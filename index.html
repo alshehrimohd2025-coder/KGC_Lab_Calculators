@@ -963,11 +963,23 @@ acidInputs.forEach(id => {
 calculateAcid();
 
 /* ---------- ربط نتيجة المعايرة بتانك من لوحة الأحواض ---------- */
+const tankArabicNames = {
+  'Flux Tank': 'تانك الفلكس',
+  'Rinsing Tank 1': 'تانك غسيل 1',
+  'Rinsing Tank 2': 'تانك غسيل 2',
+  'Stripping Acid': 'تانك حمض التعرية',
+  'Acid Tank 1': 'تانك حمض 1',
+  'Acid Tank 2': 'تانك حمض 2',
+  'Acid Tank 3': 'تانك حمض 3',
+  'Acid Tank 4': 'تانك حمض 4',
+  'Degreasing Tank': 'تانك إزالة الشحوم'
+};
+
 function populateTankSelect() {
   const select = document.getElementById('acid-tank-select');
   if (!select || typeof tanks === 'undefined') return;
   const current = select.value;
-  select.innerHTML = tanks.map(t => `<option value="${t.id}">حوض ${t.id} — ${t.name}</option>`).join('');
+  select.innerHTML = tanks.map(t => `<option value="${t.id}">${tankArabicNames[t.name] || t.name}</option>`).join('');
   if (current) select.value = current;
 }
 populateTankSelect();
@@ -987,14 +999,16 @@ function saveAcidToTank() {
   const dateStr = now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate());
   const timeStr = pad(now.getHours()) + ":" + pad(now.getMinutes()) + ":" + pad(now.getSeconds());
 
+  const tankLabel = tankArabicNames[tank.name] || tank.name;
+
   database.ref('titration_log').push({
-    date: dateStr, time: timeStr, tankId: tank.id, tankName: tank.name, percent: lastWtPercent
+    date: dateStr, time: timeStr, tankId: tank.id, tankName: tankLabel, percent: lastWtPercent
   }).catch(function(error) {
     console.error("Firebase titration log error:", error);
   });
 
   const msg = document.getElementById('acid-save-msg');
-  msg.textContent = `✓ تم حفظ ${lastWtPercent.toFixed(2)}% في ${tank.name} (حوض ${tank.id})`;
+  msg.textContent = `✓ تم حفظ ${lastWtPercent.toFixed(2)}% في ${tankLabel}`;
   setTimeout(() => { msg.textContent = ''; }, 4000);
 }
 
@@ -1010,7 +1024,7 @@ function renderTitrationLog(entries) {
     <tr>
       <td class="num">${r.date}</td>
       <td class="num">${r.time}</td>
-      <td class="name">${r.tankName} (حوض ${r.tankId})</td>
+      <td class="name">${r.tankName}</td>
       <td class="num">${Number(r.percent).toFixed(2)}%</td>
     </tr>
   `).join('');
