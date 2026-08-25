@@ -800,83 +800,81 @@ renderAll();
 
 <section class="acid-calc-section">
   <div class="sechead"><span class="secnum">٢</span><h2 class="sectitle">حاسبة معايرة الحمض</h2></div>
-  <p class="secsub">سجّل بيانات المعايرة وستحصل على نسبة الحمض تلقائياً باستخدام معادلة التيتريشن.</p>
+  <p class="secsub">سجّل قراءة السحاحة وبيانات المعايرة وستحصل على عيارية وتركيز الحمض الأصلي تلقائياً.</p>
 
   <div class="calc-grid">
     <div class="input-group">
       <label class="input-label">
-        كمية الحمض بالدورق
+        قراءة السحاحة V_buret
         <span class="unit">mL</span>
       </label>
-      <input type="number" id="acid-volume" class="input-field" value="10" placeholder="10" step="0.1">
+      <input type="number" id="v-buret" class="input-field" value="" placeholder="أدخل القراءة" step="0.01">
     </div>
 
     <div class="input-group">
       <label class="input-label">
-        كمية الماء المقطر
+        حجم العينة V_aliquot
         <span class="unit">mL</span>
       </label>
-      <input type="number" id="water-volume" class="input-field" value="90" placeholder="90" step="0.1">
+      <input type="number" id="v-aliquot" class="input-field" value="10.5" placeholder="10.5" step="0.01">
     </div>
 
     <div class="input-group">
       <label class="input-label">
-        حجم Na₂CO₃ المستهلك
+        عيارية القاعدة N_base
+        <span class="unit">N</span>
+      </label>
+      <input type="number" id="n-base" class="input-field" value="0.303" placeholder="0.303" step="0.001">
+    </div>
+
+    <div class="input-group">
+      <label class="input-label">
+        حجم الحمض الأصلي V_acid_init
         <span class="unit">mL</span>
       </label>
-      <input type="number" id="carbonate-volume" class="input-field" value="25" placeholder="25" step="0.1">
+      <input type="number" id="v-acid-init" class="input-field" value="5.0" placeholder="5.0" step="0.01">
     </div>
 
     <div class="input-group">
       <label class="input-label">
-        تركيز Na₂CO₃
-        <span class="unit">M</span>
+        حجم التخفيف الكلي V_dilution
+        <span class="unit">mL</span>
       </label>
-      <input type="number" id="carbonate-molarity" class="input-field" value="0.1" placeholder="0.1" step="0.01">
+      <input type="number" id="v-dilution" class="input-field" value="200.0" placeholder="200.0" step="0.1">
     </div>
 
     <div class="input-group">
       <label class="input-label">
-        الوزن المولي Na₂CO₃
+        الوزن الجزيئي للحمض MW_acid
         <span class="unit">g/mol</span>
       </label>
-      <input type="number" id="carbonate-mw" class="input-field" value="106" placeholder="106" step="0.1">
+      <input type="number" id="mw-acid" class="input-field" value="36.46" placeholder="36.46" step="0.01">
     </div>
 
     <div class="input-group">
       <label class="input-label">
-        كثافة المحلول
+        كثافة الحمض Density_acid
         <span class="unit">g/mL</span>
       </label>
-      <input type="number" id="solution-density" class="input-field" value="1.05" placeholder="1.05" step="0.01">
+      <input type="number" id="density-acid" class="input-field" value="1.18" placeholder="1.18" step="0.01">
     </div>
   </div>
 
   <div class="results-panel">
     <div class="result-item">
-      <span class="result-label">مولات Na₂CO₃</span>
-      <span class="result-value" id="moles-carbonate">0.00 <span class="unit">mol</span></span>
-    </div>
-    <div class="result-item">
-      <span class="result-label">مولات HCl (من النسبة 2:1)</span>
-      <span class="result-value" id="moles-hcl">0.00 <span class="unit">mol</span></span>
-    </div>
-    <div class="result-item">
-      <span class="result-label">كتلة HCl الكلية</span>
-      <span class="result-value" id="mass-hcl">0.00 <span class="unit">g</span></span>
-    </div>
-    <div class="result-item">
-      <span class="result-label">الحجم الكلي للمحلول</span>
-      <span class="result-value" id="total-volume">0.00 <span class="unit">mL</span></span>
-    </div>
-    <div class="result-item">
-      <span class="result-label">التركيز (g/L)</span>
-      <span class="result-value" id="concentration">0.00 <span class="unit">g/L</span></span>
+      <span class="result-label">العيارية بعد التخفيف N_diluted</span>
+      <span class="result-value" id="n-diluted">0.0000 <span class="unit">N</span></span>
     </div>
     <div class="result-item" style="border-top: 2px solid var(--accent); padding-top: 16px;">
-      <span class="result-label" style="font-size: 16px; font-weight: 700;">نسبة الحمض</span>
+      <span class="result-label" style="font-size: 16px; font-weight: 700;">عيارية الحمض الأصلي N_original</span>
+      <span class="result-value" style="font-size: 24px;">
+        <span id="n-original">0.00</span><span class="unit" style="font-size: 14px;"> N</span>
+      </span>
+    </div>
+    <div class="result-item" style="border-top: 2px solid var(--accent); padding-top: 16px;">
+      <span class="result-label" style="font-size: 16px; font-weight: 700;">النسبة المئوية للحمض</span>
       <span class="result-value" style="font-size: 28px; color: #0E6E63;">
-        <span id="acid-percentage">0.0</span><span class="unit" style="font-size: 16px;">%</span>
+        <span id="acid-percentage">0.00</span><span class="unit" style="font-size: 16px;">%</span>
       </span>
     </div>
   </div>
@@ -886,87 +884,55 @@ renderAll();
   </div>
 
   <div class="calc-note">
-    💡 <b>المعادلة الكيميائية:</b> 2HCl + Na₂CO₃ → 2NaCl + H₂O + CO₂
-    <br>
-    الكتلة المولية لـ HCl = 36.461 g/mol
+    💡 <b>الحسابات:</b><br>
+    N_diluted = (V_buret × N_base) ÷ V_aliquot<br>
+    N_original = (N_diluted × V_dilution) ÷ V_acid_init<br>
+    Wt% = (N_original × MW_acid) ÷ (Density_acid × 10)
   </div>
 </section>
 
 <script>
 function calculateAcid() {
-  // المدخلات
-  const acidVolume = parseFloat(document.getElementById('acid-volume').value) || 0;
-  const waterVolume = parseFloat(document.getElementById('water-volume').value) || 0;
-  const carbonateVolume = parseFloat(document.getElementById('carbonate-volume').value) || 0;
-  const carbonateMolarity = parseFloat(document.getElementById('carbonate-molarity').value) || 0;
-  const carbonateMW = parseFloat(document.getElementById('carbonate-mw').value) || 106;
-  const solutionDensity = parseFloat(document.getElementById('solution-density').value) || 1.05;
-
-  // الثوابت
-  const HCL_MW = 36.461; // g/mol
+  // المدخلات (كلها قابلة للتعديل)
+  const vBuret = parseFloat(document.getElementById('v-buret').value) || 0;
+  const vAliquot = parseFloat(document.getElementById('v-aliquot').value) || 0;
+  const nBase = parseFloat(document.getElementById('n-base').value) || 0;
+  const vAcidInit = parseFloat(document.getElementById('v-acid-init').value) || 0;
+  const vDilution = parseFloat(document.getElementById('v-dilution').value) || 0;
+  const mwAcid = parseFloat(document.getElementById('mw-acid').value) || 0;
+  const densityAcid = parseFloat(document.getElementById('density-acid').value) || 0;
 
   // الحسابات
-  // 1. حساب مولات Na₂CO₃
-  const molesCarbonate = (carbonateVolume / 1000) * carbonateMolarity;
-
-  // 2. حساب مولات HCl (من النسبة 2:1)
-  const molesHCl = 2 * molesCarbonate;
-
-  // 3. حساب كتلة HCl
-  const massHCl = molesHCl * HCL_MW;
-
-  // 4. حساب الحجم الكلي
-  const totalVolume = acidVolume + waterVolume;
-
-  // 5. حساب التركيز (g/L)
-  const concentration = (massHCl / totalVolume) * 1000;
-
-  // 6. حساب النسبة المئوية
-  // الكثافة المرجعية للـ HCl النقي 100% = 1.19 g/mL = 1190 g/L
-  const pureHCLDensity = 1190; // g/L
-  const acidPercentage = (concentration / pureHCLDensity) * 100;
+  const nDiluted = vAliquot !== 0 ? (vBuret * nBase) / vAliquot : 0;
+  const nOriginal = vAcidInit !== 0 ? (nDiluted * vDilution) / vAcidInit : 0;
+  const wtPercent = densityAcid !== 0 ? (nOriginal * mwAcid) / (densityAcid * 10) : 0;
 
   // تحديث النتائج
-  document.getElementById('moles-carbonate').innerHTML = `${molesCarbonate.toFixed(4)} <span class="unit">mol</span>`;
-  document.getElementById('moles-hcl').innerHTML = `${molesHCl.toFixed(4)} <span class="unit">mol</span>`;
-  document.getElementById('mass-hcl').innerHTML = `${massHCl.toFixed(3)} <span class="unit">g</span>`;
-  document.getElementById('total-volume').innerHTML = `${totalVolume.toFixed(1)} <span class="unit">mL</span>`;
-  document.getElementById('concentration').innerHTML = `${concentration.toFixed(2)} <span class="unit">g/L</span>`;
-  document.getElementById('acid-percentage').textContent = acidPercentage.toFixed(2);
+  document.getElementById('n-diluted').innerHTML = `${nDiluted.toFixed(4)} <span class="unit">N</span>`;
+  document.getElementById('n-original').textContent = nOriginal.toFixed(2);
+  document.getElementById('acid-percentage').textContent = wtPercent.toFixed(2);
 
   // تحديث خطوات الحساب
   const stepsHTML = `
     <div class="step-item">
-      <span class="step-label">١. مولات Na₂CO₃</span>
-      ${carbonateVolume} mL × ${carbonateMolarity} M ÷ 1000 = <b>${molesCarbonate.toFixed(4)} mol</b>
+      <span class="step-label">١. العيارية بعد التخفيف N_diluted</span>
+      (${vBuret} mL × ${nBase} N) ÷ ${vAliquot} mL = <b>${nDiluted.toFixed(4)} N</b>
     </div>
     <div class="step-item">
-      <span class="step-label">٢. مولات HCl (2:1)</span>
-      ${molesCarbonate.toFixed(4)} mol × 2 = <b>${molesHCl.toFixed(4)} mol</b>
+      <span class="step-label">٢. عيارية الحمض الأصلي N_original</span>
+      (${nDiluted.toFixed(4)} N × ${vDilution} mL) ÷ ${vAcidInit} mL = <b>${nOriginal.toFixed(4)} N</b>
     </div>
     <div class="step-item">
-      <span class="step-label">٣. كتلة HCl</span>
-      ${molesHCl.toFixed(4)} mol × ${HCL_MW} g/mol = <b>${massHCl.toFixed(3)} g</b>
-    </div>
-    <div class="step-item">
-      <span class="step-label">٤. الحجم الكلي</span>
-      ${acidVolume} mL + ${waterVolume} mL = <b>${totalVolume} mL</b>
-    </div>
-    <div class="step-item">
-      <span class="step-label">٥. التركيز (g/L)</span>
-      (${massHCl.toFixed(3)} g ÷ ${totalVolume} mL) × 1000 = <b>${concentration.toFixed(2)} g/L</b>
-    </div>
-    <div class="step-item">
-      <span class="step-label">٦. النسبة المئوية</span>
-      (${concentration.toFixed(2)} g/L ÷ 1190 g/L) × 100 = <b>${acidPercentage.toFixed(2)}%</b>
+      <span class="step-label">٣. النسبة المئوية للحمض Wt%</span>
+      (${nOriginal.toFixed(4)} N × ${mwAcid} g/mol) ÷ (${densityAcid} g/mL × 10) = <b>${wtPercent.toFixed(2)}%</b>
     </div>
   `;
   document.getElementById('steps-breakdown').innerHTML = stepsHTML;
 }
 
 // ربط الحقول بالحساب التلقائي
-const inputs = ['acid-volume', 'water-volume', 'carbonate-volume', 'carbonate-molarity', 'carbonate-mw', 'solution-density'];
-inputs.forEach(id => {
+const acidInputs = ['v-buret', 'v-aliquot', 'n-base', 'v-acid-init', 'v-dilution', 'mw-acid', 'density-acid'];
+acidInputs.forEach(id => {
   document.getElementById(id).addEventListener('input', calculateAcid);
 });
 
