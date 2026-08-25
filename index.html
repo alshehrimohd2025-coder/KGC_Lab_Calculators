@@ -474,6 +474,7 @@ td.name{color:var(--ink); font-weight:500}
           <th>pH</th>
           <th>Fe (g/L)</th>
           <th>Baumé</th>
+          <th>نسبة الحمض %</th>
           <th>الزمن (دقيقة)</th>
           <th>الحالة</th>
         </tr>
@@ -488,16 +489,16 @@ td.name{color:var(--ink); font-weight:500}
 <script>
 // Tank Data with specifications
 const tankSpecs = [
-  { id: 10, name: 'Flux Tank', ph: 4.2, fe: 1.2, baume: 17, time: 25, status: 'good' },
-  { id: 9, name: 'Rinsing Tank 2', ph: 7, fe: 0, baume: 0, time: 2, status: 'good' },
-  { id: 8, name: 'Rinsing Tank 1', ph: 3.2, fe: 5, baume: 2, time: 2, status: 'good' },
-  { id: 7, name: 'Stripping Acid', ph: 0.8, fe: 120, baume: 18, time: 4, status: 'good' },
-  { id: 6, name: 'Acid Tank 4', ph: 2.1, fe: 35, baume: 10.5, time: 8, status: 'good' },
-  { id: 5, name: 'Acid Tank 3', ph: 1.8, fe: 38, baume: 11, time: 8, status: 'good' },
-  { id: 4, name: 'Acid Tank 2', ph: 1.6, fe: 42, baume: 11.5, time: 8, status: 'good' },
-  { id: 3, name: 'Acid Tank 1', ph: 1.5, fe: 45, baume: 12, time: 8, status: 'good' },
-  { id: 2, name: 'Rinsing Tank 2', ph: 7, fe: 0, baume: 0, time: 2, status: 'good' },
-  { id: 1, name: 'Degreasing Tank', ph: 9.5, fe: 0, baume: 6, time: 3, status: 'good' },
+  { id: 10, name: 'Flux Tank', ph: 4.2, fe: 1.2, baume: 17, acidPercent: 0, time: 25, status: 'good' },
+  { id: 9, name: 'Rinsing Tank 2', ph: 7, fe: 0, baume: 0, acidPercent: 0, time: 2, status: 'good' },
+  { id: 8, name: 'Rinsing Tank 1', ph: 3.2, fe: 5, baume: 2, acidPercent: 0, time: 2, status: 'good' },
+  { id: 7, name: 'Stripping Acid', ph: 0.8, fe: 120, baume: 18, acidPercent: 0, time: 4, status: 'good' },
+  { id: 6, name: 'Acid Tank 4', ph: 2.1, fe: 35, baume: 10.5, acidPercent: 0, time: 8, status: 'good' },
+  { id: 5, name: 'Acid Tank 3', ph: 1.8, fe: 38, baume: 11, acidPercent: 0, time: 8, status: 'good' },
+  { id: 4, name: 'Acid Tank 2', ph: 1.6, fe: 42, baume: 11.5, acidPercent: 0, time: 8, status: 'good' },
+  { id: 3, name: 'Acid Tank 1', ph: 1.5, fe: 45, baume: 12, acidPercent: 0, time: 8, status: 'good' },
+  { id: 2, name: 'Rinsing Tank 2', ph: 7, fe: 0, baume: 0, acidPercent: 0, time: 2, status: 'good' },
+  { id: 1, name: 'Degreasing Tank', ph: 9.5, fe: 0, baume: 6, acidPercent: 0, time: 3, status: 'good' },
 ];
 
 // Local state
@@ -611,6 +612,10 @@ function renderCards() {
           <span class="data-value" onclick="makeEditable(this, ${tank.id}, 'baume')">${tank.baume.toFixed(2)}</span>
         </div>
         <div class="data-row">
+          <span class="data-label">حمض %</span>
+          <span class="data-value" onclick="makeEditable(this, ${tank.id}, 'acidPercent')">${(tank.acidPercent || 0).toFixed(2)}</span>
+        </div>
+        <div class="data-row">
           <span class="data-label">زمن</span>
           <span class="data-value" onclick="makeEditable(this, ${tank.id}, 'time')">${tank.time}</span>
         </div>
@@ -639,6 +644,7 @@ function renderTable() {
       <td onclick="makeEditable(this, ${tank.id}, 'ph')" style="cursor: pointer;">${tank.ph.toFixed(2)}</td>
       <td onclick="makeEditable(this, ${tank.id}, 'fe')" style="cursor: pointer;">${tank.fe.toFixed(2)}</td>
       <td onclick="makeEditable(this, ${tank.id}, 'baume')" style="cursor: pointer;">${tank.baume.toFixed(2)}</td>
+      <td onclick="makeEditable(this, ${tank.id}, 'acidPercent')" style="cursor: pointer;">${(tank.acidPercent || 0).toFixed(2)}</td>
       <td onclick="makeEditable(this, ${tank.id}, 'time')" style="cursor: pointer;">${tank.time}</td>
       <td><span style="padding: 4px 8px; border-radius: 4px; background: ${statusColor}; color: ${tank.status === 'warning' ? '#000' : '#fff'}; font-weight: 600; cursor: pointer;" onclick="setStatus(${tank.id}, 'good')">${statusText}</span></td>
     `;
@@ -883,14 +889,31 @@ renderAll();
     <!-- سيتم ملأها بـ JavaScript -->
   </div>
 
-  <div class="calc-note">
-    💡 <b>نسبة الحمض الحر من نتيجة المعايرة</b><br>
-    بروتوكول كربونات الصوديوم مع كاشف الميثيل البرتقالي — نقطة النهاية عند تحوّل اللون من الوردي إلى الأصفر الذهبي الثابت.<br>
-    المعادلة مرنة: لو غيّرت حجم العينة أو عيارية القاعدة يتغيّر الحساب تلقائياً.
+  <div style="margin-top:20px; padding-top:20px; border-top:1px dashed var(--line-strong); display:flex; gap:12px; flex-wrap:wrap; align-items:end;">
+    <div class="input-group" style="flex:1; min-width:220px;">
+      <label class="input-label">احفظ النتيجة في تانك</label>
+      <select id="acid-tank-select" class="input-field" style="text-align:right; direction:rtl;"></select>
+    </div>
+    <button class="btn" id="save-to-tank-btn" onclick="saveAcidToTank()">💾 حفظ للتانك المختار</button>
+  </div>
+  <div id="acid-save-msg" style="margin-top:8px; font-size:12.5px; color:var(--accent); min-height:16px;"></div>
+
+  <div style="margin-top:28px;">
+    <p class="panel-label" style="margin-bottom:10px;">سجل المعايرات</p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>التاريخ</th><th>الوقت</th><th>التانك</th><th>نسبة الحمض %</th></tr>
+        </thead>
+        <tbody id="titration-log-body"></tbody>
+      </table>
+    </div>
   </div>
 </section>
 
 <script>
+let lastWtPercent = 0;
+
 function calculateAcid() {
   // المدخلات (كلها قابلة للتعديل)
   const vBuret = parseFloat(document.getElementById('v-buret').value) || 0;
@@ -905,6 +928,7 @@ function calculateAcid() {
   const nDiluted = vAliquot !== 0 ? (vBuret * nBase) / vAliquot : 0;
   const nOriginal = vAcidInit !== 0 ? (nDiluted * vDilution) / vAcidInit : 0;
   const wtPercent = densityAcid !== 0 ? (nOriginal * mwAcid) / (densityAcid * 10) : 0;
+  lastWtPercent = wtPercent;
 
   // تحديث النتائج
   document.getElementById('n-diluted').innerHTML = `${nDiluted.toFixed(4)} <span class="unit">N</span>`;
@@ -937,6 +961,64 @@ acidInputs.forEach(id => {
 
 // حساب أولي
 calculateAcid();
+
+/* ---------- ربط نتيجة المعايرة بتانك من لوحة الأحواض ---------- */
+function populateTankSelect() {
+  const select = document.getElementById('acid-tank-select');
+  if (!select || typeof tanks === 'undefined') return;
+  const current = select.value;
+  select.innerHTML = tanks.map(t => `<option value="${t.id}">حوض ${t.id} — ${t.name}</option>`).join('');
+  if (current) select.value = current;
+}
+populateTankSelect();
+
+function saveAcidToTank() {
+  const select = document.getElementById('acid-tank-select');
+  const tankId = parseInt(select.value);
+  const tank = tanks.find(t => t.id === tankId);
+  if (!tank) return;
+
+  tank.acidPercent = lastWtPercent;
+  saveToStorage();
+  renderAll();
+
+  const now = new Date();
+  const pad = n => (n < 10 ? "0" : "") + n;
+  const dateStr = now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate());
+  const timeStr = pad(now.getHours()) + ":" + pad(now.getMinutes()) + ":" + pad(now.getSeconds());
+
+  database.ref('titration_log').push({
+    date: dateStr, time: timeStr, tankId: tank.id, tankName: tank.name, percent: lastWtPercent
+  }).catch(function(error) {
+    console.error("Firebase titration log error:", error);
+  });
+
+  const msg = document.getElementById('acid-save-msg');
+  msg.textContent = `✓ تم حفظ ${lastWtPercent.toFixed(2)}% في ${tank.name} (حوض ${tank.id})`;
+  setTimeout(() => { msg.textContent = ''; }, 4000);
+}
+
+function renderTitrationLog(entries) {
+  const tbody = document.getElementById('titration-log-body');
+  if (!tbody) return;
+  const rows = Object.values(entries || {}).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+  if (rows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--ink-3);">لا يوجد سجل معايرات بعد</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td class="num">${r.date}</td>
+      <td class="num">${r.time}</td>
+      <td class="name">${r.tankName} (حوض ${r.tankId})</td>
+      <td class="num">${Number(r.percent).toFixed(2)}%</td>
+    </tr>
+  `).join('');
+}
+
+database.ref('titration_log').limitToLast(50).on('value', function(snapshot) {
+  renderTitrationLog(snapshot.val());
+});
 </script><div class="wrap">
 
   <div class="notice">
