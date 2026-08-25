@@ -286,17 +286,22 @@ td.name{color:var(--ink); font-weight:500}
   box-shadow: var(--shadow);
 }
 
-.tank-card.status-good {
+.tank-card.status-in_service {
   border-color: #22c55e;
   background: rgba(34, 197, 94, 0.08);
 }
 
-.tank-card.status-warning {
+.tank-card.status-maintenance {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.tank-card.status-needs_review {
   border-color: #eab308;
   background: rgba(234, 179, 8, 0.08);
 }
 
-.tank-card.status-critical {
+.tank-card.status-out_of_service {
   border-color: #dc2626;
   background: rgba(220, 38, 38, 0.08);
 }
@@ -367,46 +372,33 @@ td.name{color:var(--ink); font-weight:500}
   text-align: center;
 }
 
-.status-selector {
-  display: flex;
-  gap: 4px;
+.status-select {
+  width: 100%;
   margin-top: 10px;
-  justify-content: center;
-}
-
-.status-btn {
-  flex: 1;
-  padding: 6px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 11px;
+  padding: 8px 6px;
+  border-radius: 6px;
+  border: 1.5px solid var(--line);
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  text-align: center;
+  text-align-last: center;
+  direction: rtl;
+  font-family: var(--sans);
   transition: all 0.2s;
 }
 
-.status-btn:hover {
-  transform: scale(1.05);
-}
-
-.status-btn.active-good {
-  background: #22c55e;
-  color: white;
-  border-color: #22c55e;
-}
-
-.status-btn.active-warning {
-  background: #eab308;
-  color: #000;
-  border-color: #eab308;
-}
-
-.status-btn.active-critical {
-  background: #dc2626;
-  color: white;
-  border-color: #dc2626;
+.status-select-cell {
+  padding: 6px 10px;
+  border-radius: 5px;
+  border: 1.5px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  text-align-last: center;
+  direction: rtl;
+  font-family: var(--sans);
 }
 
 .tanks-table-container {
@@ -532,16 +524,31 @@ database.ref('tanks_data').on('value', function(snapshot) {
   tanksLoadedFromFirebase = true;
 });
 
+const STATUS_META = {
+  in_service:     { text: '✓ داخل الخدمة',  color: '#22c55e' },
+  maintenance:    { text: '🔧 تحت الصيانة', color: '#3b82f6' },
+  needs_review:   { text: '⚠ يحتاج مراجعة', color: '#eab308' },
+  out_of_service: { text: '✕ خارج الخدمة',  color: '#dc2626' }
+};
+const STATUS_LEGACY_MAP = { good: 'in_service', warning: 'needs_review', critical: 'out_of_service' };
+
+function normalizeStatus(status) {
+  return STATUS_META[status] ? status : (STATUS_LEGACY_MAP[status] || 'in_service');
+}
+
 function getStatusColor(status) {
-  if (status === 'good') return '#22c55e';
-  if (status === 'warning') return '#eab308';
-  return '#dc2626';
+  return STATUS_META[normalizeStatus(status)].color;
 }
 
 function getStatusText(status) {
-  if (status === 'good') return '✓ جيد';
-  if (status === 'warning') return '⚠ تحذير';
-  return '✕ خطر';
+  return STATUS_META[normalizeStatus(status)].text;
+}
+
+function statusOptionsHTML(currentStatus) {
+  const current = normalizeStatus(currentStatus);
+  return Object.keys(STATUS_META).map(key =>
+    `<option value="${key}" ${current === key ? 'selected' : ''}>${STATUS_META[key].text}</option>`
+  ).join('');
 }
 
 function makeEditable(element, tankId, field) {
@@ -591,7 +598,7 @@ function renderCards() {
   tanks.forEach(tank => {
     const color = getStatusColor(tank.status);
     const statusText = getStatusText(tank.status);
-    const statusClass = `status-${tank.status}`;
+    const statusClass = `status-${normalizeStatus(tank.status)}`;
 
     const card = document.createElement('div');
     card.className = `tank-card ${statusClass}`;
@@ -620,11 +627,9 @@ function renderCards() {
           <span class="data-value" onclick="makeEditable(this, ${tank.id}, 'time')">${tank.time}</span>
         </div>
       </div>
-      <div class="status-selector">
-        <button class="status-btn ${tank.status === 'good' ? 'active-good' : ''}" onclick="setStatus(${tank.id}, 'good')">✓ جيد</button>
-        <button class="status-btn ${tank.status === 'warning' ? 'active-warning' : ''}" onclick="setStatus(${tank.id}, 'warning')">⚠ تحذير</button>
-        <button class="status-btn ${tank.status === 'critical' ? 'active-critical' : ''}" onclick="setStatus(${tank.id}, 'critical')">✕ خطر</button>
-      </div>
+      <select class="status-select" style="background:${color}1a; border-color:${color}; color:${color};" onchange="setStatus(${tank.id}, this.value)">
+        ${statusOptionsHTML(tank.status)}
+      </select>
     `;
     container.appendChild(card);
   });
@@ -646,7 +651,7 @@ function renderTable() {
       <td onclick="makeEditable(this, ${tank.id}, 'baume')" style="cursor: pointer;">${tank.baume.toFixed(2)}</td>
       <td onclick="makeEditable(this, ${tank.id}, 'acidPercent')" style="cursor: pointer;">${(tank.acidPercent || 0).toFixed(2)}</td>
       <td onclick="makeEditable(this, ${tank.id}, 'time')" style="cursor: pointer;">${tank.time}</td>
-      <td><span style="padding: 4px 8px; border-radius: 4px; background: ${statusColor}; color: ${tank.status === 'warning' ? '#000' : '#fff'}; font-weight: 600; cursor: pointer;" onclick="setStatus(${tank.id}, 'good')">${statusText}</span></td>
+      <td><select class="status-select-cell" style="background:${statusColor}1a; border-color:${statusColor}; color:${statusColor};" onchange="setStatus(${tank.id}, this.value)">${statusOptionsHTML(tank.status)}</select></td>
     `;
     tbody.appendChild(tr);
   });
