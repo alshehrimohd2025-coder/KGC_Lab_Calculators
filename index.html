@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js"></script>
 <style>
 :root{
   --ground:#F1F4F3; --surface:#FFFFFF; --recess:#E7ECEA;
@@ -1500,6 +1502,52 @@ document.addEventListener("click",function(ev){
 })();
 
 })();
+</script>
+
+<script>
+// Firebase Configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyCCqt5yp88PvKto38CUrS5cos-8Dpvgu40",
+  authDomain: "kgc-galvanizing-monitor.firebaseapp.com",
+  projectId: "kgc-galvanizing-monitor",
+  databaseURL: "https://kgc-galvanizing-monitor-default-rtdb.firebaseio.com",
+  storageBucket: "kgc-galvanizing-monitor.firebasestorage.app",
+  messagingSenderId: "880978608319",
+  appId: "1:880978608319:web:5a318377dd8149494640a",
+  measurementId: "G-7RRTB25PYS"
+};
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
+
+// Sync data to Firebase
+function syncToFirebase() {
+  const state = JSON.parse(document.getElementById('kgc-state').textContent);
+  const timestamp = new Date().toISOString();
+
+  database.ref('production_data/' + timestamp).set({
+    tanks: state.tanks || {},
+    logs: state.log || [],
+    timestamp: timestamp
+  }).catch(function(error) {
+    console.error("Firebase sync error:", error);
+  });
+}
+
+// Auto-sync on data changes (every 5 seconds)
+setInterval(syncToFirebase, 5000);
+
+// Load latest data from Firebase
+database.ref('production_data').limitToLast(1).on('value', function(snapshot) {
+  const data = snapshot.val();
+  if(data) {
+    const latestKey = Object.keys(data)[Object.keys(data).length - 1];
+    const latestData = data[latestKey];
+    // Update UI with latest data
+    console.log("Latest production data:", latestData);
+  }
+});
 </script>
 
 </body>
