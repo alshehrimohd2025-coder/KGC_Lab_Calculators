@@ -903,7 +903,7 @@ renderAll();
     <div class="tablewrap">
       <table>
         <thead>
-          <tr><th>التاريخ</th><th>الوقت</th><th>التانك</th><th>نسبة الحمض %</th></tr>
+          <tr><th>التاريخ</th><th>الوقت</th><th>التانك</th><th>نسبة الحمض %</th><th></th></tr>
         </thead>
         <tbody id="titration-log-body"></tbody>
       </table>
@@ -1015,9 +1015,11 @@ function saveAcidToTank() {
 function renderTitrationLog(entries) {
   const tbody = document.getElementById('titration-log-body');
   if (!tbody) return;
-  const rows = Object.values(entries || {}).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+  const rows = Object.entries(entries || {})
+    .map(([key, r]) => ({ key, ...r }))
+    .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
   if (rows.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--ink-3);">لا يوجد سجل معايرات بعد</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--ink-3);">لا يوجد سجل معايرات بعد</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(r => `
@@ -1026,8 +1028,16 @@ function renderTitrationLog(entries) {
       <td class="num">${r.time}</td>
       <td class="name">${r.tankName}</td>
       <td class="num">${Number(r.percent).toFixed(2)}%</td>
+      <td><button class="btn mini danger" onclick="deleteTitrationEntry('${r.key}')">🗑 حذف</button></td>
     </tr>
   `).join('');
+}
+
+function deleteTitrationEntry(key) {
+  if (!confirm('هل تريد حذف هذا السجل من سجل المعايرات؟')) return;
+  database.ref('titration_log/' + key).remove().catch(function(error) {
+    console.error("Firebase delete error:", error);
+  });
 }
 
 database.ref('titration_log').limitToLast(50).on('value', function(snapshot) {
