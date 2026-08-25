@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>لوحة الأحواض التفاعلية - KGC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#F1F4F3; --surface:#FFFFFF; --recess:#E7ECEA;
+  --line:#D2DAD8; --line-strong:#B4C0BD;
+  --ink:#141A1B; --ink-2:#3D4B4A; --ink-3:#697877;
+  --accent:#0E6E63; --accent-soft:#DCEBE8; --accent-line:#8FC4BC;
+  --warn:#A9541B; --warn-soft:#F7E7DA; --warn-line:#DFAE85;
+  --crit:#93262B; --crit-soft:#F7E2E3; --crit-line:#DA9DA0;
+  --fact:#1D5B86; --fact-soft:#DDEAF3; --fact-line:#9BC0DA;
+  --shadow:0 1px 2px rgba(20,26,27,.05), 0 4px 16px rgba(20,26,27,.05);
+  --sans:"IBM Plex Sans Arabic","Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono","Courier New",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E1315; --surface:#161D1F; --recess:#1D2528;
+    --line:#2A3538; --line-strong:#3B4A4D;
+    --ink:#E3EAE8; --ink-2:#B0BEBC; --ink-3:#7E8E8D;
+    --accent:#45A99C; --accent-soft:#152C2A; --accent-line:#2C6A62;
+    --warn:#D98A50; --warn-soft:#2E2018; --warn-line:#6B4629;
+    --crit:#D97A7E; --crit-soft:#2E1A1B; --crit-line:#6B3A3D;
+    --fact:#6FA8CF; --fact-soft:#152530; --fact-line:#2F5A7A;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E1315; --surface:#161D1F; --recess:#1D2528;
+  --line:#2A3538; --line-strong:#3B4A4D;
+  --ink:#E3EAE8; --ink-2:#B0BEBC; --ink-3:#7E8E8D;
+  --accent:#45A99C; --accent-soft:#152C2A; --accent-line:#2C6A62;
+  --warn:#D98A50; --warn-soft:#2E2018; --warn-line:#6B4629;
+  --crit:#D97A7E; --crit-soft:#2E1A1B; --crit-line:#6B3A3D;
+  --fact:#6FA8CF; --fact-soft:#152530; --fact-line:#2F5A7A;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--sans); font-weight:400; line-height:1.7;
+  direction:rtl; text-align:right; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1080px; margin:0 auto; padding:0 20px 80px}
+
+.sechead{display:flex; align-items:baseline; gap:12px; margin-bottom:6px; flex-wrap:wrap}
+.secnum{font-family:var(--mono); font-size:12px; font-weight:600; color:var(--accent); border:1px solid var(--accent-line); background:var(--accent-soft); width:26px; height:26px; display:grid; place-items:center; border-radius:4px; flex:0 0 auto; align-self:center}
+h2.sectitle{font-size:21px; font-weight:600; margin:0; letter-spacing:-.005em}
+.secsub{font-size:14.5px; color:var(--ink-3); margin:0 0 18px; padding-right:38px; max-width:68ch}
+
+#tanks-dashboard {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 24px;
+  margin-bottom: 40px;
+  box-shadow: var(--shadow);
+}
+
+.tanks-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 32px;
+  direction: rtl;
+  justify-content: flex-end;
+}
+
+.tank-card {
+  background: var(--recess);
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  min-width: 160px;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.tank-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow);
+}
+
+.tank-card.status-good {
+  border-color: #22c55e;
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.tank-card.status-warning {
+  border-color: #eab308;
+  background: rgba(234, 179, 8, 0.08);
+}
+
+.tank-card.status-critical {
+  border-color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.tank-number {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+
+.tank-name {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+.tank-data {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.data-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  padding: 6px;
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.data-label {
+  color: var(--ink-3);
+  font-weight: 500;
+  flex: 1;
+  text-align: right;
+}
+
+.data-value {
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+  min-width: 45px;
+  text-align: center;
+  transition: background 0.2s;
+  flex: 0 0 auto;
+}
+
+.data-value:hover {
+  background: var(--line);
+}
+
+.data-input {
+  width: 50px;
+  padding: 4px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--mono);
+  direction: ltr;
+  text-align: center;
+}
+
+.status-selector {
+  display: flex;
+  gap: 4px;
+  margin-top: 10px;
+  justify-content: center;
+}
+
+.status-btn {
+  flex: 1;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.status-btn:hover {
+  transform: scale(1.05);
+}
+
+.status-btn.active-good {
+  background: #22c55e;
+  color: white;
+  border-color: #22c55e;
+}
+
+.status-btn.active-warning {
+  background: #eab308;
+  color: #000;
+  border-color: #eab308;
+}
+
+.status-btn.active-critical {
+  background: #dc2626;
+  color: white;
+  border-color: #dc2626;
+}
+
+.tanks-table-container {
+  overflow-x: auto;
+  margin-top: 20px;
+}
+
+.tanks-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  direction: rtl;
+}
+
+.tanks-table thead tr {
+  background: var(--recess);
+  border-bottom: 2px solid var(--line);
+}
+
+.tanks-table th {
+  padding: 12px;
+  text-align: center;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.tanks-table td {
+  padding: 10px 12px;
+  text-align: center;
+  border-bottom: 1px solid var(--line);
+}
+
+.tanks-table tbody tr:hover {
+  background: var(--recess);
+}
+
+.tanks-table .tank-name-col {
+  text-align: right;
+  font-weight: 500;
+}
+
+.save-note {
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+</style>
+</head>
+<body>
+
+<section id="tanks-dashboard">
+  <div class="sechead"><span class="secnum">١</span><h2 class="sectitle">لوحة الأحواض الحية</h2></div>
+  <p class="secsub">عدّل القيم واختر حالة كل حوض بنفسك — اضغط على أي رقم لتعديله أو اختر الحالة من الأزرار.</p>
+
+  <!-- Tanks Cards View -->
+  <div class="tanks-grid" id="tanks-container"></div>
+
+  <!-- Tanks Table View -->
+  <div class="tanks-table-container">
+    <table class="tanks-table" id="tanks-table-body">
+      <thead>
+        <tr>
+          <th>الحوض</th>
+          <th>pH</th>
+          <th>Fe (g/L)</th>
+          <th>Baumé</th>
+          <th>الزمن (دقيقة)</th>
+          <th>الحالة</th>
+        </tr>
+      </thead>
+      <tbody id="tanks-list"></tbody>
+    </table>
+  </div>
+
+  <div class="save-note">💾 التغييرات تُحفظ تلقائياً في الرابط</div>
+</section>
+
+<script>
+// Tank Data with specifications
+const tankSpecs = [
+  { id: 10, name: 'Flux Tank', ph: 4.2, fe: 1.2, baume: 17, time: 25, status: 'good' },
+  { id: 9, name: 'Rinsing Tank 2', ph: 7, fe: 0, baume: 0, time: 2, status: 'good' },
+  { id: 8, name: 'Rinsing Tank 1', ph: 3.2, fe: 5, baume: 2, time: 2, status: 'good' },
+  { id: 7, name: 'Stripping Acid', ph: 0.8, fe: 120, baume: 18, time: 4, status: 'good' },
+  { id: 6, name: 'Acid Tank 4', ph: 2.1, fe: 35, baume: 10.5, time: 8, status: 'good' },
+  { id: 5, name: 'Acid Tank 3', ph: 1.8, fe: 38, baume: 11, time: 8, status: 'good' },
+  { id: 4, name: 'Acid Tank 2', ph: 1.6, fe: 42, baume: 11.5, time: 8, status: 'good' },
+  { id: 3, name: 'Acid Tank 1', ph: 1.5, fe: 45, baume: 12, time: 8, status: 'good' },
+  { id: 2, name: 'Rinsing Tank 2', ph: 7, fe: 0, baume: 0, time: 2, status: 'good' },
+  { id: 1, name: 'Degreasing Tank', ph: 9.5, fe: 0, baume: 6, time: 3, status: 'good' },
+];
+
+// Local state
+let tanks = JSON.parse(JSON.stringify(tankSpecs));
+
+// Load from localStorage if available
+try {
+  const saved = localStorage.getItem('kgc-tanks-data');
+  if (saved) tanks = JSON.parse(saved);
+} catch (e) {}
+
+function saveToStorage() {
+  try {
+    localStorage.setItem('kgc-tanks-data', JSON.stringify(tanks));
+  } catch (e) {}
+}
+
+function getStatusColor(status) {
+  if (status === 'good') return '#22c55e';
+  if (status === 'warning') return '#eab308';
+  return '#dc2626';
+}
+
+function getStatusText(status) {
+  if (status === 'good') return '✓ جيد';
+  if (status === 'warning') return '⚠ تحذير';
+  return '✕ خطر';
+}
+
+function makeEditable(element, tankId, field) {
+  const tank = tanks.find(t => t.id === tankId);
+  if (!tank) return;
+
+  const oldValue = tank[field];
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.value = oldValue;
+  input.step = '0.1';
+  input.className = 'data-input';
+  input.setAttribute('data-tank-id', tankId);
+  input.setAttribute('data-field', field);
+
+  element.innerHTML = '';
+  element.appendChild(input);
+  input.focus();
+  input.select();
+
+  const save = () => {
+    const newValue = parseFloat(input.value) || oldValue;
+    tank[field] = newValue;
+    saveToStorage();
+    renderAll();
+  };
+
+  input.addEventListener('blur', save);
+  input.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') save();
+  });
+}
+
+function setStatus(tankId, newStatus) {
+  const tank = tanks.find(t => t.id === tankId);
+  if (tank) {
+    tank.status = newStatus;
+    saveToStorage();
+    renderAll();
+  }
+}
+
+function renderCards() {
+  const container = document.getElementById('tanks-container');
+  container.innerHTML = '';
+
+  tanks.forEach(tank => {
+    const color = getStatusColor(tank.status);
+    const statusText = getStatusText(tank.status);
+    const statusClass = `status-${tank.status}`;
+
+    const card = document.createElement('div');
+    card.className = `tank-card ${statusClass}`;
+    card.innerHTML = `
+      <div class="tank-number">${tank.id}</div>
+      <div class="tank-name">${tank.name}</div>
+      <div class="tank-data">
+        <div class="data-row">
+          <span class="data-label">pH</span>
+          <span class="data-value" onclick="makeEditable(this, ${tank.id}, 'ph')">${tank.ph.toFixed(2)}</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Fe</span>
+          <span class="data-value" onclick="makeEditable(this, ${tank.id}, 'fe')">${tank.fe.toFixed(2)}</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Baumé</span>
+          <span class="data-value" onclick="makeEditable(this, ${tank.id}, 'baume')">${tank.baume.toFixed(2)}</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">زمن</span>
+          <span class="data-value" onclick="makeEditable(this, ${tank.id}, 'time')">${tank.time}</span>
+        </div>
+      </div>
+      <div class="status-selector">
+        <button class="status-btn ${tank.status === 'good' ? 'active-good' : ''}" onclick="setStatus(${tank.id}, 'good')">✓ جيد</button>
+        <button class="status-btn ${tank.status === 'warning' ? 'active-warning' : ''}" onclick="setStatus(${tank.id}, 'warning')">⚠ تحذير</button>
+        <button class="status-btn ${tank.status === 'critical' ? 'active-critical' : ''}" onclick="setStatus(${tank.id}, 'critical')">✕ خطر</button>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function renderTable() {
+  const tbody = document.getElementById('tanks-list');
+  tbody.innerHTML = '';
+
+  tanks.forEach(tank => {
+    const statusText = getStatusText(tank.status);
+    const statusColor = getStatusColor(tank.status);
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="tank-name-col">${tank.name}</td>
+      <td onclick="makeEditable(this, ${tank.id}, 'ph')" style="cursor: pointer;">${tank.ph.toFixed(2)}</td>
+      <td onclick="makeEditable(this, ${tank.id}, 'fe')" style="cursor: pointer;">${tank.fe.toFixed(2)}</td>
+      <td onclick="makeEditable(this, ${tank.id}, 'baume')" style="cursor: pointer;">${tank.baume.toFixed(2)}</td>
+      <td onclick="makeEditable(this, ${tank.id}, 'time')" style="cursor: pointer;">${tank.time}</td>
+      <td><span style="padding: 4px 8px; border-radius: 4px; background: ${statusColor}; color: ${tank.status === 'warning' ? '#000' : '#fff'}; font-weight: 600; cursor: pointer;" onclick="setStatus(${tank.id}, 'good')">${statusText}</span></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderAll() {
+  renderCards();
+  renderTable();
+}
+
+// Initial render
+renderAll();
+</script>
+
+</body>
+</html>
