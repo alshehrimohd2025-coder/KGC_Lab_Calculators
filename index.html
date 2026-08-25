@@ -9,6 +9,20 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyCCqt5yp88PvKto38CUrS5cos-8Dpvgu40",
+  authDomain: "kgc-galvanizing-monitor.firebaseapp.com",
+  projectId: "kgc-galvanizing-monitor",
+  databaseURL: "https://kgc-galvanizing-monitor-default-rtdb.asia-southeast1.firebasedatabase.app",
+  storageBucket: "kgc-galvanizing-monitor.firebasestorage.app",
+  messagingSenderId: "880978608319",
+  appId: "1:880978608319:web:5a318377dd8149494640a",
+  measurementId: "G-7RRTB25PYS"
+};
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
+</script>
 <style>
 :root{
   --ground:#F1F4F3; --surface:#FFFFFF; --recess:#E7ECEA;
@@ -488,8 +502,9 @@ const tankSpecs = [
 
 // Local state
 let tanks = JSON.parse(JSON.stringify(tankSpecs));
+let tanksLoadedFromFirebase = false;
 
-// Load from localStorage if available
+// Load from localStorage as instant fallback (offline / first paint)
 try {
   const saved = localStorage.getItem('kgc-tanks-data');
   if (saved) tanks = JSON.parse(saved);
@@ -499,7 +514,22 @@ function saveToStorage() {
   try {
     localStorage.setItem('kgc-tanks-data', JSON.stringify(tanks));
   } catch (e) {}
+  database.ref('tanks_data').set(tanks).catch(function(error) {
+    console.error("Firebase tanks sync error:", error);
+  });
 }
+
+// Live sync: any device that edits a tank pushes to Firebase,
+// every open tab (including this one) re-renders from Firebase.
+database.ref('tanks_data').on('value', function(snapshot) {
+  const remote = snapshot.val();
+  if (remote) {
+    tanks = remote;
+    try { localStorage.setItem('kgc-tanks-data', JSON.stringify(tanks)); } catch (e) {}
+    renderAll();
+  }
+  tanksLoadedFromFirebase = true;
+});
 
 function getStatusColor(status) {
   if (status === 'good') return '#22c55e';
@@ -1505,21 +1535,7 @@ document.addEventListener("click",function(ev){
 </script>
 
 <script>
-// Firebase Configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyCCqt5yp88PvKto38CUrS5cos-8Dpvgu40",
-  authDomain: "kgc-galvanizing-monitor.firebaseapp.com",
-  projectId: "kgc-galvanizing-monitor",
-  databaseURL: "https://kgc-galvanizing-monitor-default-rtdb.asia-southeast1.firebasedatabase.app",
-  storageBucket: "kgc-galvanizing-monitor.firebasestorage.app",
-  messagingSenderId: "880978608319",
-  appId: "1:880978608319:web:5a318377dd8149494640a",
-  measurementId: "G-7RRTB25PYS"
-};
-
-// Initialize Firebase
-firebase.initializeApp(firebaseConfig);
-const database = firebase.database();
+// Uses the `database` global initialized in <head>
 
 // Load and sync data from Firebase
 let localState = null;
