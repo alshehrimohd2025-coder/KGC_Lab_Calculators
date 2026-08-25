@@ -1521,33 +1521,57 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const database = firebase.database();
 
-// Sync data to Firebase
-function syncToFirebase() {
-  const state = JSON.parse(document.getElementById('kgc-state').textContent);
-  const timestamp = new Date().toISOString();
+// Load and sync data from Firebase
+let localState = null;
+let firebaseLoaded = false;
 
-  database.ref('production_data/' + timestamp).set({
-    tanks: state.tanks || {},
-    logs: state.log || [],
-    timestamp: timestamp
-  }).catch(function(error) {
-    console.error("Firebase sync error:", error);
-  });
+function syncToFirebase() {
+  const stateElement = document.getElementById('kgc-state');
+  if(!stateElement) return;
+
+  try {
+    const state = JSON.parse(stateElement.textContent);
+    database.ref('current_data').set({
+      state: state,
+      timestamp: new Date().toISOString()
+    }).catch(function(error) {
+      console.error("Firebase sync error:", error);
+    });
+  } catch(e) {
+    console.error("Error syncing to Firebase:", e);
+  }
 }
 
-// Auto-sync on data changes (every 5 seconds)
-setInterval(syncToFirebase, 5000);
-
-// Load latest data from Firebase
-database.ref('production_data').limitToLast(1).on('value', function(snapshot) {
+// Load data from Firebase when page loads
+database.ref('current_data').on('value', function(snapshot) {
   const data = snapshot.val();
-  if(data) {
-    const latestKey = Object.keys(data)[Object.keys(data).length - 1];
-    const latestData = data[latestKey];
-    // Update UI with latest data
-    console.log("Latest production data:", latestData);
+  if(data && data.state) {
+    const state = data.state;
+    const stateElement = document.getElementById('kgc-state');
+    if(stateElement) {
+      // Update local state with Firebase data
+      stateElement.textContent = JSON.stringify(state);
+      localState = state;
+
+      // Trigger UI update if function exists
+      if(typeof renderAll === 'function') {
+        try {
+          renderAll();
+        } catch(e) {
+          console.log("Render update:", e);
+        }
+      }
+    }
+    firebaseLoaded = true;
   }
 });
+
+// Auto-sync on data changes (every 3 seconds)
+setInterval(function() {
+  if(firebaseLoaded) {
+    syncToFirebase();
+  }
+}, 3000);
 </script>
 
 </body>
