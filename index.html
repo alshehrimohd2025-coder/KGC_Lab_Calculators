@@ -22,6 +22,14 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const database = firebase.database();
+
+/* ---------- access mode ----------
+   Default = read-only (safe to share). Full access only via ?edit=<key>.
+   Note: this is a soft guard that prevents accidental edits, not real security —
+   the key lives in the page source. Firebase rules still allow writes.        */
+const KGC_EDIT_KEY = 'kgc-lab-2026';
+const IS_EDITOR = new URLSearchParams(location.search).get('edit') === KGC_EDIT_KEY;
+document.documentElement.classList.add(IS_EDITOR ? 'mode-edit' : 'mode-view');
 </script>
 <style>
 :root{
@@ -305,6 +313,27 @@ td.name{color:var(--ink); font-weight:500}
 .app-page.active{display:block}
 @keyframes pageIn{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none}}
 @media print{.topnav{display:none !important} .app-page{display:block !important; animation:none}}
+
+/* ---------- read-only mode (managers) ---------- */
+/* only the tanks dashboard is reachable, and nothing is editable */
+.mode-view .topnav{display:none}
+.mode-view #page-acid,
+.mode-view #page-flux{display:none !important}
+.mode-view #page-tanks{display:block !important}
+.mode-view .data-value{cursor:default; pointer-events:none}
+.mode-view .data-value:hover{background:transparent; color:var(--ink)}
+.mode-view .status-select,
+.mode-view .status-select-cell{pointer-events:none; cursor:default}
+.mode-view .save-note{display:none}
+.mode-view .secsub-edit{display:none}
+.viewbadge{
+  display:none; align-items:center; gap:8px; width:fit-content;
+  padding:7px 15px; border-radius:999px; margin:0 0 20px;
+  background:var(--fact-soft); border:1px solid var(--fact-line); color:var(--fact);
+  font-size:13px; font-weight:600;
+}
+.viewbadge svg{width:15px; height:15px}
+.mode-view .viewbadge{display:inline-flex}
 </style>
 <script id="kgc-state" type="application/json">{"inputs": {}, "log": [], "seq": 0}</script>
 </head>
@@ -616,7 +645,11 @@ function showAppPage(pageId, btn) {
 <div id="page-tanks" class="app-page active">
 <section id="tanks-dashboard">
   <div class="sechead"><span class="secnum">١</span><h2 class="sectitle">لوحة الأحواض الحية</h2></div>
-  <p class="secsub">عدّل القيم واختر حالة كل حوض بنفسك — اضغط على أي رقم لتعديله أو اختر الحالة من الأزرار.</p>
+  <p class="secsub secsub-edit">عدّل القيم واختر حالة كل حوض بنفسك — اضغط على أي رقم لتعديله أو اختر الحالة من القائمة.</p>
+  <div class="viewbadge">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+    عرض فقط — القراءات تتحدّث مباشرة من المختبر
+  </div>
 
   <!-- Tanks Cards View -->
   <div class="tanks-grid" id="tanks-container"></div>
@@ -710,6 +743,7 @@ try {
 } catch (e) {}
 
 function saveToStorage() {
+  if (!IS_EDITOR) return;
   try {
     localStorage.setItem('kgc-tanks-data', JSON.stringify(tanks));
   } catch (e) {}
@@ -761,6 +795,7 @@ function statusOptionsHTML(currentStatus) {
 }
 
 function makeEditable(element, tankId, field) {
+  if (!IS_EDITOR) return;
   const tank = tanks.find(t => t.id === tankId);
   if (!tank) return;
 
@@ -792,6 +827,7 @@ function makeEditable(element, tankId, field) {
 }
 
 function setStatus(tankId, newStatus) {
+  if (!IS_EDITOR) return;
   const tank = tanks.find(t => t.id === tankId);
   if (tank) {
     tank.status = newStatus;
