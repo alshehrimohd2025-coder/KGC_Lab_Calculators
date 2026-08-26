@@ -225,10 +225,46 @@ td.name{color:var(--ink); font-weight:500}
   .secsub{padding-right:0}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none !important; animation:none !important}}
+
+/* top navigation between pages */
+.topnav{
+  position:sticky; top:0; z-index:50;
+  background:var(--surface); border-bottom:1px solid var(--line);
+  box-shadow:0 1px 3px rgba(0,0,0,.06);
+}
+.topnav .wrap{display:flex; gap:6px; padding:10px 20px; flex-wrap:wrap}
+.topnav button{
+  font-family:var(--sans); font-size:13.5px; font-weight:600; cursor:pointer;
+  padding:9px 16px; border-radius:5px; border:1px solid var(--line);
+  background:var(--recess); color:var(--ink-2); white-space:nowrap;
+  transition:all .15s ease;
+}
+.topnav button:hover{border-color:var(--accent-line); color:var(--accent)}
+.topnav button.active{background:var(--accent); border-color:var(--accent); color:#fff}
+.app-page{display:none}
+.app-page.active{display:block}
+@media print{.topnav{display:none !important} .app-page{display:block !important}}
 </style>
 <script id="kgc-state" type="application/json">{"inputs": {}, "log": [], "seq": 0}</script>
 </head>
 <body>
+
+<nav class="topnav">
+  <div class="wrap">
+    <button type="button" class="active" data-page="page-tanks" onclick="showAppPage('page-tanks', this)">لوحة الأحواض</button>
+    <button type="button" data-page="page-acid" onclick="showAppPage('page-acid', this)">حاسبة معايرة الحمض</button>
+    <button type="button" data-page="page-flux" onclick="showAppPage('page-flux', this)">حاسبة الفلكس FL-01</button>
+  </div>
+</nav>
+<script>
+function showAppPage(pageId, btn) {
+  document.querySelectorAll('.app-page').forEach(function(el) { el.classList.remove('active'); });
+  document.getElementById(pageId).classList.add('active');
+  document.querySelectorAll('.topnav button').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'instant' });
+}
+</script>
 
 <header class="masthead">
   <div class="wrap">
@@ -450,6 +486,7 @@ td.name{color:var(--ink); font-weight:500}
 }
 </style>
 
+<div id="page-tanks" class="app-page active">
 <section id="tanks-dashboard">
   <div class="sechead"><span class="secnum">١</span><h2 class="sectitle">لوحة الأحواض الحية</h2></div>
   <p class="secsub">عدّل القيم واختر حالة كل حوض بنفسك — اضغط على أي رقم لتعديله أو اختر الحالة من الأزرار.</p>
@@ -477,6 +514,7 @@ td.name{color:var(--ink); font-weight:500}
 
   <div class="save-note">💾 التغييرات تُحفظ تلقائياً في الرابط</div>
 </section>
+</div>
 
 <script>
 // Tank Data with specifications
@@ -809,6 +847,7 @@ renderAll();
 }
 </style>
 
+<div id="page-acid" class="app-page">
 <section class="acid-calc-section">
   <div class="sechead"><span class="secnum">٢</span><h2 class="sectitle">حاسبة معايرة الحمض</h2></div>
   <p class="secsub">سجّل قراءة السحاحة وبيانات المعايرة وستحصل على عيارية وتركيز الحمض الأصلي تلقائياً.</p>
@@ -915,6 +954,7 @@ renderAll();
     </div>
   </div>
 </section>
+</div>
 
 <script>
 let lastWtPercent = 0;
@@ -1048,7 +1088,8 @@ function deleteTitrationEntry(key) {
 database.ref('titration_log').limitToLast(50).on('value', function(snapshot) {
   renderTitrationLog(snapshot.val());
 });
-</script><div class="wrap">
+</script>
+<div id="page-flux" class="app-page wrap">
 
   <div class="notice">
     <h2><span class="tag">تنبيه قبل الاعتماد</span> الأرقام النظرية لا تطابق سجل المعالجة الفعلي</h2>
