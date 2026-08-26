@@ -461,7 +461,10 @@ function showAppPage(pageId, btn) {
 .tanks-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
-  align-items: start;
+  /* every card identical: same column width, and one uniform row height
+     across all rows — tanks with fewer readings simply have more slack */
+  grid-auto-rows: 1fr;
+  align-items: stretch;
   gap: 14px;
   margin-bottom: 30px;
   direction: rtl;
@@ -471,6 +474,8 @@ function showAppPage(pageId, btn) {
 .tank-card {
   --tank: var(--line-strong);
   position: relative;
+  display: flex;
+  flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 6px 6px var(--r-lg) var(--r-lg);
@@ -480,6 +485,9 @@ function showAppPage(pageId, btn) {
   box-shadow: var(--e1);
   transition: box-shadow .22s var(--ease), transform .22s var(--ease), border-color .22s var(--ease);
 }
+/* readings absorb the extra height so the status control always sits on the base */
+.tank-card .tank-data { flex: 1 1 auto; }
+.tank-card .status-select { margin-top: auto; }
 /* liquid tint rising from the base of the vessel */
 .tank-card::after {
   content: "";
