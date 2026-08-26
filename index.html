@@ -513,20 +513,33 @@ function showAppPage(pageId, btn) {
 </div>
 
 <script>
+// Field catalog: key -> {label, raw(no decimals)}
+const TANK_FIELD_DEFS = {
+  ph:          { label: 'pH' },
+  fe:          { label: 'Fe' },
+  baume:       { label: 'Baumé' },
+  acidPercent: { label: 'حمض %' },
+  time:        { label: 'زمن', raw: true },
+  t:           { label: 'T' },
+  sp:          { label: 'SP' }
+};
+const WET_FULL = ['ph', 'fe', 'baume', 'acidPercent', 'time'];
+const WET_SIMPLE = ['ph', 'baume', 'time'];
+
 // Tank Data with specifications
 const tankSpecs = [
-  { id: 12, name: 'Zinc Tank', type: 'zinc', sp: 0, tc: 0, zincPct: 0, flueGas: 0, status: 'good' },
-  { id: 11, name: 'Drying', type: 'drying', t: 0, status: 'good' },
-  { id: 10, name: 'Flux Tank', type: 'wet', ph: 4.2, fe: 1.2, baume: 17, acidPercent: 0, time: 25, status: 'good' },
-  { id: 9, name: 'Rinsing Tank 2', type: 'wet', ph: 7, fe: 0, baume: 0, acidPercent: 0, time: 2, status: 'good' },
-  { id: 8, name: 'Rinsing Tank 1', type: 'wet', ph: 3.2, fe: 5, baume: 2, acidPercent: 0, time: 2, status: 'good' },
-  { id: 7, name: 'Stripping Acid', type: 'wet', ph: 0.8, fe: 120, baume: 18, acidPercent: 0, time: 4, status: 'good' },
-  { id: 6, name: 'Acid Tank 4', type: 'wet', ph: 2.1, fe: 35, baume: 10.5, acidPercent: 0, time: 8, status: 'good' },
-  { id: 5, name: 'Acid Tank 3', type: 'wet', ph: 1.8, fe: 38, baume: 11, acidPercent: 0, time: 8, status: 'good' },
-  { id: 4, name: 'Acid Tank 2', type: 'wet', ph: 1.6, fe: 42, baume: 11.5, acidPercent: 0, time: 8, status: 'good' },
-  { id: 3, name: 'Acid Tank 1', type: 'wet', ph: 1.5, fe: 45, baume: 12, acidPercent: 0, time: 8, status: 'good' },
-  { id: 2, name: 'Rinsing Before Acid', type: 'wet', ph: 7, fe: 0, baume: 0, acidPercent: 0, time: 2, status: 'good' },
-  { id: 1, name: 'Degreasing Tank', type: 'wet', ph: 9.5, fe: 0, baume: 6, acidPercent: 0, time: 3, status: 'good' },
+  { id: 12, name: 'Zinc Tank', type: 'zinc', fields: ['sp', 'time'], sp: 0, time: 0, status: 'good' },
+  { id: 11, name: 'Drying', type: 'drying', fields: ['t'], t: 0, status: 'good' },
+  { id: 10, name: 'Flux Tank', type: 'wet', fields: WET_FULL, ph: 4.2, fe: 1.2, baume: 17, acidPercent: 0, time: 25, status: 'good' },
+  { id: 9, name: 'Rinsing Tank 2', type: 'wet', fields: WET_FULL, ph: 7, fe: 0, baume: 0, acidPercent: 0, time: 2, status: 'good' },
+  { id: 8, name: 'Rinsing Tank 1', type: 'wet', fields: WET_FULL, ph: 3.2, fe: 5, baume: 2, acidPercent: 0, time: 2, status: 'good' },
+  { id: 7, name: 'Stripping Acid', type: 'wet', fields: WET_FULL, ph: 0.8, fe: 120, baume: 18, acidPercent: 0, time: 4, status: 'good' },
+  { id: 6, name: 'Acid Tank 4', type: 'wet', fields: WET_FULL, ph: 2.1, fe: 35, baume: 10.5, acidPercent: 0, time: 8, status: 'good' },
+  { id: 5, name: 'Acid Tank 3', type: 'wet', fields: WET_FULL, ph: 1.8, fe: 38, baume: 11, acidPercent: 0, time: 8, status: 'good' },
+  { id: 4, name: 'Acid Tank 2', type: 'wet', fields: WET_FULL, ph: 1.6, fe: 42, baume: 11.5, acidPercent: 0, time: 8, status: 'good' },
+  { id: 3, name: 'Acid Tank 1', type: 'wet', fields: WET_FULL, ph: 1.5, fe: 45, baume: 12, acidPercent: 0, time: 8, status: 'good' },
+  { id: 2, name: 'Rinsing Before Acid', type: 'wet', fields: WET_SIMPLE, ph: 7, baume: 0, time: 2, status: 'good' },
+  { id: 1, name: 'Degreasing Tank', type: 'wet', fields: WET_SIMPLE, ph: 9.5, baume: 6, time: 3, status: 'good' },
 ];
 
 const tankArabicNames = {
@@ -552,7 +565,7 @@ function migrateTanks(list) {
   return tankSpecs.map(function(spec) {
     const existing = byId[spec.id];
     if (!existing) return JSON.parse(JSON.stringify(spec));
-    return Object.assign({}, spec, existing, { name: spec.name, type: spec.type });
+    return Object.assign({}, spec, existing, { name: spec.name, type: spec.type, fields: spec.fields });
   });
 }
 
@@ -655,24 +668,17 @@ function setStatus(tankId, newStatus) {
 }
 
 function tankDataRowsHTML(tank) {
-  const row = (label, field, value) => `
+  const fields = tank.fields || WET_FULL;
+  return fields.map(function(key) {
+    const def = TANK_FIELD_DEFS[key] || { label: key };
+    const value = tank[key];
+    const display = def.raw ? (value || 0) : Number(value || 0).toFixed(2);
+    return `
         <div class="data-row">
-          <span class="data-label">${label}</span>
-          <span class="data-value" onclick="makeEditable(this, ${tank.id}, '${field}')">${Number(value || 0).toFixed(2)}</span>
+          <span class="data-label">${def.label}</span>
+          <span class="data-value" onclick="makeEditable(this, ${tank.id}, '${key}')">${display}</span>
         </div>`;
-
-  if (tank.type === 'drying') {
-    return row('T', 't', tank.t);
-  }
-  if (tank.type === 'zinc') {
-    return row('SP', 'sp', tank.sp) + row('TC', 'tc', tank.tc) + row('%', 'zincPct', tank.zincPct) + row('FLUE GAS', 'flueGas', tank.flueGas);
-  }
-  return row('pH', 'ph', tank.ph) + row('Fe', 'fe', tank.fe) + row('Baumé', 'baume', tank.baume) +
-    row('حمض %', 'acidPercent', tank.acidPercent) + `
-        <div class="data-row">
-          <span class="data-label">زمن</span>
-          <span class="data-value" onclick="makeEditable(this, ${tank.id}, 'time')">${tank.time}</span>
-        </div>`;
+  }).join('');
 }
 
 function renderCards() {
@@ -699,17 +705,13 @@ function renderCards() {
 }
 
 function tankTableReadingsHTML(tank) {
-  const field = (label, key, value) => `<span style="display:inline-block; margin-left:14px; cursor:pointer; white-space:nowrap;" onclick="makeEditable(this, ${tank.id}, '${key}')"><span style="color:var(--ink-3); font-size:11px;">${label}</span> ${Number(value || 0).toFixed(2)}</span>`;
-
-  if (tank.type === 'drying') {
-    return field('T', 't', tank.t);
-  }
-  if (tank.type === 'zinc') {
-    return field('SP', 'sp', tank.sp) + field('TC', 'tc', tank.tc) + field('%', 'zincPct', tank.zincPct) + field('FLUE GAS', 'flueGas', tank.flueGas);
-  }
-  return field('pH', 'ph', tank.ph) + field('Fe', 'fe', tank.fe) + field('Baumé', 'baume', tank.baume) +
-    field('حمض %', 'acidPercent', tank.acidPercent) +
-    `<span style="display:inline-block; cursor:pointer; white-space:nowrap;" onclick="makeEditable(this, ${tank.id}, 'time')"><span style="color:var(--ink-3); font-size:11px;">زمن</span> ${tank.time}</span>`;
+  const fields = tank.fields || WET_FULL;
+  return fields.map(function(key) {
+    const def = TANK_FIELD_DEFS[key] || { label: key };
+    const value = tank[key];
+    const display = def.raw ? (value || 0) : Number(value || 0).toFixed(2);
+    return `<span style="display:inline-block; margin-left:14px; cursor:pointer; white-space:nowrap;" onclick="makeEditable(this, ${tank.id}, '${key}')"><span style="color:var(--ink-3); font-size:11px;">${def.label}</span> ${display}</span>`;
+  }).join('');
 }
 
 function renderTable() {
@@ -1047,7 +1049,7 @@ function populateTankSelect() {
   const select = document.getElementById('acid-tank-select');
   if (!select || typeof tanks === 'undefined') return;
   const current = select.value;
-  select.innerHTML = tanks.filter(t => t.type === 'wet').map(t => `<option value="${t.id}">${tankArabicNames[t.name] || t.name}</option>`).join('');
+  select.innerHTML = tanks.filter(t => t.fields && t.fields.includes('acidPercent')).map(t => `<option value="${t.id}">${tankArabicNames[t.name] || t.name}</option>`).join('');
   if (current) select.value = current;
 }
 populateTankSelect();
