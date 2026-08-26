@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="production.css">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
@@ -318,7 +319,8 @@ td.name{color:var(--ink); font-weight:500}
 /* only the tanks dashboard is reachable, and nothing is editable */
 .mode-view .topnav{display:none}
 .mode-view #page-acid,
-.mode-view #page-flux{display:none !important}
+.mode-view #page-flux,
+.mode-view #page-timing{display:none !important}
 .mode-view #page-tanks{display:block !important}
 .mode-view .data-value{cursor:default; pointer-events:none}
 .mode-view .data-value:hover{background:transparent; color:var(--ink)}
@@ -352,6 +354,10 @@ td.name{color:var(--ink); font-weight:500}
     <button type="button" data-page="page-flux" onclick="showAppPage('page-flux', this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2.5" width="16" height="19" rx="2.5"/><path d="M8 7h8"/><path d="M8 11.5h3M13 11.5h3M8 15.5h3M13 15.5h3"/></svg>
       حاسبة الفلكس FL-01
+    </button>
+    <button type="button" data-page="page-timing" onclick="showAppPage('page-timing', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9.5V13l2.5 1.5"/><path d="M9 2h6"/></svg>
+      تتبع زمن الإنتاج
     </button>
   </div>
 </nav>
@@ -1925,6 +1931,9 @@ setInterval(function() {
   }
 }, 3000);
 </script>
+
+<div id="page-timing" class="app-page wrap"></div>
+<script src="production.js"></script>
 
 </body>
 </html>
