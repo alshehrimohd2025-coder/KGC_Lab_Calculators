@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="production.css">
+<script src="i18n.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
@@ -315,6 +316,51 @@ td.name{color:var(--ink); font-weight:500}
 @keyframes pageIn{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none}}
 @media print{.topnav{display:none !important} .app-page{display:block !important; animation:none}}
 
+/* ---------- language toggle ---------- */
+.langtog{
+  display:inline-flex; border:1px solid var(--line-strong); border-radius:999px;
+  overflow:hidden; flex:0 0 auto; background:var(--surface);
+}
+.langtog button{
+  font-family:var(--sans); font-size:12.5px; font-weight:600; cursor:pointer;
+  padding:6px 14px; border:none; background:transparent; color:var(--ink-3);
+  line-height:1.5; transition:background .16s var(--ease), color .16s var(--ease);
+}
+.langtog button:hover{color:var(--ink)}
+.langtog button.on{background:var(--accent); color:#fff}
+.langtog button:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
+/* the nav is hidden for managers, so the masthead carries its own copy */
+.masthead .langtog{margin-bottom:18px}
+.mode-edit .masthead .langtog{display:none}
+
+/* ---------- LTR adjustments ---------- */
+html[dir="ltr"] body{direction:ltr; text-align:left}
+html[dir="ltr"] .idcell .v{text-align:left}
+html[dir="ltr"] .secsub{padding-right:0; padding-left:38px}
+html[dir="ltr"] th{text-align:left}
+html[dir="ltr"] .data-label{text-align:left}
+html[dir="ltr"] .tanks-grid{direction:ltr}
+html[dir="ltr"] .tanks-table{direction:ltr}
+html[dir="ltr"] .tanks-table .tank-name-col{text-align:left}
+html[dir="ltr"] .formula{border-right:none; border-left:2px solid var(--accent-line)}
+html[dir="ltr"] .calc-note{border-left:none; border-right:3px solid var(--fact)}
+html[dir="ltr"] .step-breakdown{direction:ltr; text-align:left}
+html[dir="ltr"] .calc-note{direction:ltr; text-align:left}
+html[dir="ltr"] .toast{left:auto; right:22px}
+html[dir="ltr"] .status-select,
+html[dir="ltr"] .status-select-cell{direction:ltr}
+html[dir="ltr"] .pt-field label,
+html[dir="ltr"] .pt-tl-name,
+html[dir="ltr"] .pt-tl-sub{text-align:left}
+html[dir="ltr"] .pt-tl-dur{text-align:right}
+html[dir="ltr"] .pt-stat .v{text-align:left}
+html[dir="ltr"] .pt-reasons,
+html[dir="ltr"] .pt-filters input,
+html[dir="ltr"] .pt-filters select{direction:ltr}
+html[dir="ltr"] .status-select,
+html[dir="ltr"] .pt-modal{direction:ltr}
+html[dir="ltr"] .input-label .unit{margin-left:0; margin-right:0}
+
 /* ---------- read-only mode (managers) ---------- */
 /* only the tanks dashboard is reachable, and nothing is editable */
 .mode-view .topnav{display:none}
@@ -345,20 +391,25 @@ td.name{color:var(--ink); font-weight:500}
   <div class="wrap">
     <button type="button" class="active" data-page="page-tanks" onclick="showAppPage('page-tanks', this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="18" rx="1.5"/><rect x="14" y="3" width="7" height="10" rx="1.5"/><path d="M14 17h7"/></svg>
-      لوحة الأحواض
+      <span data-i18n="nav.tanks">لوحة الأحواض</span>
     </button>
     <button type="button" data-page="page-acid" onclick="showAppPage('page-acid', this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6"/><path d="M10 3v6.5L5.2 18a2 2 0 0 0 1.7 3h10.2a2 2 0 0 0 1.7-3L14 9.5V3"/><path d="M7.5 14h9"/></svg>
-      حاسبة معايرة الحمض
+      <span data-i18n="nav.acid">حاسبة معايرة الحمض</span>
     </button>
     <button type="button" data-page="page-flux" onclick="showAppPage('page-flux', this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2.5" width="16" height="19" rx="2.5"/><path d="M8 7h8"/><path d="M8 11.5h3M13 11.5h3M8 15.5h3M13 15.5h3"/></svg>
-      حاسبة الفلكس FL-01
+      <span data-i18n="nav.flux">حاسبة الفلكس FL-01</span>
     </button>
     <button type="button" data-page="page-timing" onclick="showAppPage('page-timing', this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9.5V13l2.5 1.5"/><path d="M9 2h6"/></svg>
-      تتبع زمن الإنتاج
+      <span data-i18n="nav.timing">تتبع زمن الإنتاج</span>
     </button>
+    <span style="flex:1 1 auto"></span>
+    <div class="langtog" role="group" aria-label="Language">
+      <button type="button" data-lang-btn="ar" onclick="I18N.set('ar')">ع</button>
+      <button type="button" data-lang-btn="en" onclick="I18N.set('en')">EN</button>
+    </div>
   </div>
 </nav>
 <script>
@@ -373,15 +424,19 @@ function showAppPage(pageId, btn) {
 
 <header class="masthead">
   <div class="wrap">
-    <p class="eyebrow">KGC · HOT-DIP GALVANIZING · LAB</p>
-    <h1>حاسبات مختبر جلفنة KGC</h1>
-    <p class="lede">
-      ثلاث حاسبات تشغيلية لحوض الفلكس FL-01 وأحواض الحمض وحوض الزنك، مبنية على
-      وحدات ومصطلحات شيت المصنع نفسه. القراءات وسجل العمليات محفوظة في الرابط ومشتركة بين كل جهاز يفتحه.
+    <div class="langtog" role="group" aria-label="Language">
+      <button type="button" data-lang-btn="ar" onclick="I18N.set('ar')">ع</button>
+      <button type="button" data-lang-btn="en" onclick="I18N.set('en')">EN</button>
+    </div>
+    <p class="eyebrow" data-i18n="head.eyebrow">KGC · HOT-DIP GALVANIZING · LAB</p>
+    <h1 data-i18n="head.title">حاسبات مختبر جلفنة KGC</h1>
+    <p class="lede" data-i18n="head.lede">
+      حاسبات تشغيلية لحوض الفلكس FL-01 وأحواض الحمض وحوض الزنك، مبنية على
+      وحدات ومصطلحات شيت المصنع نفسه.
     </p>
     <div class="syncbar off" id="syncbar">
       <span class="dot"></span>
-      <span id="syncmsg">جارٍ التحقق من حالة الحفظ…</span>
+      <span id="syncmsg" data-i18n-html="sync.live"></span>
     </div>
     <div class="idstrip">
       <div class="idcell"><span class="k">FLUX TANK</span><span class="v">FL-01</span></div>
@@ -650,11 +705,11 @@ function showAppPage(pageId, btn) {
 
 <div id="page-tanks" class="app-page active">
 <section id="tanks-dashboard">
-  <div class="sechead"><span class="secnum">١</span><h2 class="sectitle">لوحة الأحواض الحية</h2></div>
-  <p class="secsub secsub-edit">عدّل القيم واختر حالة كل حوض بنفسك — اضغط على أي رقم لتعديله أو اختر الحالة من القائمة.</p>
+  <div class="sechead"><span class="secnum">١</span><h2 class="sectitle" data-i18n="tanks.title">لوحة الأحواض الحية</h2></div>
+  <p class="secsub secsub-edit" data-i18n="tanks.sub">عدّل القيم واختر حالة كل حوض بنفسك — اضغط على أي رقم لتعديله أو اختر الحالة من القائمة.</p>
   <div class="viewbadge">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
-    عرض فقط — القراءات تتحدّث مباشرة من المختبر
+    <span data-i18n="tanks.viewonly">عرض فقط — القراءات تتحدّث مباشرة من المختبر</span>
   </div>
 
   <!-- Tanks Cards View -->
@@ -665,9 +720,9 @@ function showAppPage(pageId, btn) {
     <table class="tanks-table" id="tanks-table-body">
       <thead>
         <tr>
-          <th>الحوض</th>
-          <th>القراءات</th>
-          <th>الحالة</th>
+          <th data-i18n="tanks.col.tank">الحوض</th>
+          <th data-i18n="tanks.col.readings">القراءات</th>
+          <th data-i18n="tanks.col.status">الحالة</th>
         </tr>
       </thead>
       <tbody id="tanks-list"></tbody>
@@ -676,7 +731,7 @@ function showAppPage(pageId, btn) {
 
   <div class="save-note">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-    التغييرات تُحفظ تلقائياً وتتزامن مع كل الأجهزة
+    <span data-i18n="tanks.savenote">التغييرات تُحفظ تلقائياً وتتزامن مع كل الأجهزة</span>
   </div>
 </section>
 </div>
@@ -684,14 +739,11 @@ function showAppPage(pageId, btn) {
 <script>
 // Field catalog: key -> {label, raw(no decimals)}
 const TANK_FIELD_DEFS = {
-  ph:          { label: 'pH' },
-  fe:          { label: 'Fe' },
-  baume:       { label: 'Baumé' },
-  acidPercent: { label: 'حمض %' },
-  time:        { label: 'زمن', raw: true },
-  t:           { label: 'T' },
-  sp:          { label: 'SP' }
+  ph:          {}, fe: {}, baume: {}, acidPercent: {},
+  time:        { raw: true },
+  t:           {}, sp: {}
 };
+const fieldLabel = key => t('f.' + key);
 const WET_FULL = ['ph', 'fe', 'baume', 'acidPercent', 'time'];
 const WET_SIMPLE = ['ph', 'baume', 'time'];
 
@@ -711,20 +763,13 @@ const tankSpecs = [
   { id: 1, name: 'Degreasing Tank', type: 'wet', fields: WET_SIMPLE, ph: 9.5, baume: 6, time: 3, status: 'good' },
 ];
 
-const tankArabicNames = {
-  'Flux Tank': 'تانك الفلكس',
-  'Rinsing Tank 1': 'تانك غسيل 1',
-  'Rinsing Tank 2': 'تانك غسيل 2',
-  'Rinsing Before Acid': 'رينسينج قبل الحمض',
-  'Stripping Acid': 'تانك حمض التعرية',
-  'Acid Tank 1': 'تانك حمض 1',
-  'Acid Tank 2': 'تانك حمض 2',
-  'Acid Tank 3': 'تانك حمض 3',
-  'Acid Tank 4': 'تانك حمض 4',
-  'Degreasing Tank': 'تانك إزالة الشحوم',
-  'Drying': 'تانك الدراينج',
-  'Zinc Tank': 'حوض الزنك'
-};
+// Display name for a tank in the active language.
+// Falls back to the stored value so older log rows still read correctly.
+function tankLabel(name) {
+  const key = 'tank.' + name;
+  const out = t(key);
+  return out === key ? name : out;
+}
 
 // Migrate older saved data (missing new tanks or the `type` field) onto the current spec
 function migrateTanks(list) {
@@ -771,10 +816,10 @@ database.ref('tanks_data').on('value', function(snapshot) {
 });
 
 const STATUS_META = {
-  in_service:     { text: 'داخل الخدمة',  color: '#17A34A' },
-  maintenance:    { text: 'تحت الصيانة', color: '#2563EB' },
-  needs_review:   { text: 'يحتاج مراجعة', color: '#CA8A04' },
-  out_of_service: { text: 'خارج الخدمة',  color: '#DC2626' }
+  in_service:     { color: '#17A34A' },
+  maintenance:    { color: '#2563EB' },
+  needs_review:   { color: '#CA8A04' },
+  out_of_service: { color: '#DC2626' }
 };
 const STATUS_LEGACY_MAP = { good: 'in_service', warning: 'needs_review', critical: 'out_of_service' };
 
@@ -790,13 +835,13 @@ function getStatusColor(status) {
 }
 
 function getStatusText(status) {
-  return STATUS_META[normalizeStatus(status)].text;
+  return t('st.' + normalizeStatus(status));
 }
 
 function statusOptionsHTML(currentStatus) {
   const current = normalizeStatus(currentStatus);
   return Object.keys(STATUS_META).map(key =>
-    `<option value="${key}" ${current === key ? 'selected' : ''}>${STATUS_META[key].text}</option>`
+    `<option value="${key}" ${current === key ? 'selected' : ''}>${t('st.' + key)}</option>`
   ).join('');
 }
 
@@ -845,12 +890,12 @@ function setStatus(tankId, newStatus) {
 function tankDataRowsHTML(tank) {
   const fields = tank.fields || WET_FULL;
   return fields.map(function(key) {
-    const def = TANK_FIELD_DEFS[key] || { label: key };
+    const def = TANK_FIELD_DEFS[key] || {};
     const value = tank[key];
     const display = def.raw ? (value || 0) : Number(value || 0).toFixed(2);
     return `
         <div class="data-row">
-          <span class="data-label">${def.label}</span>
+          <span class="data-label">${fieldLabel(key)}</span>
           <span class="data-value" onclick="makeEditable(this, ${tank.id}, '${key}')">${display}</span>
         </div>`;
   }).join('');
@@ -872,7 +917,7 @@ function renderCards() {
         <span class="tank-num">${tank.id}</span>
         <span class="tank-dot" title="${statusText}"></span>
       </div>
-      <div class="tank-name">${tankArabicNames[tank.name] || tank.name}</div>
+      <div class="tank-name">${tankLabel(tank.name)}</div>
       <div class="tank-data">${tankDataRowsHTML(tank)}</div>
       <select class="status-select" style="background:${color}1a; border-color:${color}59; color:${color};" onchange="setStatus(${tank.id}, this.value)">
         ${statusOptionsHTML(tank.status)}
@@ -885,10 +930,10 @@ function renderCards() {
 function tankTableReadingsHTML(tank) {
   const fields = tank.fields || WET_FULL;
   return fields.map(function(key) {
-    const def = TANK_FIELD_DEFS[key] || { label: key };
+    const def = TANK_FIELD_DEFS[key] || {};
     const value = tank[key];
     const display = def.raw ? (value || 0) : Number(value || 0).toFixed(2);
-    return `<span style="display:inline-block; margin-left:14px; cursor:pointer; white-space:nowrap;" onclick="makeEditable(this, ${tank.id}, '${key}')"><span style="color:var(--ink-3); font-size:11px;">${def.label}</span> ${display}</span>`;
+    return `<span style="display:inline-block; margin-left:14px; cursor:pointer; white-space:nowrap;" onclick="makeEditable(this, ${tank.id}, '${key}')"><span style="color:var(--ink-3); font-size:11px;">${fieldLabel(key)}</span> ${display}</span>`;
   }).join('');
 }
 
@@ -902,7 +947,7 @@ function renderTable() {
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="tank-name-col">${tankArabicNames[tank.name] || tank.name}</td>
+      <td class="tank-name-col">${tankLabel(tank.name)}</td>
       <td>${tankTableReadingsHTML(tank)}</td>
       <td><select class="status-select-cell" style="background:${statusColor}1a; border-color:${statusColor}; color:${statusColor};" onchange="setStatus(${tank.id}, this.value)">${statusOptionsHTML(tank.status)}</select></td>
     `;
@@ -917,6 +962,8 @@ function renderAll() {
 
 // Initial render
 renderAll();
+// re-render the tank cards and table when the language flips
+I18N.onChange(renderAll);
 </script><style>
 .acid-calc-section {
   background: var(--surface);
@@ -1083,21 +1130,21 @@ renderAll();
 
 <div id="page-acid" class="app-page">
 <section class="acid-calc-section">
-  <div class="sechead"><span class="secnum">٢</span><h2 class="sectitle">حاسبة معايرة الحمض</h2></div>
-  <p class="secsub">سجّل قراءة السحاحة وبيانات المعايرة وستحصل على عيارية وتركيز الحمض الأصلي تلقائياً.</p>
+  <div class="sechead"><span class="secnum">٢</span><h2 class="sectitle" data-i18n="acid.title">حاسبة معايرة الحمض</h2></div>
+  <p class="secsub" data-i18n="acid.sub">سجّل قراءة السحاحة وبيانات المعايرة وستحصل على عيارية وتركيز الحمض الأصلي تلقائياً.</p>
 
   <div class="calc-grid">
     <div class="input-group">
       <label class="input-label">
-        قراءة السحاحة V_buret
+        <span data-i18n="acid.vburet">قراءة السحاحة V_buret</span>
         <span class="unit">mL</span>
       </label>
-      <input type="number" id="v-buret" class="input-field" value="" placeholder="أدخل القراءة" step="0.01">
+      <input type="number" id="v-buret" class="input-field" value="" placeholder="أدخل القراءة" data-i18n-ph="acid.ph.placeholder" step="0.01">
     </div>
 
     <div class="input-group">
       <label class="input-label">
-        حجم العينة V_aliquot
+        <span data-i18n="acid.valiquot">حجم العينة V_aliquot</span>
         <span class="unit">mL</span>
       </label>
       <input type="number" id="v-aliquot" class="input-field" value="10.5" placeholder="10.5" step="0.01">
@@ -1105,7 +1152,7 @@ renderAll();
 
     <div class="input-group">
       <label class="input-label">
-        عيارية القاعدة N_base
+        <span data-i18n="acid.nbase">عيارية القاعدة N_base</span>
         <span class="unit">N</span>
       </label>
       <input type="number" id="n-base" class="input-field" value="0.303" placeholder="0.303" step="0.001">
@@ -1113,7 +1160,7 @@ renderAll();
 
     <div class="input-group">
       <label class="input-label">
-        حجم الحمض الأصلي V_acid_init
+        <span data-i18n="acid.vacidinit">حجم الحمض الأصلي V_acid_init</span>
         <span class="unit">mL</span>
       </label>
       <input type="number" id="v-acid-init" class="input-field" value="5.0" placeholder="5.0" step="0.01">
@@ -1121,7 +1168,7 @@ renderAll();
 
     <div class="input-group">
       <label class="input-label">
-        حجم التخفيف الكلي V_dilution
+        <span data-i18n="acid.vdilution">حجم التخفيف الكلي V_dilution</span>
         <span class="unit">mL</span>
       </label>
       <input type="number" id="v-dilution" class="input-field" value="200.0" placeholder="200.0" step="0.1">
@@ -1129,7 +1176,7 @@ renderAll();
 
     <div class="input-group">
       <label class="input-label">
-        الوزن الجزيئي للحمض MW_acid
+        <span data-i18n="acid.mwacid">الوزن الجزيئي للحمض MW_acid</span>
         <span class="unit">g/mol</span>
       </label>
       <input type="number" id="mw-acid" class="input-field" value="36.46" placeholder="36.46" step="0.01">
@@ -1137,7 +1184,7 @@ renderAll();
 
     <div class="input-group">
       <label class="input-label">
-        كثافة الحمض Density_acid
+        <span data-i18n="acid.density">كثافة الحمض Density_acid</span>
         <span class="unit">g/mL</span>
       </label>
       <input type="number" id="density-acid" class="input-field" value="1.18" placeholder="1.18" step="0.01">
@@ -1146,17 +1193,17 @@ renderAll();
 
   <div class="results-panel">
     <div class="result-item">
-      <span class="result-label">العيارية بعد التخفيف N_diluted</span>
+      <span class="result-label" data-i18n="acid.ndiluted">العيارية بعد التخفيف N_diluted</span>
       <span class="result-value" id="n-diluted">0.0000 <span class="unit">N</span></span>
     </div>
     <div class="result-item" style="border-top: 1px solid var(--accent-line); padding-top: 16px;">
-      <span class="result-label" style="font-size: 16px; font-weight: 700;">عيارية الحمض الأصلي N_original</span>
+      <span class="result-label" style="font-size: 16px; font-weight: 700;" data-i18n="acid.noriginal">عيارية الحمض الأصلي N_original</span>
       <span class="result-value" style="font-size: 24px;">
         <span id="n-original">0.00</span><span class="unit" style="font-size: 14px;"> N</span>
       </span>
     </div>
     <div class="result-item" style="border-top: 1px solid var(--accent-line); padding-top: 16px;">
-      <span class="result-label" style="font-size: 16px; font-weight: 700;">النسبة المئوية للحمض</span>
+      <span class="result-label" style="font-size: 16px; font-weight: 700;" data-i18n="acid.percent">النسبة المئوية للحمض</span>
       <span class="result-value" style="font-size: 28px; color: #0E6E63;">
         <span id="acid-percentage">0.00</span><span class="unit" style="font-size: 16px;">%</span>
       </span>
@@ -1169,22 +1216,22 @@ renderAll();
 
   <div style="margin-top:20px; padding-top:20px; border-top:1px dashed var(--line-strong); display:flex; gap:12px; flex-wrap:wrap; align-items:end;">
     <div class="input-group" style="flex:1; min-width:220px;">
-      <label class="input-label">احفظ النتيجة في تانك</label>
+      <label class="input-label" data-i18n="acid.saveto">احفظ النتيجة في تانك</label>
       <select id="acid-tank-select" class="input-field" style="text-align:right; direction:rtl;"></select>
     </div>
     <button class="btn" id="save-to-tank-btn" onclick="saveAcidToTank()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
-      حفظ للتانك المختار
+      <span data-i18n="acid.savebtn">حفظ للتانك المختار</span>
     </button>
   </div>
   <div id="acid-save-msg" style="margin-top:8px; font-size:12.5px; color:var(--accent); min-height:16px;"></div>
 
   <div style="margin-top:28px;">
-    <p class="panel-label" style="margin-bottom:10px;">سجل المعايرات</p>
+    <p class="panel-label" style="margin-bottom:10px;" data-i18n="acid.log">سجل المعايرات</p>
     <div class="tablewrap">
       <table>
         <thead>
-          <tr><th>التاريخ</th><th>الوقت</th><th>التانك</th><th>نسبة الحمض %</th><th></th></tr>
+          <tr><th data-i18n="acid.col.date">التاريخ</th><th data-i18n="acid.col.time">الوقت</th><th data-i18n="acid.col.tank">التانك</th><th data-i18n="acid.col.percent">نسبة الحمض %</th><th></th></tr>
         </thead>
         <tbody id="titration-log-body"></tbody>
       </table>
@@ -1220,15 +1267,15 @@ function calculateAcid() {
   // تحديث خطوات الحساب
   const stepsHTML = `
     <div class="step-item">
-      <span class="step-label">١. العيارية بعد التخفيف N_diluted</span>
+      <span class="step-label">${t('acid.step1')}</span>
       (${vBuret} mL × ${nBase} N) ÷ ${vAliquot} mL = <b>${nDiluted.toFixed(4)} N</b>
     </div>
     <div class="step-item">
-      <span class="step-label">٢. عيارية الحمض الأصلي N_original</span>
+      <span class="step-label">${t('acid.step2')}</span>
       (${nDiluted.toFixed(4)} N × ${vDilution} mL) ÷ ${vAcidInit} mL = <b>${nOriginal.toFixed(4)} N</b>
     </div>
     <div class="step-item">
-      <span class="step-label">٣. النسبة المئوية للحمض Wt%</span>
+      <span class="step-label">${t('acid.step3')}</span>
       (${nOriginal.toFixed(4)} N × ${mwAcid} g/mol) ÷ (${densityAcid} g/mL × 10) = <b>${wtPercent.toFixed(2)}%</b>
     </div>
   `;
@@ -1243,13 +1290,19 @@ acidInputs.forEach(id => {
 
 // حساب أولي
 calculateAcid();
+// the step breakdown, tank list and log all carry translated text
+I18N.onChange(function () {
+  calculateAcid();
+  populateTankSelect();
+  if (lastTitrationSnapshot) renderTitrationLog(lastTitrationSnapshot);
+});
 
 /* ---------- ربط نتيجة المعايرة بتانك من لوحة الأحواض ---------- */
 function populateTankSelect() {
   const select = document.getElementById('acid-tank-select');
   if (!select || typeof tanks === 'undefined') return;
   const current = select.value;
-  select.innerHTML = tanks.filter(t => t.fields && t.fields.includes('acidPercent')).map(t => `<option value="${t.id}">${tankArabicNames[t.name] || t.name}</option>`).join('');
+  select.innerHTML = tanks.filter(t => t.fields && t.fields.includes('acidPercent')).map(t => `<option value="${t.id}">${tankLabel(t.name)}</option>`).join('');
   if (current) select.value = current;
 }
 populateTankSelect();
@@ -1269,16 +1322,15 @@ function saveAcidToTank() {
   const dateStr = now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate());
   const timeStr = pad(now.getHours()) + ":" + pad(now.getMinutes()) + ":" + pad(now.getSeconds());
 
-  const tankLabel = tankArabicNames[tank.name] || tank.name;
-
+  // Store the canonical name so the log can be shown in either language later.
   database.ref('titration_log').push({
-    date: dateStr, time: timeStr, tankId: tank.id, tankName: tankLabel, percent: lastWtPercent
+    date: dateStr, time: timeStr, tankId: tank.id, tankName: tank.name, percent: lastWtPercent
   }).catch(function(error) {
     console.error("Firebase titration log error:", error);
   });
 
   const msg = document.getElementById('acid-save-msg');
-  msg.textContent = `✓ تم حفظ ${lastWtPercent.toFixed(2)}% في ${tankLabel}`;
+  msg.textContent = t('acid.savedmsg', { pct: lastWtPercent.toFixed(2), tank: tankLabel(tank.name) });
   setTimeout(() => { msg.textContent = ''; }, 4000);
 }
 
@@ -1289,29 +1341,31 @@ function renderTitrationLog(entries) {
     .map(([key, r]) => ({ key, ...r }))
     .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
   if (rows.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--ink-3);">لا يوجد سجل معايرات بعد</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--ink-3);">${t('acid.empty')}</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(r => `
     <tr>
       <td class="num">${r.date}</td>
       <td class="num">${r.time}</td>
-      <td class="name">${r.tankName}</td>
+      <td class="name">${tankLabel(r.tankName)}</td>
       <td class="num">${Number(r.percent).toFixed(2)}%</td>
-      <td><button class="btn mini danger" onclick="deleteTitrationEntry('${r.key}')" aria-label="حذف السجل"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg> حذف</button></td>
+      <td><button class="btn mini danger" onclick="deleteTitrationEntry('${r.key}')" aria-label="${t('acid.deleteAria')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg> ${t('acid.delete')}</button></td>
     </tr>
   `).join('');
 }
 
 function deleteTitrationEntry(key) {
-  if (!confirm('هل تريد حذف هذا السجل من سجل المعايرات؟')) return;
+  if (!confirm(t('acid.confirmDelete'))) return;
   database.ref('titration_log/' + key).remove().catch(function(error) {
     console.error("Firebase delete error:", error);
   });
 }
 
+let lastTitrationSnapshot = null;
 database.ref('titration_log').limitToLast(50).on('value', function(snapshot) {
-  renderTitrationLog(snapshot.val());
+  lastTitrationSnapshot = snapshot.val();
+  renderTitrationLog(lastTitrationSnapshot);
 });
 </script>
 <div id="page-flux" class="app-page wrap">
@@ -1773,7 +1827,7 @@ function persist(successMsg){
   }
   if(mode!=="shared"){ toast("الحفظ غير متاح في هذا العرض"); return; }
   setBusy(true);
-  setSync("", "<span class=\"dot\"></span> جارٍ الحفظ…");
+  setSync("", "<span class=\"dot\"></span> " + t('sync.saving'));
   try{ sessionStorage.setItem("kgc-flash",successMsg); }catch(e){}
   api.publish(buildDoc(state)).catch(function(err){
     var code=(err&&err.code)||"upstream_error";
@@ -1782,12 +1836,12 @@ function persist(successMsg){
     if(code==="conflict"){ toast("شخص آخر حفظ قبلك — يتم تحديث الصفحة الآن"); return; }
     if(code==="not_writer"||code==="not_granted"||code==="not_declared"||code==="consent_required"){
       mode="readonly"; renderLog();
-      setSync("ro","<span class=\"dot\"></span> <b>عرض فقط</b> — لا تملك صلاحية الحفظ على هذا الرابط.");
+      setSync("ro","<span class=\"dot\"></span> " + t('sync.noperm'));
       return;
     }
     if(code==="rate_limited"){ toast("حفظ متكرر بسرعة — انتظر لحظة ثم أعد المحاولة"); return; }
     if(code==="too_large"){ toast("السجل أصبح كبيراً جداً — احذف عمليات قديمة"); return; }
-    setSync("", "<span class=\"dot\"></span> تعذّر الحفظ. تحقق من الاتصال وأعد المحاولة.");
+    setSync("", "<span class=\"dot\"></span> " + t('sync.failed'));
     toast("تعذّر الحفظ — حاول مرة أخرى");
   });
 }
@@ -1854,22 +1908,22 @@ document.addEventListener("click",function(ev){
       }
     }catch(e){}
     renderLog();
-    setSync("off","<span class=\"dot\"></span> <b>نسخة محلية</b> — يُحفظ على هذا الجهاز فقط. افتح رابط الصفحة المنشورة لمشاركة السجل بين الأجهزة.");
+    setSync("","<span class=\"dot\"></span> " + t('sync.live'));
     if(flash) toast(flash);
     return;
   }
   window.claude.use("artifact").then(function(a){
     if(!a){
       mode="readonly"; renderLog();
-      setSync("ro","<span class=\"dot\"></span> <b>عرض فقط</b> — الحفظ غير متاح في هذا العرض.");
+      setSync("ro","<span class=\"dot\"></span> " + t('sync.roview'));
       return;
     }
     api=a; mode="shared"; renderLog();
-    setSync("","<span class=\"dot\"></span> <b>الحفظ مفعّل</b> — كل عملية تُحفظ في الرابط وتظهر تلقائياً على أي جهاز يفتحه.");
+    setSync("","<span class=\"dot\"></span> " + t('sync.live'));
     if(flash) toast(flash);
   }).catch(function(){
     mode="readonly"; renderLog();
-    setSync("ro","<span class=\"dot\"></span> <b>عرض فقط</b> — الحفظ غير متاح في هذا العرض.");
+    setSync("ro","<span class=\"dot\"></span> " + t('sync.roview'));
   });
 })();
 

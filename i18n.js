@@ -1,0 +1,642 @@
+/* ============================================================
+   i18n — Arabic / English for the KGC lab site
+   ------------------------------------------------------------
+   Static markup opts in with data-i18n attributes:
+     data-i18n="key"        -> textContent
+     data-i18n-html="key"   -> innerHTML  (string may carry markup)
+     data-i18n-ph="key"     -> placeholder
+     data-i18n-title="key"  -> title
+
+   JS-rendered views call t('key') and register a callback on
+   I18N.onChange so they re-render when the language flips.
+   ============================================================ */
+(function () {
+  'use strict';
+
+  const DICT = {
+    ar: {
+      /* chrome */
+      'nav.tanks': 'لوحة الأحواض',
+      'nav.acid': 'حاسبة معايرة الحمض',
+      'nav.flux': 'حاسبة الفلكس FL-01',
+      'nav.timing': 'تتبع زمن الإنتاج',
+      'head.eyebrow': 'KGC · جلفنة بالغمس الساخن · المختبر',
+      'head.title': 'حاسبات مختبر جلفنة KGC',
+      'head.lede': 'حاسبات تشغيلية لحوض الفلكس FL-01 وأحواض الحمض وحوض الزنك، مبنية على وحدات ومصطلحات شيت المصنع نفسه. القراءات وسجل العمليات مشتركة بين كل جهاز يفتح الرابط.',
+
+      /* tanks dashboard */
+      'tanks.title': 'لوحة الأحواض الحية',
+      'tanks.sub': 'عدّل القيم واختر حالة كل حوض بنفسك — اضغط على أي رقم لتعديله أو اختر الحالة من القائمة.',
+      'tanks.viewonly': 'عرض فقط — القراءات تتحدّث مباشرة من المختبر',
+      'tanks.col.tank': 'الحوض',
+      'tanks.col.readings': 'القراءات',
+      'tanks.col.status': 'الحالة',
+      'tanks.savenote': 'التغييرات تُحفظ تلقائياً وتتزامن مع كل الأجهزة',
+
+      /* tank field labels */
+      'f.ph': 'pH', 'f.fe': 'Fe', 'f.baume': 'Baumé',
+      'f.acidPercent': 'حمض %', 'f.time': 'زمن', 'f.t': 'T', 'f.sp': 'SP',
+
+      /* tank names */
+      'tank.Flux Tank': 'تانك الفلكس',
+      'tank.Rinsing Tank 1': 'تانك غسيل 1',
+      'tank.Rinsing Tank 2': 'تانك غسيل 2',
+      'tank.Rinsing Before Acid': 'رينسينج قبل الحمض',
+      'tank.Stripping Acid': 'تانك حمض التعرية',
+      'tank.Acid Tank 1': 'تانك حمض 1',
+      'tank.Acid Tank 2': 'تانك حمض 2',
+      'tank.Acid Tank 3': 'تانك حمض 3',
+      'tank.Acid Tank 4': 'تانك حمض 4',
+      'tank.Degreasing Tank': 'تانك إزالة الشحوم',
+      'tank.Drying': 'تانك الدراينج',
+      'tank.Zinc Tank': 'حوض الزنك',
+
+      /* statuses */
+      'st.in_service': 'داخل الخدمة',
+      'st.maintenance': 'تحت الصيانة',
+      'st.needs_review': 'يحتاج مراجعة',
+      'st.out_of_service': 'خارج الخدمة',
+
+      /* acid calculator */
+      'acid.title': 'حاسبة معايرة الحمض',
+      'acid.sub': 'سجّل قراءة السحاحة وبيانات المعايرة وستحصل على عيارية وتركيز الحمض الأصلي تلقائياً.',
+      'acid.vburet': 'قراءة السحاحة V_buret',
+      'acid.valiquot': 'حجم العينة V_aliquot',
+      'acid.nbase': 'عيارية القاعدة N_base',
+      'acid.vacidinit': 'حجم الحمض الأصلي V_acid_init',
+      'acid.vdilution': 'حجم التخفيف الكلي V_dilution',
+      'acid.mwacid': 'الوزن الجزيئي للحمض MW_acid',
+      'acid.density': 'كثافة الحمض Density_acid',
+      'acid.ph.placeholder': 'أدخل القراءة',
+      'acid.ndiluted': 'العيارية بعد التخفيف N_diluted',
+      'acid.noriginal': 'عيارية الحمض الأصلي N_original',
+      'acid.percent': 'النسبة المئوية للحمض',
+      'acid.saveto': 'احفظ النتيجة في تانك',
+      'acid.savebtn': 'حفظ للتانك المختار',
+      'acid.log': 'سجل المعايرات',
+      'acid.col.date': 'التاريخ',
+      'acid.col.time': 'الوقت',
+      'acid.col.tank': 'التانك',
+      'acid.col.percent': 'نسبة الحمض %',
+      'acid.delete': 'حذف',
+      'acid.deleteAria': 'حذف السجل',
+      'acid.empty': 'لا يوجد سجل معايرات بعد',
+      'acid.step1': '١. العيارية بعد التخفيف N_diluted',
+      'acid.step2': '٢. عيارية الحمض الأصلي N_original',
+      'acid.step3': '٣. النسبة المئوية للحمض Wt%',
+      'acid.savedmsg': 'تم حفظ {pct}% في {tank}',
+      'acid.confirmDelete': 'هل تريد حذف هذا السجل من سجل المعايرات؟',
+
+      /* flux page notice in EN mode */
+      'flux.arabicOnly': '',
+
+      /* production tracker */
+      'pt.active.title': 'الدفعات الجارية',
+      'pt.active.sub': 'كل دفعة لها مؤقّت مستقل. كل ضغطة تُسجَّل بوقتها الفعلي وتُحفظ فوراً.',
+      'pt.analytics.title': 'لوحة التحليل',
+      'pt.analytics.sub': 'تُحسب تلقائياً من كل دفعة مكتملة — الزمن الفعلي مقابل المتوقع، والوقت الضائع، والاختناقات.',
+      'pt.history.title': 'سجل الإنتاج',
+      'pt.history.sub': 'اضغط على أي دفعة لعرض خطها الزمني الكامل ثانية بثانية.',
+      'pt.new': 'دفعة جديدة',
+      'pt.export': 'تصدير الكل (Excel)',
+      'pt.noActive': 'لا توجد دفعات جارية — اضغط «دفعة جديدة» للبدء',
+      'pt.noAnalytics': 'لا توجد دفعات مكتملة بعد — الإحصائيات تظهر بعد إنهاء أول دفعة',
+      'pt.noMatch': 'لا توجد دفعات مطابقة',
+      'pt.batch': 'دفعة',
+      'pt.noProduct': 'بدون منتج',
+      'pt.kg': 'كجم',
+      'pt.pieces': 'قطعة',
+      'pt.currentStage': 'المرحلة الحالية',
+      'pt.batchTotal': 'إجمالي الدفعة',
+      'pt.expected': 'المتوقع',
+      'pt.fromNBatches': 'من {n} دفعة سابقة',
+      'pt.phase.running': 'قيد التشغيل',
+      'pt.phase.paused': 'متوقفة',
+      'pt.phase.waiting': 'انتظار',
+      'pt.phase.immersion': 'غمر',
+      'pt.phase.draining': 'تقطير',
+      'pt.waitAfter': 'انتظار بعد {stage}',
+      'pt.downDuring': 'توقف أثناء {stage}',
+      'pt.btn.next': 'التالي',
+      'pt.btn.finish': 'إنهاء الدفعة',
+      'pt.btn.lift': 'رفع من الحوض',
+      'pt.btn.wait': 'انتظار',
+      'pt.btn.pause': 'توقف',
+      'pt.btn.resume': 'استئناف',
+      'pt.btn.undo': 'تراجع',
+      'pt.btn.rework': 'إعادة معالجة',
+      'pt.kind.stage': 'مرحلة',
+      'pt.kind.immersion': 'غمر',
+      'pt.kind.draining': 'تقطير',
+      'pt.kind.wait': 'انتظار',
+      'pt.kind.downtime': 'توقف',
+      'pt.kind.rework': 'إعادة معالجة',
+
+      'pt.stage.loading': 'التحميل',
+      'pt.stage.crane_attach': 'التركيب على الرافعة',
+      'pt.stage.crane_wait': 'انتظار الرافعة',
+      'pt.stage.crane_move': 'حركة الرافعة',
+      'pt.stage.degreasing': 'الديجريسنج',
+      'pt.stage.rinse_pre_acid': 'رينسينج قبل الحمض',
+      'pt.stage.acid': 'الحمض',
+      'pt.stage.rinse_post_acid': 'رينسينج بعد الحمض',
+      'pt.stage.flux': 'الفلكس',
+      'pt.stage.drying': 'الدراينج',
+      'pt.stage.wait_zinc': 'انتظار الفرن',
+      'pt.stage.zinc': 'فرن الزنك',
+      'pt.stage.cooling': 'التبريد',
+      'pt.stage.inspection': 'فحص الجودة',
+
+      'pt.ptank.acid_1': 'حمض 1', 'pt.ptank.acid_2': 'حمض 2',
+      'pt.ptank.acid_3': 'حمض 3', 'pt.ptank.acid_4': 'حمض 4',
+      'pt.ptank.rinse_1': 'رينسينج 1', 'pt.ptank.rinse_2': 'رينسينج 2',
+      'pt.ptank.stripping': 'ستريبنج أسيد (إعادة معالجة)',
+
+      'pt.newbatch': 'دفعة جديدة',
+      'pt.f.batchNumber': 'رقم الدفعة',
+      'pt.f.product': 'اسم / نوع المنتج',
+      'pt.f.pieces': 'عدد القطع',
+      'pt.f.weight': 'الوزن الكلي (كجم)',
+      'pt.f.workOrder': 'رقم أمر التشغيل',
+      'pt.f.notes': 'ملاحظات',
+      'pt.f.optional': 'اختياري',
+      'pt.f.autoStart': 'وقت البداية يُسجَّل تلقائياً لحظة الضغط على «بدء الدفعة» — لا يُدخل يدوياً.',
+      'pt.f.start': 'بدء الدفعة',
+      'pt.cancel': 'إلغاء',
+      'pt.close': 'إغلاق',
+      'pt.closeAria': 'إغلاق',
+
+      'pt.waitReason': 'سبب الانتظار',
+      'pt.downReason': 'سبب التوقف',
+      'pt.selectTank': 'اختر حوض {stage}',
+      'pt.issue.title': 'إنهاء الدفعة — هل فيها مشاكل؟',
+      'pt.issue.level': 'مستوى المشكلة',
+      'pt.issue.none': 'لا توجد مشاكل',
+      'pt.issue.minor': 'مشكلة بسيطة',
+      'pt.issue.major': 'مشكلة كبيرة',
+      'pt.issue.type': 'نوع المشكلة',
+      'pt.issue.desc': 'وصف المشكلة',
+      'pt.rework.title': 'إعادة معالجة — الدفعة {n}',
+      'pt.rework.reason': 'السبب',
+      'pt.rework.returnTo': 'تعود إلى مرحلة',
+      'pt.rework.hint': 'سيُسجَّل وقت بداية إعادة المعالجة الآن، ووقت نهايتها تلقائياً عند رجوع الدفعة للمرحلة التي كانت فيها. حوض الستريبنج أسيد يصبح متاحاً أثناء إعادة المعالجة.',
+      'pt.rework.start': 'بدء إعادة المعالجة',
+      'pt.rework.section': 'إعادة المعالجة',
+      'pt.rework.returned': 'رجعت إلى: {stage}',
+
+      'pt.details.timeline': 'الخط الزمني',
+      'pt.details.audit': 'سجل التعديلات',
+      'pt.details.editHint': 'اضغط على أي صف في الخط الزمني لتعديل وقته — يُحفظ الوقت الأصلي وسبب التعديل.',
+      'pt.details.delete': 'حذف الدفعة',
+      'pt.stat.actual': 'الزمن الفعلي',
+      'pt.stat.expected': 'الزمن المتوقع',
+      'pt.stat.processing': 'زمن المعالجة',
+      'pt.stat.draining': 'التقطير',
+      'pt.stat.waiting': 'الانتظار',
+      'pt.stat.downtime': 'التوقف',
+      'pt.noIssues': 'بدون مشاكل',
+      'pt.edited': 'معدّل',
+      'pt.reasonIs': 'السبب: {r}',
+
+      'pt.edit.title': 'تعديل: {stage}',
+      'pt.edit.start': 'وقت البداية',
+      'pt.edit.end': 'وقت النهاية',
+      'pt.edit.tank': 'الحوض',
+      'pt.edit.why': 'سبب التعديل (إلزامي)',
+      'pt.edit.whyPh': 'مثال: نُسي الضغط على التالي',
+      'pt.edit.hint': 'لن تُحذف القيم الأصلية — تُحفظ في سجل التعديلات مع الوقت والسبب.',
+      'pt.edit.save': 'حفظ التعديل',
+      'pt.edit.needWhy': 'اكتب سبب التعديل أولاً.',
+      'pt.edit.badRange': 'وقت النهاية قبل وقت البداية.',
+      'pt.edit.fStart': 'البداية',
+      'pt.edit.fEnd': 'النهاية',
+      'pt.edit.fReason': 'السبب',
+
+      'pt.confirmUndo': 'التراجع عن آخر خطوة؟ سيُعاد فتح المرحلة السابقة.',
+      'pt.confirmDelete': 'حذف الدفعة {n} نهائياً؟ لا يمكن التراجع.',
+
+      'pt.search': 'بحث: رقم دفعة / منتج / أمر تشغيل',
+      'pt.allProducts': 'كل المنتجات',
+      'pt.allTanks': 'كل الأحواض',
+      'pt.all': 'الكل',
+      'pt.cleanOnly': 'سليمة فقط',
+      'pt.withIssues': 'بها مشاكل',
+      'pt.h.batch': 'الدفعة',
+      'pt.h.product': 'المنتج',
+      'pt.h.weight': 'الوزن',
+      'pt.h.date': 'التاريخ',
+      'pt.h.start': 'البداية',
+      'pt.h.end': 'النهاية',
+      'pt.h.total': 'الزمن الكلي',
+      'pt.h.waiting': 'الانتظار',
+      'pt.h.status': 'الحالة',
+      'pt.clean': 'سليمة',
+      'pt.issueShort': 'مشكلة',
+
+      'pt.sec.production': 'الإنتاج',
+      'pt.sec.bottlenecks': 'الاختناقات',
+      'pt.sec.quality': 'الجودة',
+      'pt.sec.stageAvg': 'متوسط كل مرحلة',
+      'pt.sec.tankAvg': 'متوسط كل حوض',
+      'pt.sec.productAvg': 'متوسط كل منتج',
+      'pt.a.batches': 'عدد الدفعات',
+      'pt.a.weight': 'إجمالي الوزن',
+      'pt.a.avgCycle': 'متوسط زمن الدورة',
+      'pt.a.avgProc': 'متوسط المعالجة',
+      'pt.a.avgWait': 'متوسط الانتظار',
+      'pt.a.avgDown': 'متوسط التوقف',
+      'pt.a.rate': 'الإنتاجية',
+      'pt.a.kgh': 'كجم/س',
+      'pt.a.pch': 'قطعة/س',
+      'pt.a.longestStage': 'أطول مرحلة',
+      'pt.a.mostWait': 'أكثر مرحلة انتظاراً',
+      'pt.a.longestTank': 'أطول حوض',
+      'pt.a.topDown': 'أكثر سبب توقف',
+      'pt.a.craneWait': 'متوسط انتظار الرافعة',
+      'pt.a.craneMove': 'متوسط حركة الرافعة',
+      'pt.a.withIssues': 'دفعات بها مشاكل',
+      'pt.a.cleanPct': 'نسبة السليمة',
+      'pt.a.topIssue': 'أكثر مشكلة تكراراً',
+      'pt.a.reworks': 'عمليات إعادة المعالجة',
+      'pt.a.issueCycle': 'متوسط زمن الدفعات المعيبة',
+      'pt.a.nBatches': '{n} دفعة',
+      'pt.a.immersionN': 'غمر · {n} دفعة',
+      'pt.a.drainAvg': 'تقطير {d}',
+
+      'r.wait.crane': 'الرافعة مشغولة',
+      'r.wait.operator': 'تأخير المشغّل',
+      'r.wait.tank': 'الحوض مشغول',
+      'r.wait.equip': 'عطل معدات',
+      'r.wait.prod': 'تأخير إنتاج',
+      'r.wait.maint': 'صيانة',
+      'r.wait.other': 'أخرى',
+      'r.down.crane': 'عطل رافعة',
+      'r.down.equip': 'عطل معدات',
+      'r.down.tank': 'مشكلة حوض',
+      'r.down.operator': 'مشكلة مشغّل',
+      'r.down.maint': 'صيانة',
+      'r.down.product': 'مشكلة منتج',
+      'r.down.other': 'أخرى',
+      'r.iss.surface': 'جودة السطح',
+      'r.iss.rust': 'صدأ',
+      'r.iss.excesszinc': 'زنك زائد',
+      'r.iss.coating': 'طلاء ضعيف',
+      'r.iss.chem': 'عملية كيميائية',
+      'r.iss.handling': 'مناولة',
+      'r.iss.other': 'أخرى',
+      'r.rw.coating': 'طلاء ضعيف',
+      'r.rw.excesszinc': 'زنك زائد',
+      'r.rw.contam': 'تلوث السطح',
+      'r.rw.oxid': 'أكسدة',
+      'r.rw.other': 'أخرى',
+
+      'sync.saving': 'جارٍ الحفظ…',
+      'sync.noperm': '<b>عرض فقط</b> — لا تملك صلاحية الحفظ على هذا الرابط.',
+      'sync.failed': 'تعذّر الحفظ. تحقق من الاتصال وأعد المحاولة.',
+      'sync.live': '<b>المزامنة مفعّلة</b> — القراءات تُحفظ تلقائياً وتظهر على كل جهاز يفتح الرابط.',
+      'sync.roview': '<b>عرض فقط</b> — الحفظ غير متاح في هذا العرض.',
+      'u.h': 'س', 'u.m': 'د', 'u.s': 'ث'
+    },
+
+    en: {
+      'nav.tanks': 'Tank dashboard',
+      'nav.acid': 'Acid titration',
+      'nav.flux': 'Flux calculator FL-01',
+      'nav.timing': 'Production timing',
+      'head.eyebrow': 'KGC · HOT-DIP GALVANIZING · LAB',
+      'head.title': 'KGC galvanizing lab calculators',
+      'head.lede': 'Operational calculators for flux tank FL-01, the acid tanks and the zinc kettle, built on the plant sheet’s own units and terms. Readings and the operations log are shared across every device that opens the link.',
+
+      'tanks.title': 'Live tank dashboard',
+      'tanks.sub': 'Edit values and set each tank’s status yourself — tap any number to change it, or pick a status from the list.',
+      'tanks.viewonly': 'View only — readings update live from the lab',
+      'tanks.col.tank': 'Tank',
+      'tanks.col.readings': 'Readings',
+      'tanks.col.status': 'Status',
+      'tanks.savenote': 'Changes save automatically and sync to every device',
+
+      'f.ph': 'pH', 'f.fe': 'Fe', 'f.baume': 'Baumé',
+      'f.acidPercent': 'Acid %', 'f.time': 'Time', 'f.t': 'T', 'f.sp': 'SP',
+
+      'tank.Flux Tank': 'Flux tank',
+      'tank.Rinsing Tank 1': 'Rinsing tank 1',
+      'tank.Rinsing Tank 2': 'Rinsing tank 2',
+      'tank.Rinsing Before Acid': 'Rinsing before acid',
+      'tank.Stripping Acid': 'Stripping acid',
+      'tank.Acid Tank 1': 'Acid tank 1',
+      'tank.Acid Tank 2': 'Acid tank 2',
+      'tank.Acid Tank 3': 'Acid tank 3',
+      'tank.Acid Tank 4': 'Acid tank 4',
+      'tank.Degreasing Tank': 'Degreasing tank',
+      'tank.Drying': 'Drying',
+      'tank.Zinc Tank': 'Zinc kettle',
+
+      'st.in_service': 'In service',
+      'st.maintenance': 'Under maintenance',
+      'st.needs_review': 'Needs review',
+      'st.out_of_service': 'Out of service',
+
+      'acid.title': 'Acid titration calculator',
+      'acid.sub': 'Enter the burette reading and titration data to get the original acid normality and concentration automatically.',
+      'acid.vburet': 'Burette reading V_buret',
+      'acid.valiquot': 'Aliquot volume V_aliquot',
+      'acid.nbase': 'Base normality N_base',
+      'acid.vacidinit': 'Original acid volume V_acid_init',
+      'acid.vdilution': 'Total dilution volume V_dilution',
+      'acid.mwacid': 'Acid molecular weight MW_acid',
+      'acid.density': 'Acid density Density_acid',
+      'acid.ph.placeholder': 'Enter reading',
+      'acid.ndiluted': 'Diluted normality N_diluted',
+      'acid.noriginal': 'Original acid normality N_original',
+      'acid.percent': 'Acid percentage',
+      'acid.saveto': 'Save the result to a tank',
+      'acid.savebtn': 'Save to selected tank',
+      'acid.log': 'Titration log',
+      'acid.col.date': 'Date',
+      'acid.col.time': 'Time',
+      'acid.col.tank': 'Tank',
+      'acid.col.percent': 'Acid %',
+      'acid.delete': 'Delete',
+      'acid.deleteAria': 'Delete entry',
+      'acid.empty': 'No titration entries yet',
+      'acid.step1': '1. Diluted normality N_diluted',
+      'acid.step2': '2. Original acid normality N_original',
+      'acid.step3': '3. Acid percentage Wt%',
+      'acid.savedmsg': 'Saved {pct}% to {tank}',
+      'acid.confirmDelete': 'Delete this entry from the titration log?',
+
+      'flux.arabicOnly': 'This calculator’s technical text is still Arabic only.',
+
+      'pt.active.title': 'Active batches',
+      'pt.active.sub': 'Each batch runs its own timer. Every tap is stamped with its real time and saved immediately.',
+      'pt.analytics.title': 'Analytics',
+      'pt.analytics.sub': 'Computed automatically from every completed batch — actual vs expected time, lost time and bottlenecks.',
+      'pt.history.title': 'Production history',
+      'pt.history.sub': 'Open any batch to see its full timeline, second by second.',
+      'pt.new': 'New batch',
+      'pt.export': 'Export all (Excel)',
+      'pt.noActive': 'No active batches — tap “New batch” to start',
+      'pt.noAnalytics': 'No completed batches yet — analytics appear after the first one finishes',
+      'pt.noMatch': 'No matching batches',
+      'pt.batch': 'Batch',
+      'pt.noProduct': 'No product',
+      'pt.kg': 'kg',
+      'pt.pieces': 'pcs',
+      'pt.currentStage': 'Current stage',
+      'pt.batchTotal': 'Batch total',
+      'pt.expected': 'Expected',
+      'pt.fromNBatches': 'from {n} previous batches',
+      'pt.phase.running': 'Running',
+      'pt.phase.paused': 'Paused',
+      'pt.phase.waiting': 'Waiting',
+      'pt.phase.immersion': 'Immersion',
+      'pt.phase.draining': 'Draining',
+      'pt.waitAfter': 'Waiting after {stage}',
+      'pt.downDuring': 'Downtime during {stage}',
+      'pt.btn.next': 'Next',
+      'pt.btn.finish': 'Finish batch',
+      'pt.btn.lift': 'Lift out of tank',
+      'pt.btn.wait': 'Wait',
+      'pt.btn.pause': 'Pause',
+      'pt.btn.resume': 'Resume',
+      'pt.btn.undo': 'Undo',
+      'pt.btn.rework': 'Rework',
+      'pt.kind.stage': 'Stage',
+      'pt.kind.immersion': 'Immersion',
+      'pt.kind.draining': 'Draining',
+      'pt.kind.wait': 'Waiting',
+      'pt.kind.downtime': 'Downtime',
+      'pt.kind.rework': 'Rework',
+
+      'pt.stage.loading': 'Loading',
+      'pt.stage.crane_attach': 'Crane attachment',
+      'pt.stage.crane_wait': 'Waiting for crane',
+      'pt.stage.crane_move': 'Crane movement',
+      'pt.stage.degreasing': 'Degreasing',
+      'pt.stage.rinse_pre_acid': 'Rinsing before acid',
+      'pt.stage.acid': 'Acid',
+      'pt.stage.rinse_post_acid': 'Rinsing after acid',
+      'pt.stage.flux': 'Flux',
+      'pt.stage.drying': 'Drying',
+      'pt.stage.wait_zinc': 'Waiting for kettle',
+      'pt.stage.zinc': 'Zinc kettle',
+      'pt.stage.cooling': 'Cooling',
+      'pt.stage.inspection': 'Quality inspection',
+
+      'pt.ptank.acid_1': 'Acid 1', 'pt.ptank.acid_2': 'Acid 2',
+      'pt.ptank.acid_3': 'Acid 3', 'pt.ptank.acid_4': 'Acid 4',
+      'pt.ptank.rinse_1': 'Rinse 1', 'pt.ptank.rinse_2': 'Rinse 2',
+      'pt.ptank.stripping': 'Stripping acid (rework)',
+
+      'pt.newbatch': 'New batch',
+      'pt.f.batchNumber': 'Batch number',
+      'pt.f.product': 'Product name / type',
+      'pt.f.pieces': 'Number of pieces',
+      'pt.f.weight': 'Total weight (kg)',
+      'pt.f.workOrder': 'Work order number',
+      'pt.f.notes': 'Notes',
+      'pt.f.optional': 'Optional',
+      'pt.f.autoStart': 'The start time is stamped automatically when you tap “Start batch” — it is never typed in.',
+      'pt.f.start': 'Start batch',
+      'pt.cancel': 'Cancel',
+      'pt.close': 'Close',
+      'pt.closeAria': 'Close',
+
+      'pt.waitReason': 'Reason for waiting',
+      'pt.downReason': 'Reason for downtime',
+      'pt.selectTank': 'Select {stage} tank',
+      'pt.issue.title': 'Finish batch — any issues?',
+      'pt.issue.level': 'Issue level',
+      'pt.issue.none': 'No issues',
+      'pt.issue.minor': 'Minor issue',
+      'pt.issue.major': 'Major issue',
+      'pt.issue.type': 'Issue type',
+      'pt.issue.desc': 'Issue description',
+      'pt.rework.title': 'Rework — batch {n}',
+      'pt.rework.reason': 'Reason',
+      'pt.rework.returnTo': 'Return to stage',
+      'pt.rework.hint': 'The rework start time is stamped now, and the end time automatically once the batch returns to the stage it left. Stripping acid becomes selectable during rework.',
+      'pt.rework.start': 'Start rework',
+      'pt.rework.section': 'Rework',
+      'pt.rework.returned': 'Returned to: {stage}',
+
+      'pt.details.timeline': 'Timeline',
+      'pt.details.audit': 'Edit log',
+      'pt.details.editHint': 'Tap any timeline row to correct its time — the original value and your reason are kept.',
+      'pt.details.delete': 'Delete batch',
+      'pt.stat.actual': 'Actual time',
+      'pt.stat.expected': 'Expected time',
+      'pt.stat.processing': 'Processing time',
+      'pt.stat.draining': 'Draining',
+      'pt.stat.waiting': 'Waiting',
+      'pt.stat.downtime': 'Downtime',
+      'pt.noIssues': 'No issues',
+      'pt.edited': 'Edited',
+      'pt.reasonIs': 'Reason: {r}',
+
+      'pt.edit.title': 'Edit: {stage}',
+      'pt.edit.start': 'Start time',
+      'pt.edit.end': 'End time',
+      'pt.edit.tank': 'Tank',
+      'pt.edit.why': 'Reason for the edit (required)',
+      'pt.edit.whyPh': 'e.g. forgot to tap Next',
+      'pt.edit.hint': 'Original values are never deleted — they are kept in the edit log with the time and reason.',
+      'pt.edit.save': 'Save edit',
+      'pt.edit.needWhy': 'Enter a reason for the edit first.',
+      'pt.edit.badRange': 'End time is before start time.',
+      'pt.edit.fStart': 'Start',
+      'pt.edit.fEnd': 'End',
+      'pt.edit.fReason': 'Reason',
+
+      'pt.confirmUndo': 'Undo the last step? The previous stage will reopen.',
+      'pt.confirmDelete': 'Permanently delete batch {n}? This cannot be undone.',
+
+      'pt.search': 'Search: batch / product / work order',
+      'pt.allProducts': 'All products',
+      'pt.allTanks': 'All tanks',
+      'pt.all': 'All',
+      'pt.cleanOnly': 'Clean only',
+      'pt.withIssues': 'With issues',
+      'pt.h.batch': 'Batch',
+      'pt.h.product': 'Product',
+      'pt.h.weight': 'Weight',
+      'pt.h.date': 'Date',
+      'pt.h.start': 'Start',
+      'pt.h.end': 'End',
+      'pt.h.total': 'Total time',
+      'pt.h.waiting': 'Waiting',
+      'pt.h.status': 'Status',
+      'pt.clean': 'Clean',
+      'pt.issueShort': 'Issue',
+
+      'pt.sec.production': 'Production',
+      'pt.sec.bottlenecks': 'Bottlenecks',
+      'pt.sec.quality': 'Quality',
+      'pt.sec.stageAvg': 'Average per stage',
+      'pt.sec.tankAvg': 'Average per tank',
+      'pt.sec.productAvg': 'Average per product',
+      'pt.a.batches': 'Batches',
+      'pt.a.weight': 'Total weight',
+      'pt.a.avgCycle': 'Avg cycle time',
+      'pt.a.avgProc': 'Avg processing',
+      'pt.a.avgWait': 'Avg waiting',
+      'pt.a.avgDown': 'Avg downtime',
+      'pt.a.rate': 'Throughput',
+      'pt.a.kgh': 'kg/h',
+      'pt.a.pch': 'pcs/h',
+      'pt.a.longestStage': 'Longest stage',
+      'pt.a.mostWait': 'Most waiting at',
+      'pt.a.longestTank': 'Slowest tank',
+      'pt.a.topDown': 'Top downtime cause',
+      'pt.a.craneWait': 'Avg crane waiting',
+      'pt.a.craneMove': 'Avg crane movement',
+      'pt.a.withIssues': 'Batches with issues',
+      'pt.a.cleanPct': 'Clean rate',
+      'pt.a.topIssue': 'Most common issue',
+      'pt.a.reworks': 'Rework operations',
+      'pt.a.issueCycle': 'Avg cycle of faulty batches',
+      'pt.a.nBatches': '{n} batches',
+      'pt.a.immersionN': 'immersion · {n} batches',
+      'pt.a.drainAvg': 'draining {d}',
+
+      'r.wait.crane': 'Crane busy',
+      'r.wait.operator': 'Operator delay',
+      'r.wait.tank': 'Tank busy',
+      'r.wait.equip': 'Equipment problem',
+      'r.wait.prod': 'Production delay',
+      'r.wait.maint': 'Maintenance',
+      'r.wait.other': 'Other',
+      'r.down.crane': 'Crane failure',
+      'r.down.equip': 'Equipment failure',
+      'r.down.tank': 'Tank problem',
+      'r.down.operator': 'Operator problem',
+      'r.down.maint': 'Maintenance',
+      'r.down.product': 'Product problem',
+      'r.down.other': 'Other',
+      'r.iss.surface': 'Surface quality',
+      'r.iss.rust': 'Rust',
+      'r.iss.excesszinc': 'Excess zinc',
+      'r.iss.coating': 'Poor coating',
+      'r.iss.chem': 'Chemical process',
+      'r.iss.handling': 'Handling',
+      'r.iss.other': 'Other',
+      'r.rw.coating': 'Poor coating',
+      'r.rw.excesszinc': 'Excess zinc',
+      'r.rw.contam': 'Surface contamination',
+      'r.rw.oxid': 'Oxidation',
+      'r.rw.other': 'Other',
+
+      'sync.saving': 'Saving…',
+      'sync.noperm': '<b>View only</b> — you do not have permission to save on this link.',
+      'sync.failed': 'Could not save. Check your connection and try again.',
+      'sync.live': '<b>Live sync on</b> — readings save automatically and appear on every device that opens the link.',
+      'sync.roview': '<b>View only</b> — saving is not available in this view.',
+      'u.h': 'h', 'u.m': 'm', 'u.s': 's'
+    }
+  };
+
+  const STORE = 'kgc-lang';
+  let lang = 'ar';
+  try {
+    const saved = localStorage.getItem(STORE);
+    if (saved === 'ar' || saved === 'en') lang = saved;
+  } catch (e) { /* private mode */ }
+
+  function t(key, vars) {
+    let s = (DICT[lang] && DICT[lang][key]);
+    if (s == null) s = (DICT.ar[key] != null ? DICT.ar[key] : key);
+    if (vars) {
+      Object.keys(vars).forEach(k => { s = s.split('{' + k + '}').join(vars[k]); });
+    }
+    return s;
+  }
+
+  function applyStatic(scope) {
+    (scope || document).querySelectorAll('[data-i18n]').forEach(el => {
+      el.textContent = t(el.getAttribute('data-i18n'));
+    });
+    (scope || document).querySelectorAll('[data-i18n-html]').forEach(el => {
+      el.innerHTML = t(el.getAttribute('data-i18n-html'));
+    });
+    (scope || document).querySelectorAll('[data-i18n-ph]').forEach(el => {
+      el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph')));
+    });
+    (scope || document).querySelectorAll('[data-i18n-title]').forEach(el => {
+      el.setAttribute('title', t(el.getAttribute('data-i18n-title')));
+    });
+  }
+
+  const listeners = [];
+
+  function apply() {
+    const html = document.documentElement;
+    html.setAttribute('lang', lang);
+    html.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+    html.classList.toggle('lang-en', lang === 'en');
+    html.classList.toggle('lang-ar', lang === 'ar');
+    applyStatic();
+    document.querySelectorAll('[data-lang-btn]').forEach(b => {
+      b.classList.toggle('on', b.getAttribute('data-lang-btn') === lang);
+    });
+    listeners.forEach(fn => { try { fn(lang); } catch (e) { console.error(e); } });
+  }
+
+  function set(next) {
+    if (next !== 'ar' && next !== 'en') return;
+    lang = next;
+    try { localStorage.setItem(STORE, lang); } catch (e) { /* ignore */ }
+    apply();
+  }
+
+  window.I18N = {
+    t: t,
+    set: set,
+    apply: apply,
+    applyStatic: applyStatic,
+    get lang() { return lang; },
+    onChange: fn => listeners.push(fn)
+  };
+  window.t = t;
+
+  document.addEventListener('DOMContentLoaded', apply);
+})();
