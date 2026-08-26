@@ -500,11 +500,7 @@ function showAppPage(pageId, btn) {
       <thead>
         <tr>
           <th>الحوض</th>
-          <th>pH</th>
-          <th>Fe (g/L)</th>
-          <th>Baumé</th>
-          <th>نسبة الحمض %</th>
-          <th>الزمن (دقيقة)</th>
+          <th>القراءات</th>
           <th>الحالة</th>
         </tr>
       </thead>
@@ -519,17 +515,46 @@ function showAppPage(pageId, btn) {
 <script>
 // Tank Data with specifications
 const tankSpecs = [
-  { id: 10, name: 'Flux Tank', ph: 4.2, fe: 1.2, baume: 17, acidPercent: 0, time: 25, status: 'good' },
-  { id: 9, name: 'Rinsing Tank 2', ph: 7, fe: 0, baume: 0, acidPercent: 0, time: 2, status: 'good' },
-  { id: 8, name: 'Rinsing Tank 1', ph: 3.2, fe: 5, baume: 2, acidPercent: 0, time: 2, status: 'good' },
-  { id: 7, name: 'Stripping Acid', ph: 0.8, fe: 120, baume: 18, acidPercent: 0, time: 4, status: 'good' },
-  { id: 6, name: 'Acid Tank 4', ph: 2.1, fe: 35, baume: 10.5, acidPercent: 0, time: 8, status: 'good' },
-  { id: 5, name: 'Acid Tank 3', ph: 1.8, fe: 38, baume: 11, acidPercent: 0, time: 8, status: 'good' },
-  { id: 4, name: 'Acid Tank 2', ph: 1.6, fe: 42, baume: 11.5, acidPercent: 0, time: 8, status: 'good' },
-  { id: 3, name: 'Acid Tank 1', ph: 1.5, fe: 45, baume: 12, acidPercent: 0, time: 8, status: 'good' },
-  { id: 2, name: 'Rinsing Tank 2', ph: 7, fe: 0, baume: 0, acidPercent: 0, time: 2, status: 'good' },
-  { id: 1, name: 'Degreasing Tank', ph: 9.5, fe: 0, baume: 6, acidPercent: 0, time: 3, status: 'good' },
+  { id: 12, name: 'Zinc Tank', type: 'zinc', sp: 0, tc: 0, zincPct: 0, flueGas: 0, status: 'good' },
+  { id: 11, name: 'Drying', type: 'drying', t: 0, status: 'good' },
+  { id: 10, name: 'Flux Tank', type: 'wet', ph: 4.2, fe: 1.2, baume: 17, acidPercent: 0, time: 25, status: 'good' },
+  { id: 9, name: 'Rinsing Tank 2', type: 'wet', ph: 7, fe: 0, baume: 0, acidPercent: 0, time: 2, status: 'good' },
+  { id: 8, name: 'Rinsing Tank 1', type: 'wet', ph: 3.2, fe: 5, baume: 2, acidPercent: 0, time: 2, status: 'good' },
+  { id: 7, name: 'Stripping Acid', type: 'wet', ph: 0.8, fe: 120, baume: 18, acidPercent: 0, time: 4, status: 'good' },
+  { id: 6, name: 'Acid Tank 4', type: 'wet', ph: 2.1, fe: 35, baume: 10.5, acidPercent: 0, time: 8, status: 'good' },
+  { id: 5, name: 'Acid Tank 3', type: 'wet', ph: 1.8, fe: 38, baume: 11, acidPercent: 0, time: 8, status: 'good' },
+  { id: 4, name: 'Acid Tank 2', type: 'wet', ph: 1.6, fe: 42, baume: 11.5, acidPercent: 0, time: 8, status: 'good' },
+  { id: 3, name: 'Acid Tank 1', type: 'wet', ph: 1.5, fe: 45, baume: 12, acidPercent: 0, time: 8, status: 'good' },
+  { id: 2, name: 'Rinsing Before Acid', type: 'wet', ph: 7, fe: 0, baume: 0, acidPercent: 0, time: 2, status: 'good' },
+  { id: 1, name: 'Degreasing Tank', type: 'wet', ph: 9.5, fe: 0, baume: 6, acidPercent: 0, time: 3, status: 'good' },
 ];
+
+const tankArabicNames = {
+  'Flux Tank': 'تانك الفلكس',
+  'Rinsing Tank 1': 'تانك غسيل 1',
+  'Rinsing Tank 2': 'تانك غسيل 2',
+  'Rinsing Before Acid': 'رينسينج قبل الحمض',
+  'Stripping Acid': 'تانك حمض التعرية',
+  'Acid Tank 1': 'تانك حمض 1',
+  'Acid Tank 2': 'تانك حمض 2',
+  'Acid Tank 3': 'تانك حمض 3',
+  'Acid Tank 4': 'تانك حمض 4',
+  'Degreasing Tank': 'تانك إزالة الشحوم',
+  'Drying': 'تانك الدراينج',
+  'Zinc Tank': 'حوض الزنك'
+};
+
+// Migrate older saved data (missing new tanks or the `type` field) onto the current spec
+function migrateTanks(list) {
+  if (!Array.isArray(list)) list = [];
+  const byId = {};
+  list.forEach(function(t) { if (t && t.id != null) byId[t.id] = t; });
+  return tankSpecs.map(function(spec) {
+    const existing = byId[spec.id];
+    if (!existing) return JSON.parse(JSON.stringify(spec));
+    return Object.assign({}, spec, existing, { name: spec.name, type: spec.type });
+  });
+}
 
 // Local state
 let tanks = JSON.parse(JSON.stringify(tankSpecs));
@@ -538,7 +563,7 @@ let tanksLoadedFromFirebase = false;
 // Load from localStorage as instant fallback (offline / first paint)
 try {
   const saved = localStorage.getItem('kgc-tanks-data');
-  if (saved) tanks = JSON.parse(saved);
+  if (saved) tanks = migrateTanks(JSON.parse(saved));
 } catch (e) {}
 
 function saveToStorage() {
@@ -555,7 +580,7 @@ function saveToStorage() {
 database.ref('tanks_data').on('value', function(snapshot) {
   const remote = snapshot.val();
   if (remote) {
-    tanks = remote;
+    tanks = migrateTanks(remote);
     try { localStorage.setItem('kgc-tanks-data', JSON.stringify(tanks)); } catch (e) {}
     renderAll();
   }
@@ -629,6 +654,27 @@ function setStatus(tankId, newStatus) {
   }
 }
 
+function tankDataRowsHTML(tank) {
+  const row = (label, field, value) => `
+        <div class="data-row">
+          <span class="data-label">${label}</span>
+          <span class="data-value" onclick="makeEditable(this, ${tank.id}, '${field}')">${Number(value || 0).toFixed(2)}</span>
+        </div>`;
+
+  if (tank.type === 'drying') {
+    return row('T', 't', tank.t);
+  }
+  if (tank.type === 'zinc') {
+    return row('SP', 'sp', tank.sp) + row('TC', 'tc', tank.tc) + row('%', 'zincPct', tank.zincPct) + row('FLUE GAS', 'flueGas', tank.flueGas);
+  }
+  return row('pH', 'ph', tank.ph) + row('Fe', 'fe', tank.fe) + row('Baumé', 'baume', tank.baume) +
+    row('حمض %', 'acidPercent', tank.acidPercent) + `
+        <div class="data-row">
+          <span class="data-label">زمن</span>
+          <span class="data-value" onclick="makeEditable(this, ${tank.id}, 'time')">${tank.time}</span>
+        </div>`;
+}
+
 function renderCards() {
   const container = document.getElementById('tanks-container');
   container.innerHTML = '';
@@ -642,35 +688,28 @@ function renderCards() {
     card.className = `tank-card ${statusClass}`;
     card.innerHTML = `
       <div class="tank-number">${tank.id}</div>
-      <div class="tank-name">${tank.name}</div>
-      <div class="tank-data">
-        <div class="data-row">
-          <span class="data-label">pH</span>
-          <span class="data-value" onclick="makeEditable(this, ${tank.id}, 'ph')">${tank.ph.toFixed(2)}</span>
-        </div>
-        <div class="data-row">
-          <span class="data-label">Fe</span>
-          <span class="data-value" onclick="makeEditable(this, ${tank.id}, 'fe')">${tank.fe.toFixed(2)}</span>
-        </div>
-        <div class="data-row">
-          <span class="data-label">Baumé</span>
-          <span class="data-value" onclick="makeEditable(this, ${tank.id}, 'baume')">${tank.baume.toFixed(2)}</span>
-        </div>
-        <div class="data-row">
-          <span class="data-label">حمض %</span>
-          <span class="data-value" onclick="makeEditable(this, ${tank.id}, 'acidPercent')">${(tank.acidPercent || 0).toFixed(2)}</span>
-        </div>
-        <div class="data-row">
-          <span class="data-label">زمن</span>
-          <span class="data-value" onclick="makeEditable(this, ${tank.id}, 'time')">${tank.time}</span>
-        </div>
-      </div>
+      <div class="tank-name">${tankArabicNames[tank.name] || tank.name}</div>
+      <div class="tank-data">${tankDataRowsHTML(tank)}</div>
       <select class="status-select" style="background:${color}1a; border-color:${color}; color:${color};" onchange="setStatus(${tank.id}, this.value)">
         ${statusOptionsHTML(tank.status)}
       </select>
     `;
     container.appendChild(card);
   });
+}
+
+function tankTableReadingsHTML(tank) {
+  const field = (label, key, value) => `<span style="display:inline-block; margin-left:14px; cursor:pointer; white-space:nowrap;" onclick="makeEditable(this, ${tank.id}, '${key}')"><span style="color:var(--ink-3); font-size:11px;">${label}</span> ${Number(value || 0).toFixed(2)}</span>`;
+
+  if (tank.type === 'drying') {
+    return field('T', 't', tank.t);
+  }
+  if (tank.type === 'zinc') {
+    return field('SP', 'sp', tank.sp) + field('TC', 'tc', tank.tc) + field('%', 'zincPct', tank.zincPct) + field('FLUE GAS', 'flueGas', tank.flueGas);
+  }
+  return field('pH', 'ph', tank.ph) + field('Fe', 'fe', tank.fe) + field('Baumé', 'baume', tank.baume) +
+    field('حمض %', 'acidPercent', tank.acidPercent) +
+    `<span style="display:inline-block; cursor:pointer; white-space:nowrap;" onclick="makeEditable(this, ${tank.id}, 'time')"><span style="color:var(--ink-3); font-size:11px;">زمن</span> ${tank.time}</span>`;
 }
 
 function renderTable() {
@@ -683,12 +722,8 @@ function renderTable() {
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="tank-name-col">${tank.name}</td>
-      <td onclick="makeEditable(this, ${tank.id}, 'ph')" style="cursor: pointer;">${tank.ph.toFixed(2)}</td>
-      <td onclick="makeEditable(this, ${tank.id}, 'fe')" style="cursor: pointer;">${tank.fe.toFixed(2)}</td>
-      <td onclick="makeEditable(this, ${tank.id}, 'baume')" style="cursor: pointer;">${tank.baume.toFixed(2)}</td>
-      <td onclick="makeEditable(this, ${tank.id}, 'acidPercent')" style="cursor: pointer;">${(tank.acidPercent || 0).toFixed(2)}</td>
-      <td onclick="makeEditable(this, ${tank.id}, 'time')" style="cursor: pointer;">${tank.time}</td>
+      <td class="tank-name-col">${tankArabicNames[tank.name] || tank.name}</td>
+      <td>${tankTableReadingsHTML(tank)}</td>
       <td><select class="status-select-cell" style="background:${statusColor}1a; border-color:${statusColor}; color:${statusColor};" onchange="setStatus(${tank.id}, this.value)">${statusOptionsHTML(tank.status)}</select></td>
     `;
     tbody.appendChild(tr);
@@ -1008,23 +1043,11 @@ acidInputs.forEach(id => {
 calculateAcid();
 
 /* ---------- ربط نتيجة المعايرة بتانك من لوحة الأحواض ---------- */
-const tankArabicNames = {
-  'Flux Tank': 'تانك الفلكس',
-  'Rinsing Tank 1': 'تانك غسيل 1',
-  'Rinsing Tank 2': 'تانك غسيل 2',
-  'Stripping Acid': 'تانك حمض التعرية',
-  'Acid Tank 1': 'تانك حمض 1',
-  'Acid Tank 2': 'تانك حمض 2',
-  'Acid Tank 3': 'تانك حمض 3',
-  'Acid Tank 4': 'تانك حمض 4',
-  'Degreasing Tank': 'تانك إزالة الشحوم'
-};
-
 function populateTankSelect() {
   const select = document.getElementById('acid-tank-select');
   if (!select || typeof tanks === 'undefined') return;
   const current = select.value;
-  select.innerHTML = tanks.map(t => `<option value="${t.id}">${tankArabicNames[t.name] || t.name}</option>`).join('');
+  select.innerHTML = tanks.filter(t => t.type === 'wet').map(t => `<option value="${t.id}">${tankArabicNames[t.name] || t.name}</option>`).join('');
   if (current) select.value = current;
 }
 populateTankSelect();
