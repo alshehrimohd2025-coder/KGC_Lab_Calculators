@@ -330,8 +330,24 @@ td.name{color:var(--ink); font-weight:500}
 .langtog button.on{background:var(--accent); color:#fff}
 .langtog button:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
 /* the nav is hidden for managers, so the masthead carries its own copy */
-.masthead .langtog{margin-bottom:18px}
+.masthead .langtog{margin-inline-start:auto; flex:0 0 auto}
 .mode-edit .masthead .langtog{display:none}
+
+/* brand row: logo + title (+ language toggle for managers) */
+.brandrow{display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:12px}
+.brandrow h1{margin:0}
+.brandlogo{height:46px; width:auto; flex:0 0 auto; display:block}
+
+/* managers get an official, uncluttered header — tank status only */
+.mode-view .eyebrow,
+.mode-view .lede,
+.mode-view .syncbar,
+.mode-view .idstrip{display:none}
+.mode-view .masthead{margin-bottom:24px}
+.mode-view .masthead .wrap{padding-top:22px; padding-bottom:16px}
+.mode-view .brandrow{margin-bottom:0}
+.mode-view h1{font-size:clamp(19px,2.7vw,26px)}
+@media (max-width:560px){ .brandlogo{height:38px} }
 
 /* ---------- LTR adjustments ---------- */
 html[dir="ltr"] body{direction:ltr; text-align:left}
@@ -424,12 +440,15 @@ function showAppPage(pageId, btn) {
 
 <header class="masthead">
   <div class="wrap">
-    <div class="langtog" role="group" aria-label="Language">
-      <button type="button" data-lang-btn="ar" onclick="I18N.set('ar')">ع</button>
-      <button type="button" data-lang-btn="en" onclick="I18N.set('en')">EN</button>
+    <div class="brandrow">
+      <img class="brandlogo" src="logo.png" alt="KSC" onerror="this.remove()">
+      <h1 data-i18n="head.title">حاسبات مختبر جلفنة KGC</h1>
+      <div class="langtog" role="group" aria-label="Language">
+        <button type="button" data-lang-btn="ar" onclick="I18N.set('ar')">ع</button>
+        <button type="button" data-lang-btn="en" onclick="I18N.set('en')">EN</button>
+      </div>
     </div>
     <p class="eyebrow" data-i18n="head.eyebrow">KGC · HOT-DIP GALVANIZING · LAB</p>
-    <h1 data-i18n="head.title">حاسبات مختبر جلفنة KGC</h1>
     <p class="lede" data-i18n="head.lede">
       حاسبات تشغيلية لحوض الفلكس FL-01 وأحواض الحمض وحوض الزنك، مبنية على
       وحدات ومصطلحات شيت المصنع نفسه.
