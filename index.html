@@ -355,7 +355,7 @@ html[dir="ltr"] .idcell .v{text-align:left}
 html[dir="ltr"] .secsub{padding-right:0; padding-left:38px}
 html[dir="ltr"] th{text-align:left}
 html[dir="ltr"] .data-label{text-align:left}
-html[dir="ltr"] .tanks-grid{direction:ltr}
+/* the production line keeps the plant's own right-to-left order in English too */
 html[dir="ltr"] .tanks-table{direction:ltr}
 html[dir="ltr"] .tanks-table .tank-name-col{text-align:left}
 html[dir="ltr"] .formula{border-right:none; border-left:2px solid var(--accent-line)}
@@ -477,16 +477,40 @@ function showAppPage(pageId, btn) {
   box-shadow: var(--e2);
 }
 
+/* The line reads the way the plant is physically laid out: one row, first
+   stage on the right. It stays RTL in English too — it mirrors the floor,
+   not the interface language. */
 .tanks-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
-  /* every card identical: same column width, and one uniform row height
-     across all rows — tanks with fewer readings simply have more slack */
-  grid-auto-rows: 1fr;
+  display: flex;
   align-items: stretch;
-  gap: 14px;
-  margin-bottom: 30px;
+  gap: 0;
   direction: rtl;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 12px;
+  margin-bottom: 26px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+}
+.tanks-grid::-webkit-scrollbar { height: 8px; }
+.tanks-grid::-webkit-scrollbar-track { background: var(--recess); border-radius: 4px; }
+.tanks-grid::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 4px; }
+.tanks-grid::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
+
+.tanks-grid .tank-card { flex: 0 0 172px; scroll-snap-align: center; }
+
+/* flow arrow between consecutive stages */
+.flow-arrow {
+  flex: 0 0 32px;
+  align-self: center;
+  display: grid;
+  place-items: center;
+  color: var(--line-strong);
+}
+.flow-arrow svg { width: 19px; height: 19px; }
+@media (max-width: 560px) {
+  .tanks-grid .tank-card { flex: 0 0 158px; }
+  .flow-arrow { flex: 0 0 24px; }
 }
 
 /* --- tank vessel card --- */
@@ -915,7 +939,8 @@ function setStatus(tankId, newStatus) {
 }
 
 function tankDataRowsHTML(tank) {
-  const fields = tank.fields || WET_FULL;
+  // time is tracked in the table below, not on the card
+  const fields = (tank.fields || WET_FULL).filter(k => k !== 'time');
   return fields.map(function(key) {
     const def = TANK_FIELD_DEFS[key] || {};
     const value = tank[key];
@@ -928,11 +953,22 @@ function tankDataRowsHTML(tank) {
   }).join('');
 }
 
+// arrow drawn between two stages — points along the flow (right to left)
+function flowArrowHTML() {
+  return '<div class="flow-arrow" aria-hidden="true">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></svg></div>';
+}
+
 function renderCards() {
   const container = document.getElementById('tanks-container');
   container.innerHTML = '';
 
-  tanks.forEach(tank => {
+  // Draw in process order (degreasing first). In the RTL row that puts the
+  // first stage on the right, matching how the line is walked on the floor.
+  const ordered = tanks.slice().sort((a, b) => a.id - b.id);
+
+  ordered.forEach((tank, i) => {
     const color = getStatusColor(tank.status);
     const statusText = getStatusText(tank.status);
     const statusClass = `status-${normalizeStatus(tank.status)}`;
@@ -951,6 +987,10 @@ function renderCards() {
       </select>
     `;
     container.appendChild(card);
+
+    if (i < ordered.length - 1) {
+      container.insertAdjacentHTML('beforeend', flowArrowHTML());
+    }
   });
 }
 
