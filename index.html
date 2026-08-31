@@ -11,6 +11,7 @@
 <script src="i18n.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyCCqt5yp88PvKto38CUrS5cos-8Dpvgu40",
@@ -26,12 +27,54 @@ firebase.initializeApp(firebaseConfig);
 const database = firebase.database();
 
 /* ---------- access mode ----------
-   Default = read-only (safe to share). Full access only via ?edit=<key>.
-   Note: this is a soft guard that prevents accidental edits, not real security —
-   the key lives in the page source. Firebase rules still allow writes.        */
+   ?edit=<key> shows the editor UI (which pages/controls appear) — still just
+   a convenience flag, not a secret. The REAL gate is Firebase Auth below:
+   the database rules only accept writes from the one signed-in editor
+   account, enforced by Firebase itself, not by anything in this file.        */
 const KGC_EDIT_KEY = 'kgc-lab-2026';
 const IS_EDITOR = new URLSearchParams(location.search).get('edit') === KGC_EDIT_KEY;
 document.documentElement.classList.add(IS_EDITOR ? 'mode-edit' : 'mode-view');
+
+/* ---------- write authentication ----------
+   One shared editor account. The email is not secret (just an account name);
+   the password lives only in Firebase and in the editor's memory — never in
+   this source file, so it can't leak through view-source or GitHub.          */
+const EDITOR_EMAIL = 'editor@kgc-lab.internal';
+let IS_AUTHED = false;
+
+function refreshAuthUI() {
+  document.documentElement.classList.toggle('authed', IS_AUTHED);
+  const gate = document.getElementById('authgate');
+  if (gate) gate.style.display = (IS_EDITOR && !IS_AUTHED) ? 'flex' : 'none';
+  // re-render whatever is currently visible so unlocked controls appear immediately
+  if (typeof renderAll === 'function') { try { renderAll(); } catch (e) {} }
+  if (window.KGCProduction && typeof window.KGCProduction.render === 'function') { try { window.KGCProduction.render(); } catch (e) {} }
+}
+
+if (IS_EDITOR) {
+  firebase.auth().onAuthStateChanged(function (user) {
+    IS_AUTHED = !!user;
+    refreshAuthUI();
+  });
+}
+
+function authSignIn(password) {
+  const errEl = document.getElementById('authgate-err');
+  const btn = document.getElementById('authgate-submit');
+  if (errEl) errEl.textContent = '';
+  if (btn) btn.disabled = true;
+  firebase.auth().signInWithEmailAndPassword(EDITOR_EMAIL, password)
+    .catch(function (error) {
+      if (errEl) errEl.textContent = t('auth.badPassword');
+    })
+    .finally(function () {
+      if (btn) btn.disabled = false;
+    });
+}
+
+function authSignOut() {
+  firebase.auth().signOut();
+}
 </script>
 <style>
 :root{
@@ -175,7 +218,7 @@ h2.sectitle{font-size:21px; font-weight:700; margin:0; letter-spacing:-.018em}
 .g2{grid-template-columns:repeat(auto-fit,minmax(215px,1fr))}
 .field label{display:block; font-size:13px; font-weight:500; color:var(--ink-2); margin-bottom:5px; line-height:1.45}
 .field .unit{font-family:var(--mono); font-size:11px; color:var(--ink-3); font-weight:400}
-input[type="number"],input[type="text"]{
+input[type="number"],input[type="text"],input[type="password"],input[type="email"]{
   width:100%; font-family:var(--mono); font-size:15px; font-weight:500;
   padding:9px 11px; border:1px solid var(--line-strong); border-radius:var(--r-sm);
   background:var(--surface); color:var(--ink); direction:ltr; text-align:left;
@@ -183,7 +226,7 @@ input[type="number"],input[type="text"]{
   transition:border-color .16s var(--ease), box-shadow .16s var(--ease);
 }
 input[type="text"]{font-family:var(--sans); direction:rtl; text-align:right; font-size:14px}
-input[type="number"]:hover,input[type="text"]:hover{border-color:var(--accent-line)}
+input[type="number"]:hover,input[type="text"]:hover,input[type="password"]:hover,input[type="email"]:hover{border-color:var(--accent-line)}
 input:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent)}
 input[type="number"]:placeholder-shown{direction:rtl; text-align:right; font-family:var(--sans); font-size:13.5px; color:var(--ink-3)}
 .field .hint{font-size:11.5px; color:var(--ink-3); margin-top:4px; line-height:1.5}
@@ -399,10 +442,55 @@ html[dir="ltr"] .input-label .unit{margin-left:0; margin-right:0}
 }
 .viewbadge svg{width:15px; height:15px}
 .mode-view .viewbadge{display:inline-flex}
+
+/* ---------- editor sign-in gate ---------- */
+/* the edit link shows this UI, but everything stays inert until Firebase
+   confirms the sign-in — matches the mode-view lockdown, just conditional
+   on auth instead of the URL flag */
+.mode-edit:not(.authed) .topnav,
+.mode-edit:not(.authed) .app-page{filter:blur(3px); pointer-events:none; user-select:none}
+#authgate{
+  display:none; position:fixed; inset:0; z-index:600;
+  background:rgba(8,14,16,.6);
+  -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px);
+  place-items:center; padding:20px;
+}
+.mode-edit:not(.authed) #authgate{display:grid}
+.authgate-box{
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--r-lg);
+  box-shadow:var(--e3); width:100%; max-width:340px; padding:30px 26px; text-align:center;
+}
+.authgate-icon{width:34px; height:34px; margin:0 auto 12px; color:var(--accent)}
+.signout-btn{
+  font-family:var(--sans); font-size:12.5px; font-weight:600; cursor:pointer;
+  padding:6px 13px; border-radius:999px; border:1px solid var(--line-strong);
+  background:transparent; color:var(--ink-3);
+}
+.signout-btn:hover{color:var(--crit); border-color:var(--crit-line)}
+.mode-edit:not(.authed) .signout-btn{display:none}
 </style>
 <script id="kgc-state" type="application/json">{"inputs": {}, "log": [], "seq": 0}</script>
 </head>
 <body>
+
+<div id="authgate">
+  <div class="authgate-box">
+    <svg class="authgate-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10.5" width="16" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>
+    <h3 style="margin:0 0 6px; font-size:17px; font-weight:700;" data-i18n="auth.title">تسجيل الدخول للتعديل</h3>
+    <p style="margin:0 0 18px; font-size:13px; color:var(--ink-3); line-height:1.7;" data-i18n="auth.sub">كلمة مرور المحرر — تُدخل مرة وحدة لكل جهاز.</p>
+    <input type="password" id="authgate-pw" data-i18n-ph="auth.pwPlaceholder" placeholder="كلمة المرور" autocomplete="current-password">
+    <p id="authgate-err" style="color:var(--crit); font-size:12.5px; min-height:18px; margin:8px 0 0;"></p>
+    <button type="button" class="btn" id="authgate-submit" style="width:100%; justify-content:center; margin-top:10px;" data-i18n="auth.submit">دخول</button>
+  </div>
+</div>
+<script>
+(function () {
+  const pw = document.getElementById('authgate-pw');
+  const go = function () { if (pw.value) authSignIn(pw.value); };
+  document.getElementById('authgate-submit').addEventListener('click', go);
+  pw.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+})();
+</script>
 
 <nav class="topnav">
   <div class="wrap">
@@ -427,6 +515,7 @@ html[dir="ltr"] .input-label .unit{margin-left:0; margin-right:0}
       <span data-i18n="nav.standards">معايير التشغيل</span>
     </button>
     <span style="flex:1 1 auto"></span>
+    <button type="button" class="signout-btn" onclick="authSignOut()" data-i18n="auth.signout">تسجيل الخروج</button>
     <div class="langtog" role="group" aria-label="Language">
       <button type="button" data-lang-btn="ar" onclick="I18N.set('ar')">ع</button>
       <button type="button" data-lang-btn="en" onclick="I18N.set('en')">EN</button>
@@ -850,7 +939,7 @@ try {
 } catch (e) {}
 
 function saveToStorage() {
-  if (!IS_EDITOR) return;
+  if (!IS_EDITOR || !IS_AUTHED) return;
   try {
     localStorage.setItem('kgc-tanks-data', JSON.stringify(tanks));
   } catch (e) {}
@@ -902,7 +991,7 @@ function statusOptionsHTML(currentStatus) {
 }
 
 function makeEditable(element, tankId, field) {
-  if (!IS_EDITOR) return;
+  if (!IS_EDITOR || !IS_AUTHED) return;
   const tank = tanks.find(t => t.id === tankId);
   if (!tank) return;
 
@@ -934,7 +1023,7 @@ function makeEditable(element, tankId, field) {
 }
 
 function setStatus(tankId, newStatus) {
-  if (!IS_EDITOR) return;
+  if (!IS_EDITOR || !IS_AUTHED) return;
   const tank = tanks.find(t => t.id === tankId);
   if (tank) {
     tank.status = newStatus;
@@ -1380,6 +1469,7 @@ function populateTankSelect() {
 populateTankSelect();
 
 function saveAcidToTank() {
+  if (!IS_EDITOR || !IS_AUTHED) return;
   const select = document.getElementById('acid-tank-select');
   const tankId = parseInt(select.value);
   const tank = tanks.find(t => t.id === tankId);
@@ -1428,6 +1518,7 @@ function renderTitrationLog(entries) {
 }
 
 function deleteTitrationEntry(key) {
+  if (!IS_EDITOR || !IS_AUTHED) return;
   if (!confirm(t('acid.confirmDelete'))) return;
   database.ref('titration_log/' + key).remove().catch(function(error) {
     console.error("Firebase delete error:", error);

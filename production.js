@@ -7,7 +7,9 @@
 
    Depends on globals defined in index.html:
      database   (firebase realtime db)
-     IS_EDITOR  (write access flag)
+     IS_EDITOR  (editor UI flag, from the ?edit= link)
+     IS_AUTHED  (Firebase Auth confirmed the editor's password)
+   Every write also requires IS_AUTHED — IS_EDITOR alone only shows the UI.
    ============================================================ */
 (function () {
   'use strict';
@@ -162,7 +164,7 @@
   }
 
   function save(b) {
-    if (!IS_EDITOR) return;
+    if (!IS_EDITOR || !IS_AUTHED) return;
     b.updatedTs = Date.now();
     try {
       dbRef.child('batches/' + b.id).set(clean(b))
@@ -356,7 +358,7 @@
 
   /** Tank stage: lift out of the liquid — ends immersion, starts draining. */
   function liftOut(id) {
-    const b = batches[id]; if (!b || !IS_EDITOR) return;
+    const b = batches[id]; if (!b || !IS_EDITOR || !IS_AUTHED) return;
     const cur = openSeg(b);
     if (!cur || cur.kind !== 'immersion') return;
     const now = Date.now();
@@ -370,7 +372,7 @@
 
   /** Close the current segment and open the next stage (or finish). */
   function next(id) {
-    const b = batches[id]; if (!b || !IS_EDITOR) return;
+    const b = batches[id]; if (!b || !IS_EDITOR || !IS_AUTHED) return;
     const cur = openSeg(b);
     if (!cur) return;
     if (cur.kind === 'immersion') return;                 // must lift out first
@@ -413,7 +415,7 @@
 
   /** Stage is done but the batch has not moved on yet — log the gap. */
   function startWait(id) {
-    const b = batches[id]; if (!b || !IS_EDITOR) return;
+    const b = batches[id]; if (!b || !IS_EDITOR || !IS_AUTHED) return;
     const cur = openSeg(b);
     if (!cur || cur.kind === 'wait' || cur.kind === 'downtime' || cur.kind === 'immersion') return;
     askReason(t('pt.waitReason'), WAIT_REASONS, reason => {
@@ -428,7 +430,7 @@
   }
 
   function pause(id) {
-    const b = batches[id]; if (!b || !IS_EDITOR) return;
+    const b = batches[id]; if (!b || !IS_EDITOR || !IS_AUTHED) return;
     const cur = openSeg(b);
     if (!cur || cur.kind === 'downtime') return;
     askReason(t('pt.downReason'), DOWN_REASONS, reason => {
@@ -445,7 +447,7 @@
   }
 
   function resume(id) {
-    const b = batches[id]; if (!b || !IS_EDITOR) return;
+    const b = batches[id]; if (!b || !IS_EDITOR || !IS_AUTHED) return;
     const cur = openSeg(b);
     if (!cur || cur.kind !== 'downtime') return;
     const now = Date.now();
@@ -461,7 +463,7 @@
 
   /** Undo an accidental NEXT: drop the open segment and reopen the previous. */
   function undo(id) {
-    const b = batches[id]; if (!b || !IS_EDITOR) return;
+    const b = batches[id]; if (!b || !IS_EDITOR || !IS_AUTHED) return;
     const list = segs(b);
     if (list.length < 2) return;
     if (!confirm(t('pt.confirmUndo'))) return;
@@ -477,7 +479,7 @@
   }
 
   function startRework(id) {
-    const b = batches[id]; if (!b || !IS_EDITOR) return;
+    const b = batches[id]; if (!b || !IS_EDITOR || !IS_AUTHED) return;
     askRework(b, (reason, targetKey) => {
       const now = Date.now();
       const targetIdx = stageIndexOf(targetKey);
@@ -504,7 +506,7 @@
   }
 
   function finishBatch(id) {
-    const b = batches[id]; if (!b || !IS_EDITOR) return;
+    const b = batches[id]; if (!b || !IS_EDITOR || !IS_AUTHED) return;
     askIssue(issue => {
       const now = Date.now();
       closeOpen(b, now);
@@ -516,7 +518,7 @@
   }
 
   function deleteBatch(id) {
-    const b = batches[id]; if (!b || !IS_EDITOR) return;
+    const b = batches[id]; if (!b || !IS_EDITOR || !IS_AUTHED) return;
     if (!confirm(t('pt.confirmDelete', { n: b.batchNumber }))) return;
     dbRef.child('batches/' + id).remove();
     delete batches[id];
@@ -613,7 +615,7 @@
   }
 
   function openNewBatch() {
-    if (!IS_EDITOR) return;
+    if (!IS_EDITOR || !IS_AUTHED) return;
     const m = modal(
       headHtml(t('pt.newbatch')) +
       '<div class="pt-modal-body"><div class="pt-form">' +
@@ -742,7 +744,7 @@
   }
 
   function editSegment(id, i) {
-    const b = batches[id]; if (!b || !IS_EDITOR) return;
+    const b = batches[id]; if (!b || !IS_EDITOR || !IS_AUTHED) return;
     const s = segs(b)[i]; if (!s) return;
 
     const m = modal(
@@ -1117,7 +1119,7 @@
   if (window.I18N) I18N.onChange(render);
 
   window.KGCProduction = {
-    exportCsv: exportCsv, analytics: analytics, totals: totals,
+    exportCsv: exportCsv, analytics: analytics, totals: totals, render: render,
     _batches: () => batches, _stages: () => STAGES
   };
 })();
