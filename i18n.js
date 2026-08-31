@@ -20,6 +20,7 @@
       'nav.acid': 'حاسبة معايرة الحمض',
       'nav.flux': 'حاسبة الفلكس FL-01',
       'nav.timing': 'تتبع زمن الإنتاج',
+      'nav.standards': 'معايير التشغيل',
       'head.eyebrow': 'KGC · جلفنة بالغمس الساخن · المختبر',
       'head.title': 'حاسبات مختبر جلفنة KGC',
       'head.lede': 'حاسبات تشغيلية لحوض الفلكس FL-01 وأحواض الحمض وحوض الزنك، مبنية على وحدات ومصطلحات شيت المصنع نفسه. القراءات وسجل العمليات مشتركة بين كل جهاز يفتح الرابط.',
@@ -295,6 +296,24 @@
       'sync.failed': 'تعذّر الحفظ. تحقق من الاتصال وأعد المحاولة.',
       'sync.live': '<b>المزامنة مفعّلة</b> — القراءات تُحفظ تلقائياً وتظهر على كل جهاز يفتح الرابط.',
       'sync.roview': '<b>عرض فقط</b> — الحفظ غير متاح في هذا العرض.',
+
+      /* operating standards — live tank cards (the long reference text below stays Arabic-only) */
+      'std.title': 'معايير التشغيل والتنبيهات الحية',
+      'std.sub': 'معيار داخلي لمصنع KGC، مبني على قراءاتكم الفعلية — يتحدّث تلقائياً مع كل معايرة.',
+      'std.arabicOnly': 'الجداول والشروحات الفنية بالأسفل بالعربي فقط حالياً، مثل قسم حاسبة الفلكس.',
+      'std.live.title': 'الحالة الحية لأحواض الحمض والفلكس',
+      'std.freeAcid': 'الحمض الحر',
+      'std.asGL': 'يعادل',
+      'std.dissolvedFe': 'الحديد الذائب',
+      'std.noReading': 'لا توجد قراءة بعد',
+      'std.throughput': 'الوزن الممرر (منذ بدء التتبع)',
+      'std.stage.good': 'ضمن النطاق المستهدف',
+      'std.stage.warn': 'يقترب من نهاية العمر — راقب',
+      'std.stage.crit': 'منتهي الصلاحية — يحتاج تجديد',
+      'std.band.low': 'منخفض — تخليل بطيء',
+      'std.band.target': 'ضمن النطاق المستهدف',
+      'std.band.wide': 'مرتفع نسبياً — مقبول تشغيلياً',
+      'std.band.high': 'مرتفع جداً — خطر تقصف هيدروجيني',
       'u.h': 'س', 'u.m': 'د', 'u.s': 'ث'
     },
 
@@ -303,6 +322,7 @@
       'nav.acid': 'Acid titration',
       'nav.flux': 'Flux calculator FL-01',
       'nav.timing': 'Production timing',
+      'nav.standards': 'Operating standards',
       'head.eyebrow': 'KGC · HOT-DIP GALVANIZING · LAB',
       'head.title': 'KGC galvanizing lab calculators',
       'head.lede': 'Operational calculators for flux tank FL-01, the acid tanks and the zinc kettle, built on the plant sheet’s own units and terms. Readings and the operations log are shared across every device that opens the link.',
@@ -571,6 +591,24 @@
       'sync.failed': 'Could not save. Check your connection and try again.',
       'sync.live': '<b>Live sync on</b> — readings save automatically and appear on every device that opens the link.',
       'sync.roview': '<b>View only</b> — saving is not available in this view.',
+
+      /* operating standards — live tank cards (the long reference text below stays Arabic-only) */
+      'std.title': 'Operating standards & live alerts',
+      'std.sub': "KGC's internal standard, built from your actual readings — updates automatically with every titration.",
+      'std.arabicOnly': 'The reference tables and notes below are Arabic-only for now, same as the Flux calculator section.',
+      'std.live.title': 'Live status — acid tanks & flux',
+      'std.freeAcid': 'Free acid',
+      'std.asGL': 'equals',
+      'std.dissolvedFe': 'Dissolved iron',
+      'std.noReading': 'No reading yet',
+      'std.throughput': 'Weight processed (since tracking began)',
+      'std.stage.good': 'Within target range',
+      'std.stage.warn': 'Approaching end of life — monitor',
+      'std.stage.crit': 'Exhausted — needs renewal',
+      'std.band.low': 'Low — slow pickling',
+      'std.band.target': 'Within target range',
+      'std.band.wide': 'Somewhat high — operationally acceptable',
+      'std.band.high': 'Too high — hydrogen embrittlement risk',
       'u.h': 'h', 'u.m': 'm', 'u.s': 's'
     }
   };

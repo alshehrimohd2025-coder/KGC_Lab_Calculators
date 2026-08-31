@@ -382,7 +382,8 @@ html[dir="ltr"] .input-label .unit{margin-left:0; margin-right:0}
 .mode-view .topnav{display:none}
 .mode-view #page-acid,
 .mode-view #page-flux,
-.mode-view #page-timing{display:none !important}
+.mode-view #page-timing,
+.mode-view #page-standards{display:none !important}
 .mode-view #page-tanks{display:block !important}
 .mode-view .data-value{cursor:default; pointer-events:none}
 .mode-view .data-value:hover{background:transparent; color:var(--ink)}
@@ -420,6 +421,10 @@ html[dir="ltr"] .input-label .unit{margin-left:0; margin-right:0}
     <button type="button" data-page="page-timing" onclick="showAppPage('page-timing', this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9.5V13l2.5 1.5"/><path d="M9 2h6"/></svg>
       <span data-i18n="nav.timing">تتبع زمن الإنتاج</span>
+    </button>
+    <button type="button" data-page="page-standards" onclick="showAppPage('page-standards', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+      <span data-i18n="nav.standards">معايير التشغيل</span>
     </button>
     <span style="flex:1 1 auto"></span>
     <div class="langtog" role="group" aria-label="Language">
@@ -2055,6 +2060,115 @@ setInterval(function() {
 
 <div id="page-timing" class="app-page wrap"></div>
 <script src="production.js"></script>
+
+<style>
+.std-note-en{display:none; margin-bottom:20px}
+:root.lang-en .std-note-en{display:block}
+.std-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; margin-bottom:8px}
+.std-card{background:var(--surface); border:1px solid var(--line); border-top:3px solid var(--line); border-radius:var(--r-md); padding:14px 16px; box-shadow:var(--e1)}
+.std-name{font-size:14px; font-weight:700; color:var(--ink); margin-bottom:10px; display:flex; align-items:center}
+.std-row{display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:4px 0; font-size:13px}
+.std-k{color:var(--ink-3)}
+.std-v{font-family:var(--mono); font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; direction:ltr}
+.std-v small{font-family:var(--sans); font-weight:400; color:var(--ink-3); direction:rtl; unicode-bidi:isolate}
+.std-badge{display:inline-block; font-size:11.5px; font-weight:600; padding:2px 10px; border-radius:999px; border:1px solid}
+</style>
+
+<div id="page-standards" class="app-page wrap">
+
+  <section>
+    <div class="sechead"><span class="secnum">١</span><h2 class="sectitle" data-i18n="std.title">معايير التشغيل والتنبيهات الحية</h2></div>
+    <p class="secsub" data-i18n="std.sub">معيار داخلي لمصنع KGC، مبني على قراءاتكم الفعلية — يتحدّث تلقائياً مع كل معايرة.</p>
+    <p class="secsub std-note-en" data-i18n="std.arabicOnly" style="padding-right:0"></p>
+
+    <p class="panel-label" data-i18n="std.live.title" style="margin:6px 0 12px">الحالة الحية لأحواض الحمض والفلكس</p>
+    <div class="std-grid" id="std-live"></div>
+  </section>
+
+  <div class="notice">
+    <h2><span class="tag">مصدر المعيار</span> هذا معيار داخلي، وليس اعتماداً هندسياً مستقلاً</h2>
+    <p>
+      الأرقام والبروتوكول أدناه مبنية على مادة فنية أرسلها مسؤول المصنع كمرجع لبناء ستاندر تشغيلي داخلي لمصنع KGC.
+      لم يتحقق منها Claude من جهة هندسية أو معيارية مستقلة — اعتمادها النهائي قرار إدارة الجودة والمهندس الكيميائي بالمصنع.
+    </p>
+    <p>
+      <strong>ملاحظة تحويل الوحدات:</strong> النسبة المئوية للحمض الحر (وزناً) تُحوَّل إلى جم/لتر باستخدام
+      <b>كثافة محلول HCl الفعلية</b> عند كل تركيز (بيانات فيزيائية معروفة)، وليس بافتراض كثافة = 1 — لأن هذا الافتراض
+      يقلّل قيمة جم/لتر بنسبة تصل 5–8%.
+    </p>
+  </div>
+
+  <section>
+    <div class="sechead"><span class="secnum">٢</span><h2 class="sectitle">المعيار المرجعي — أحواض الحمض 1-4 والستريبنج</h2></div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>المعامل</th><th>النطاق المستهدف</th><th>ملاحظة تشغيلية</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="name">الحمض الحر (Free HCl)</td>
+            <td class="num">10% – 16% وزناً<br><span style="color:var(--ink-3); font-size:11.5px">≈ 105 – 172 جم/لتر</span></td>
+            <td>يُسمح بالعمل حتى 20% تشغيلياً. فوق ذلك فقط لإزالة قشور ثقيلة (Heavy Mill Scale) مع مثبط قوي.</td>
+          </tr>
+          <tr>
+            <td class="name">الحديد الذائب (Fe²⁺)</td>
+            <td class="num">أقل من 120 جم/لتر مثالي<br>120 – 150 نهاية العمر</td>
+            <td>هذا هو المؤشر الأساسي لعمر الحوض — وليس عدد الأيام. عند 220 جم/لتر فأكثر يصل الحوض للتشبع التام ويتوقف التفاعل حتى مع إضافة حمض جديد.</td>
+          </tr>
+          <tr>
+            <td class="name">درجة حرارة التشغيل</td>
+            <td class="num">15°م – 40°م</td>
+            <td>يعمل بارداً بدون سخانات؛ HCl متطاير، والتسخين يرفع تركيز الأبخرة الحمضية في الصالة.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="flag flag-warn">
+      <span class="fi">↓</span>
+      <span><b>تحت 10%:</b> تخليل بطيء (يمتد زمن الشحنة من 10–15 دقيقة إلى 30+ دقيقة)، وتخليل ناقص يترك بقع صدأ مجهرية تحت الطلاء (Bare Spots) لأن الحمض الضعيف لا يفكك طبقة الأكسيد الداخلية بالكامل.</span>
+    </div>
+    <div class="flag flag-crit">
+      <span class="fi">↑</span>
+      <span><b>فوق 20%:</b> خطر التقصف الهيدروجيني للصلب عالي المقاومة (هيدروجين ذري يتراكم عند الحدود البلورية للمعدن)، بالإضافة لزيادة الأبخرة الحمضية التي تسرّع تآكل هياكل الصالة والرافعات.</span>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead"><span class="secnum">٣</span><h2 class="sectitle">بروتوكول إطالة عمر حوض الحمض</h2></div>
+    <p class="secsub" style="padding-right:0">ثلاث ممارسات ميتالورجية تضاعف عمر الحوض التشغيلي عند تطبيقها معاً.</p>
+    <div class="legend">
+      <dl>
+        <div class="row"><span class="chip chip-std">المثبط SI 400 (H)</span><dd>يشكّل غشاءً جزيئياً واقياً يحمي الفولاذ النقي بنسبة تصل 80% بمجرد إذابة الصدأ، فيمنع ذوبان الحديد في الحمام بلا طائل ويحافظ على تركيز الحمض الحر.</dd></div>
+        <div class="row"><span class="chip chip-std">تحضير مسبق SUPERCLEAN 150 PLUS</span><dd>تأمين خلو الفولاذ الوارد كلياً من الزيوت قبل دخول الحمض — الزيوت الهيدروكربونية تعزل الأكسيد عن الحمض، فيضطر المشغّل لإطالة زمن المكوث ويتضاعف استهلاك كيمياء الحوض.</dd></div>
+        <div class="row"><span class="chip chip-std">التصريف الميكانيكي (60–90 ثانية)</span><dd>تعليق الشحنة بزاوية مائلة فوق حوض الحمض لهذه المدة قبل الانتقال، لمنع سحب كميات كبيرة من الحمض إلى حوض الغسيل التالي (Drag-out).</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead"><span class="secnum">٤</span><h2 class="sectitle">معيار حوض الفلكس</h2></div>
+    <p class="secsub" style="padding-right:0">نفس الحدود المعتمدة أصلاً في قسم حاسبة الفلكس بهذا الموقع — لا حدود جديدة.</p>
+    <div class="legend">
+      <dl>
+        <div class="row"><span class="chip chip-std">حد مصنعي معتمد</span><dd>pH 4–5 · حديد 0.5–1.5 g/L · بوميه 15–20 · SG 1.13–1.18 — مأخوذة من صفحة Targets في شيتكم نفسه.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section>
+    <div class="sechead"><span class="secnum">٥</span><h2 class="sectitle">أحواض بانتظار تحديد المعيار</h2></div>
+    <p class="secsub" style="padding-right:0">ما وصلني بعد مرجع فني لتحديد نطاقات مستهدفة لهذه الأحواض. أرسل القيم المعتمدة عندكم (إن وجدت) أو مصدراً فنياً وأضيفها فوراً بنفس الأسلوب أعلاه.</p>
+    <p>
+      <span class="chip chip-tbd" style="margin:0 4px 8px">تانك إزالة الشحوم</span>
+      <span class="chip chip-tbd" style="margin:0 4px 8px">رينسينج قبل الحمض</span>
+      <span class="chip chip-tbd" style="margin:0 4px 8px">رينسينج بعد الحمض</span>
+      <span class="chip chip-tbd" style="margin:0 4px 8px">تانك الدراينج</span>
+      <span class="chip chip-tbd" style="margin:0 4px 8px">حوض الزنك (الفرن)</span>
+    </p>
+  </section>
+
+</div>
+<script src="standards.js"></script>
 
 </body>
 </html>
