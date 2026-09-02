@@ -1054,6 +1054,23 @@ function flowArrowHTML() {
     '<path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></svg></div>';
 }
 
+// Fe / free-acid alert, when the standards module has loaded and this tank
+// is one it tracks — same box as the reading, no separate page to visit.
+// Short wording + no-wrap: the dashboard card is much narrower than the
+// full Standards page card the long label was written for.
+function standardsFlagHTML(tank) {
+  const S = window.KGCStandards;
+  if (!S || S.TRACKED_IDS.indexOf(tank.id) === -1) return '';
+  const status = S.worstStatus(tank);
+  if (!status) return '';
+  const tierVar = { good: '--accent', warn: '--warn', crit: '--crit' }[status.tier];
+  const v = `var(${tierVar})`;
+  return `<div style="margin:0 10px 10px; text-align:center;">` +
+    `<span style="display:inline-block; white-space:nowrap; font-size:11px; font-weight:600; ` +
+    `padding:2px 9px; border-radius:999px; color:${v}; border:1px solid ${v}66; background:${v}1a;">` +
+    `${t('std.short.' + status.tier)}</span></div>`;
+}
+
 function renderCards() {
   const container = document.getElementById('tanks-container');
   container.innerHTML = '';
@@ -1076,6 +1093,7 @@ function renderCards() {
       </div>
       <div class="tank-name">${tankLabel(tank.name)}</div>
       <div class="tank-data">${tankDataRowsHTML(tank)}</div>
+      ${standardsFlagHTML(tank)}
       <select class="status-select" style="background:${color}1a; border-color:${color}59; color:${color};" onchange="setStatus(${tank.id}, this.value)">
         ${statusOptionsHTML(tank.status)}
       </select>

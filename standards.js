@@ -155,4 +155,19 @@
   database.ref('production/batches').on('value', render);
   // Re-render on language change (badges + labels are localized).
   if (window.I18N) I18N.onChange(render);
+
+  /* Worst-of Fe/Free-Acid status for one tank — used by the main dashboard
+     cards (visible to managers too, unlike this standards page) so the
+     alert shows in the same box as the reading, not a separate tab. */
+  function worstStatus(tank) {
+    const acid = tank.id === 10 ? null : acidStatus(tank.acidPercent);
+    const fe = feStatus(tank.fe);
+    const rank = { good: 0, warn: 1, crit: 2 };
+    return [acid, fe].filter(Boolean).reduce((w, s) => (!w || rank[s.tier] > rank[w.tier]) ? s : w, null);
+  }
+
+  window.KGCStandards = { TRACKED_IDS: TRACKED_IDS, worstStatus: worstStatus, badge: badge };
+  // The dashboard may have already rendered before this file loaded — refresh
+  // it once now that the standards data/functions exist.
+  if (typeof renderAll === 'function') { try { renderAll(); } catch (e) {} }
 })();

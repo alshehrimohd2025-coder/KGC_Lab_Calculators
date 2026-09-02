@@ -320,6 +320,9 @@
       'std.band.target': 'ضمن النطاق المستهدف',
       'std.band.wide': 'مرتفع نسبياً — مقبول تشغيلياً',
       'std.band.high': 'مرتفع جداً — خطر تقصف هيدروجيني',
+      'std.short.good': 'ضمن المعيار',
+      'std.short.warn': 'يحتاج مراقبة',
+      'std.short.crit': 'يحتاج إجراء',
       'u.h': 'س', 'u.m': 'د', 'u.s': 'ث'
     },
 
@@ -621,6 +624,9 @@
       'std.band.target': 'Within target range',
       'std.band.wide': 'Somewhat high — operationally acceptable',
       'std.band.high': 'Too high — hydrogen embrittlement risk',
+      'std.short.good': 'On target',
+      'std.short.warn': 'Monitor',
+      'std.short.crit': 'Action needed',
       'u.h': 'h', 'u.m': 'm', 'u.s': 's'
     }
   };
