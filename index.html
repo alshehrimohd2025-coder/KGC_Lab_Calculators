@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="production.css">
+<link rel="stylesheet" href="lab.css">
 <script src="i18n.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -436,7 +437,8 @@ html[dir="ltr"] .input-label .unit{margin-left:0; margin-right:0}
 .mode-view #page-acid,
 .mode-view #page-flux,
 .mode-view #page-timing,
-.mode-view #page-standards{display:none !important}
+.mode-view #page-standards,
+.mode-view #page-lab{display:none !important}
 .mode-view #page-tanks{display:block !important}
 .mode-view .data-value{cursor:default; pointer-events:none}
 .mode-view .data-value:hover{background:transparent; color:var(--ink)}
@@ -523,6 +525,10 @@ html[dir="ltr"] .input-label .unit{margin-left:0; margin-right:0}
     <button type="button" data-page="page-standards" onclick="showAppPage('page-standards', this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
       <span data-i18n="nav.standards">معايير التشغيل</span>
+    </button>
+    <button type="button" data-page="page-lab" onclick="showAppPage('page-lab', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l5-5 4 3 6-7"/><path d="M3 21h18"/></svg>
+      <span data-i18n="nav.lab">صحة الأحواض</span>
     </button>
     <span style="flex:1 1 auto"></span>
     <button type="button" class="signout-btn" onclick="authSignOut()" data-i18n="auth.signout">تسجيل الخروج</button>
@@ -956,6 +962,9 @@ function saveToStorage() {
   database.ref('tanks_data').set(tanks).catch(function(error) {
     console.error("Firebase tanks sync error:", error);
   });
+  // Snapshot today's readings so the Fe trend has history to draw from —
+  // tanks_data only ever holds the latest value.
+  if (window.KGCLab) window.KGCLab.captureReadings();
 }
 
 // Live sync: any device that edits a tank pushes to Firebase,
@@ -2287,7 +2296,47 @@ setInterval(function() {
   </section>
 
 </div>
+<div id="page-lab" class="app-page wrap">
+
+  <section class="lab-section">
+    <div class="sechead"><span class="secnum">١</span><h2 class="sectitle" data-i18n="lab.trend.title">اتجاه الحديد الذائب</h2></div>
+    <p class="secsub" data-i18n="lab.trend.sub">يُرسم من قراءاتكم اليومية، ويبدأ من آخر تجديد للحوض — التجديد يعيد الحمام لنقطة الصفر.</p>
+    <div id="lab-trends"></div>
+  </section>
+
+  <section class="lab-section">
+    <div class="sechead"><span class="secnum">٢</span><h2 class="sectitle" data-i18n="lab.life.title">العمر المتبقي التقديري</h2></div>
+    <p class="secsub" data-i18n="lab.life.sub">تقدير إحصائي من معدل ارتفاع الحديد — يظهر فقط عند توفر قراءات كافية.</p>
+    <div class="lab-life-grid" id="lab-life"></div>
+  </section>
+
+  <section class="lab-section">
+    <div class="sechead"><span class="secnum">٣</span><h2 class="sectitle" data-i18n="lab.rn.title">سجل التجديد والإضافات</h2></div>
+    <p class="secsub" data-i18n="lab.rn.sub">سجّل تجديد الحوض أو إضافة الحمض — التجديد يعيد حساب اتجاه الحديد من تاريخه.</p>
+    <div class="lab-form" id="lab-renewal-form">
+      <div><label data-i18n="lab.col.tank">الحوض</label><select id="lab-rn-tank"></select></div>
+      <div><label data-i18n="lab.col.type">النوع</label><select id="lab-rn-type">
+        <option value="renewal" data-i18n="lab.type.renewal">تجديد كامل</option>
+        <option value="addition" data-i18n="lab.type.addition">إضافة حمض</option>
+      </select></div>
+      <div><label data-i18n="lab.col.date">التاريخ</label><input type="date" id="lab-rn-date"></div>
+      <div><label data-i18n="lab.col.qty">الكمية (لتر)</label><input type="number" id="lab-rn-qty" step="1" placeholder="0"></div>
+      <div><label data-i18n="lab.col.note">ملاحظة</label><input type="text" id="lab-rn-note"></div>
+      <div><button class="btn" id="lab-rn-save" style="width:100%; justify-content:center;" data-i18n="lab.rn.save">حفظ</button></div>
+    </div>
+    <div id="lab-renewal-log"></div>
+  </section>
+
+  <section class="lab-section">
+    <div class="sechead"><span class="secnum">٤</span><h2 class="sectitle" data-i18n="lab.inv.title">المخزون الكيميائي</h2></div>
+    <p class="secsub" data-i18n="lab.inv.sub">حدّث الكمية بعد كل استلام أو صرف — التنبيه يظهر تلقائياً عند بلوغ الحد الأدنى.</p>
+    <div class="lab-inv-grid" id="lab-inventory"></div>
+  </section>
+
+</div>
+
 <script src="standards.js"></script>
+<script src="lab.js"></script>
 
 </body>
 </html>

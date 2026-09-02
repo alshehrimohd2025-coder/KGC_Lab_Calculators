@@ -1,0 +1,132 @@
+/* ============================================================
+   Bath health & supplies — styles
+   Uses the design tokens defined in index.html
+   ============================================================ */
+
+.lab-section { margin-bottom: 34px; }
+
+/* ---------- trend chart ---------- */
+.lab-chart-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 16px 18px 12px;
+  box-shadow: var(--e1);
+  margin-bottom: 14px;
+}
+.lab-chart-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.lab-chart-title { font-size: 14px; font-weight: 700; color: var(--ink); }
+.lab-chart-meta {
+  font-family: var(--mono); font-size: 11.5px; color: var(--ink-3);
+  direction: ltr; font-variant-numeric: tabular-nums;
+}
+.lab-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.lab-svg .grid { stroke: var(--line); stroke-width: 1; }
+.lab-svg .axis-label {
+  font-family: var(--mono); font-size: 9.5px; fill: var(--ink-3);
+}
+.lab-svg .band-warn { fill: var(--warn); opacity: .07; }
+.lab-svg .band-crit { fill: var(--crit); opacity: .07; }
+.lab-svg .limit-line { stroke-width: 1; stroke-dasharray: 4 4; }
+.lab-svg .series { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.lab-svg .trend { stroke: var(--ink-3); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: .8; }
+.lab-svg .pt { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+
+/* ---------- life estimate ---------- */
+.lab-life-grid {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+.lab-life {
+  --lc: var(--line-strong);
+  background: var(--surface); border: 1px solid var(--line);
+  border-top: 3px solid var(--lc);
+  border-radius: var(--r-md); padding: 14px 16px; box-shadow: var(--e1);
+}
+.lab-life.t-good { --lc: var(--accent); }
+.lab-life.t-warn { --lc: var(--warn); }
+.lab-life.t-crit { --lc: var(--crit); }
+.lab-life-name { font-size: 13.5px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+.lab-life-big {
+  font-family: var(--mono); font-size: 26px; font-weight: 700; color: var(--lc);
+  direction: ltr; font-variant-numeric: tabular-nums; line-height: 1.2;
+}
+.lab-life-big small { font-size: 12px; font-weight: 500; color: var(--ink-3); margin-inline-start: 5px; }
+.lab-life-sub { font-size: 11.5px; color: var(--ink-3); margin-top: 6px; line-height: 1.6; }
+.lab-life-none { font-size: 12.5px; color: var(--ink-3); line-height: 1.7; }
+
+/* ---------- shared empty state ---------- */
+.lab-empty {
+  padding: 26px 20px; text-align: center; color: var(--ink-3); font-size: 13.5px;
+  background: var(--surface); border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md); line-height: 1.8;
+}
+
+/* ---------- inventory ---------- */
+.lab-inv-grid {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+.lab-inv {
+  --ic: var(--accent);
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-md); padding: 14px 16px; box-shadow: var(--e1);
+}
+.lab-inv.low { --ic: var(--crit); border-color: color-mix(in srgb, var(--crit) 40%, var(--line)); }
+.lab-inv-name { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
+.lab-inv-qty {
+  font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--ic);
+  direction: ltr; font-variant-numeric: tabular-nums;
+}
+.lab-inv-qty small { font-size: 11.5px; font-weight: 500; color: var(--ink-3); margin-inline-start: 4px; }
+.lab-inv-bar {
+  height: 5px; border-radius: 3px; background: var(--recess);
+  margin: 9px 0 7px; overflow: hidden;
+}
+.lab-inv-bar span { display: block; height: 100%; background: var(--ic); border-radius: 3px; }
+.lab-inv-min { font-size: 11px; color: var(--ink-3); }
+.lab-inv-edit {
+  margin-top: 9px; width: 100%; padding: 6px 9px; font-size: 13px;
+  font-family: var(--mono); text-align: center; direction: ltr;
+  border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--ink);
+}
+.lab-inv-edit:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+html:not(.authed) .lab-inv-edit,
+.mode-view .lab-inv-edit { display: none; }
+
+/* ---------- renewal log form ---------- */
+.lab-form {
+  display: grid; gap: 12px; align-items: end;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  background: var(--recess); border: 1px solid var(--line);
+  border-radius: var(--r-md); padding: 16px; margin-bottom: 14px;
+}
+.lab-form label {
+  display: block; font-size: 12.5px; font-weight: 600;
+  color: var(--ink-2); margin-bottom: 6px;
+}
+.lab-form select, .lab-form input {
+  width: 100%; padding: 8px 10px; font-size: 13.5px; font-family: var(--sans);
+  border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--ink);
+}
+.lab-form select:focus, .lab-form input:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+html:not(.authed) .lab-form,
+.mode-view .lab-form { display: none; }
+
+.lab-type-pill {
+  display: inline-block; font-size: 11px; font-weight: 600;
+  padding: 2px 9px; border-radius: 999px; white-space: nowrap;
+}
+.pill-renewal { background: var(--fact-soft); color: var(--fact); border: 1px solid var(--fact-line); }
+.pill-addition { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line); }
