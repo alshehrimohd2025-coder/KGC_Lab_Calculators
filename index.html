@@ -376,10 +376,20 @@ td.name{color:var(--ink); font-weight:500}
 .masthead .langtog{margin-inline-start:auto; flex:0 0 auto}
 .mode-edit .masthead .langtog{display:none}
 
-/* brand row: logo + title (+ language toggle for managers) */
-.brandrow{display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:12px}
+/* brand row: title (+ language toggle for managers) */
+.brandrow{display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:12px; position:relative; z-index:1}
 .brandrow h1{margin:0}
-.brandlogo{height:46px; width:auto; flex:0 0 auto; display:block}
+
+/* company logo as a faint watermark behind the header text, not an inline
+   icon — the mark carries its own wordmark, so it stays subtle rather than
+   competing with the page's own title. */
+.masthead{position:relative; overflow:hidden}
+.brand-watermark{
+  position:absolute; top:14px; inset-inline-end:0;
+  width:36%; max-width:360px; min-width:200px; height:auto;
+  opacity:.08; pointer-events:none; user-select:none; z-index:0;
+}
+.masthead .wrap{position:relative; z-index:1}
 
 /* managers get an official, uncluttered header — tank status only */
 .mode-view .eyebrow,
@@ -390,7 +400,7 @@ td.name{color:var(--ink); font-weight:500}
 .mode-view .masthead .wrap{padding-top:22px; padding-bottom:16px}
 .mode-view .brandrow{margin-bottom:0}
 .mode-view h1{font-size:clamp(19px,2.7vw,26px)}
-@media (max-width:560px){ .brandlogo{height:38px} }
+@media (max-width:560px){ .brand-watermark{width:44%; top:10px} }
 
 /* ---------- LTR adjustments ---------- */
 html[dir="ltr"] body{direction:ltr; text-align:left}
@@ -533,9 +543,9 @@ function showAppPage(pageId, btn) {
 </script>
 
 <header class="masthead">
+  <img class="brand-watermark" src="logo.png" alt="" aria-hidden="true" onerror="this.remove()">
   <div class="wrap">
     <div class="brandrow">
-      <img class="brandlogo" src="logo.png" alt="KSC" onerror="this.remove()">
       <h1 data-i18n="head.title">حاسبات مختبر جلفنة KGC</h1>
       <div class="langtog" role="group" aria-label="Language">
         <button type="button" data-lang-btn="ar" onclick="I18N.set('ar')">ع</button>
