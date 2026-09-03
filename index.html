@@ -570,11 +570,11 @@ const PAGE_STRIPS = {
     const total = tanks.length;
     const inService = tanks.filter(x => normalizeStatus(x.status) === 'in_service').length;
     let attention = 0;
-    const S = window.KGCStandards;
+    const S = window.KGCSpecs;
     if (S) {
       tanks.forEach(function (x) {
-        if (S.TRACKED_IDS.indexOf(x.id) === -1) return;
-        const st = S.worstStatus(x);
+        if (!S.hasSpec(x.id)) return;
+        const st = S.tankStatus(x);
         if (st && st.tier === 'crit') attention++;
       });
     }
@@ -630,12 +630,12 @@ const PAGE_STRIPS = {
   },
 
   'page-standards': function () {
-    const S = window.KGCStandards;
+    const S = window.KGCSpecs;
     if (!S || typeof tanks === 'undefined') return [];
     let good = 0, warn = 0, crit = 0;
     tanks.forEach(function (x) {
-      if (S.TRACKED_IDS.indexOf(x.id) === -1) return;
-      const st = S.worstStatus(x);
+      if (!S.hasSpec(x.id)) return;
+      const st = S.tankStatus(x);
       if (!st) return;
       if (st.tier === 'good') good++; else if (st.tier === 'warn') warn++; else crit++;
     });
@@ -1052,28 +1052,40 @@ document.addEventListener('DOMContentLoaded', function () {
 <script>
 // Field catalog: key -> {label, raw(no decimals)}
 const TANK_FIELD_DEFS = {
-  ph:          {}, fe: {}, baume: {}, acidPercent: {},
+  ph: {}, fe: {}, baume: {}, acidPercent: {}, sg: {}, conc: {}, temp: {}, ec: {}, zn: {}, salt: {},
   time:        { raw: true },
   t:           {}, sp: {}
 };
 const fieldLabel = key => t('f.' + key);
-const WET_FULL = ['ph', 'fe', 'baume', 'acidPercent', 'time'];
-const WET_SIMPLE = ['ph', 'baume', 'time'];
+
+/* Measured parameters per tank, matching the plant specification.
+   The limits for each of these live in specs.js (and Firebase), not here —
+   this list only says which readings the tank actually has.
+   `time` carries no spec; it is operational, shown in the table only. */
+const F = {
+  degrease:  ['conc', 'sg', 'temp', 'time'],
+  rinsePre:  ['ph', 'ec', 'time'],
+  acid:      ['acidPercent', 'fe', 'baume', 'sg', 'time'],
+  stripping: ['acidPercent', 'zn', 'fe', 'time'],
+  rinse1:    ['ph', 'fe', 'ec', 'time'],
+  rinse2:    ['ph', 'fe', 'ec', 'time'],
+  flux:      ['salt', 'ph', 'baume', 'sg', 'fe', 'time']
+};
 
 // Tank Data with specifications
 const tankSpecs = [
   { id: 12, name: 'Zinc Tank', type: 'zinc', fields: ['sp', 'time'], sp: 0, time: 0, status: 'good' },
   { id: 11, name: 'Drying', type: 'drying', fields: ['t'], t: 0, status: 'good' },
-  { id: 10, name: 'Flux Tank', type: 'wet', fields: WET_FULL, ph: 4.2, fe: 1.2, baume: 17, acidPercent: 0, time: 25, status: 'good' },
-  { id: 9, name: 'Rinsing Tank 2', type: 'wet', fields: WET_FULL, ph: 7, fe: 0, baume: 0, acidPercent: 0, time: 2, status: 'good' },
-  { id: 8, name: 'Rinsing Tank 1', type: 'wet', fields: WET_FULL, ph: 3.2, fe: 5, baume: 2, acidPercent: 0, time: 2, status: 'good' },
-  { id: 7, name: 'Stripping Acid', type: 'wet', fields: WET_FULL, ph: 0.8, fe: 120, baume: 18, acidPercent: 0, time: 4, status: 'good' },
-  { id: 6, name: 'Acid Tank 4', type: 'wet', fields: WET_FULL, ph: 2.1, fe: 35, baume: 10.5, acidPercent: 0, time: 8, status: 'good' },
-  { id: 5, name: 'Acid Tank 3', type: 'wet', fields: WET_FULL, ph: 1.8, fe: 38, baume: 11, acidPercent: 0, time: 8, status: 'good' },
-  { id: 4, name: 'Acid Tank 2', type: 'wet', fields: WET_FULL, ph: 1.6, fe: 42, baume: 11.5, acidPercent: 0, time: 8, status: 'good' },
-  { id: 3, name: 'Acid Tank 1', type: 'wet', fields: WET_FULL, ph: 1.5, fe: 45, baume: 12, acidPercent: 0, time: 8, status: 'good' },
-  { id: 2, name: 'Rinsing Before Acid', type: 'wet', fields: WET_SIMPLE, ph: 7, baume: 0, time: 2, status: 'good' },
-  { id: 1, name: 'Degreasing Tank', type: 'wet', fields: WET_SIMPLE, ph: 9.5, baume: 6, time: 3, status: 'good' },
+  { id: 10, name: 'Flux Tank', type: 'wet', fields: F.flux, salt: 0, ph: 0, baume: 0, sg: 0, fe: 0, time: 25, status: 'good' },
+  { id: 9, name: 'Rinsing Tank 2', type: 'wet', fields: F.rinse2, ph: 0, fe: 0, ec: 0, time: 2, status: 'good' },
+  { id: 8, name: 'Rinsing Tank 1', type: 'wet', fields: F.rinse1, ph: 0, fe: 0, ec: 0, time: 2, status: 'good' },
+  { id: 7, name: 'Stripping Acid', type: 'wet', fields: F.stripping, acidPercent: 0, zn: 0, fe: 0, time: 4, status: 'good' },
+  { id: 6, name: 'Acid Tank 4', type: 'wet', fields: F.acid, acidPercent: 0, fe: 0, baume: 0, sg: 0, time: 8, status: 'good' },
+  { id: 5, name: 'Acid Tank 3', type: 'wet', fields: F.acid, acidPercent: 0, fe: 0, baume: 0, sg: 0, time: 8, status: 'good' },
+  { id: 4, name: 'Acid Tank 2', type: 'wet', fields: F.acid, acidPercent: 0, fe: 0, baume: 0, sg: 0, time: 8, status: 'good' },
+  { id: 3, name: 'Acid Tank 1', type: 'wet', fields: F.acid, acidPercent: 0, fe: 0, baume: 0, sg: 0, time: 8, status: 'good' },
+  { id: 2, name: 'Rinsing Before Acid', type: 'wet', fields: F.rinsePre, ph: 0, ec: 0, time: 2, status: 'good' },
+  { id: 1, name: 'Degreasing Tank', type: 'wet', fields: F.degrease, conc: 0, sg: 0, temp: 0, time: 3, status: 'good' },
 ];
 
 // Display name for a tank in the active language.
@@ -1205,15 +1217,25 @@ function setStatus(tankId, newStatus) {
 
 function tankDataRowsHTML(tank) {
   // time is tracked in the table below, not on the card
-  const fields = (tank.fields || WET_FULL).filter(k => k !== 'time');
+  const fields = (tank.fields || []).filter(k => k !== 'time');
+  const SP = window.KGCSpecs;
+  const specs = SP ? SP.paramsFor(tank.id) : [];
   return fields.map(function(key) {
     const def = TANK_FIELD_DEFS[key] || {};
     const value = tank[key];
     const display = def.raw ? (value || 0) : Number(value || 0).toFixed(2);
+    // colour the reading by how it sits against its own limits
+    const p = specs.find(x => x.key === key);
+    let colour = '', title = '';
+    if (p && SP) {
+      const r = SP.evaluate(value, p);
+      if (r.tier !== 'none') colour = ' style="color:' + SP.tierColor(r.tier) + '"';
+      title = ' title="' + fieldLabel(key) + ': ' + SP.rangeText(p).replace(/"/g, '') + '"';
+    }
     return `
-        <div class="data-row">
+        <div class="data-row"${title}>
           <span class="data-label">${fieldLabel(key)}</span>
-          <span class="data-value" onclick="makeEditable(this, ${tank.id}, '${key}')">${display}</span>
+          <span class="data-value"${colour} onclick="makeEditable(this, ${tank.id}, '${key}')">${display}</span>
         </div>`;
   }).join('');
 }
@@ -1230,12 +1252,11 @@ function flowArrowHTML() {
 // Short wording + no-wrap: the dashboard card is much narrower than the
 // full Standards page card the long label was written for.
 function standardsFlagHTML(tank) {
-  const S = window.KGCStandards;
-  if (!S || S.TRACKED_IDS.indexOf(tank.id) === -1) return '';
-  const status = S.worstStatus(tank);
+  const SP = window.KGCSpecs;
+  if (!SP || !SP.hasSpec(tank.id)) return '';
+  const status = SP.tankStatus(tank);
   if (!status) return '';
-  const tierVar = { good: '--accent', warn: '--warn', crit: '--crit' }[status.tier];
-  const v = `var(${tierVar})`;
+  const v = SP.tierColor(status.tier);
   return `<div style="margin:0 10px 10px; text-align:center;">` +
     `<span style="display:inline-block; white-space:nowrap; font-size:11px; font-weight:600; ` +
     `padding:2px 9px; border-radius:999px; color:${v}; border:1px solid ${v}66; background:${v}1a;">` +
@@ -1278,7 +1299,7 @@ function renderCards() {
 }
 
 function tankTableReadingsHTML(tank) {
-  const fields = tank.fields || WET_FULL;
+  const fields = tank.fields || [];
   return fields.map(function(key) {
     const def = TANK_FIELD_DEFS[key] || {};
     const value = tank[key];
@@ -1312,6 +1333,7 @@ function renderAll() {
 
 // Initial render
 renderAll();
+window.renderTanksAll = renderAll;
 // re-render the tank cards and table when the language flips
 I18N.onChange(renderAll);
 </script><style>
@@ -2352,6 +2374,34 @@ setInterval(function() {
 .std-v{font-family:var(--mono); font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; direction:ltr}
 .std-v small{font-family:var(--sans); font-weight:400; color:var(--ink-3); direction:rtl; unicode-bidi:isolate}
 .std-badge{display:inline-block; font-size:11.5px; font-weight:600; padding:2px 10px; border-radius:999px; border:1px solid}
+
+/* live per-tank spec cards (rendered by specs.js) */
+.sp-card{background:var(--surface); border:1px solid var(--line); border-top:3px solid var(--line); border-radius:var(--r-md); padding:14px 16px; box-shadow:var(--e1)}
+.sp-head{display:flex; align-items:center; gap:9px; margin-bottom:10px}
+.sp-num{flex:0 0 auto; width:26px; height:26px; border-radius:50%; background:var(--recess); border:1px solid var(--line); color:var(--ink-2); font-family:var(--mono); font-weight:700; font-size:12.5px; display:flex; align-items:center; justify-content:center}
+.sp-title{flex:1 1 auto; font-size:14px; font-weight:700; color:var(--ink)}
+.sp-row{display:grid; grid-template-columns:1fr auto auto; align-items:center; gap:10px; padding:6px 0; border-top:1px dashed var(--line)}
+.sp-row:first-of-type{border-top:none}
+.sp-p{display:flex; flex-direction:column; gap:2px; min-width:0}
+.sp-name{font-size:12.5px; font-weight:600; color:var(--ink-2)}
+.sp-range{font-family:var(--mono); font-size:11px; color:var(--ink-3); direction:ltr; unicode-bidi:isolate}
+.sp-crit{color:var(--crit); font-weight:700; white-space:nowrap}
+.sp-val{font-family:var(--mono); font-weight:700; font-size:15px; font-variant-numeric:tabular-nums; direction:ltr; text-align:end}
+.sp-st{justify-self:end}
+.sp-badge{display:inline-block; font-size:10.5px; font-weight:600; padding:2px 9px; border-radius:999px; border:1px solid; white-space:nowrap}
+
+/* spec editor (settings) */
+#spec-editor.editor-only{display:none}
+html.authed #spec-editor.editor-only{display:block}
+.sp-edit-bar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px}
+.sp-edit-bar select{padding:8px 12px; font-size:13.5px; font-family:var(--sans); border:1px solid var(--line-strong); border-radius:var(--r-sm); background:var(--surface); color:var(--ink); min-width:190px}
+.sp-edit-bar #spec-msg{font-size:12.5px; font-weight:600}
+#spec-editor table input{width:100%; padding:6px 7px; font-family:var(--mono); font-size:12.5px; text-align:center; direction:ltr; border:1px solid var(--line-strong); border-radius:var(--r-sm); background:var(--surface); color:var(--ink); font-variant-numeric:tabular-nums}
+#spec-editor table input:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent)}
+#spec-editor td.name{font-weight:600; color:var(--ink-2); white-space:nowrap}
+/* an editor who isn't signed in sees only the read-only note */
+.spec-view-note{display:none}
+html:not(.authed) .spec-view-note{display:block}
 </style>
 
 <div id="page-standards" class="app-page wrap">
@@ -2359,92 +2409,25 @@ setInterval(function() {
   <section>
     <div class="sechead"><span class="secnum">١</span><h2 class="sectitle" data-i18n="std.title">معايير التشغيل والتنبيهات الحية</h2></div>
     <p class="secsub" data-i18n="std.sub">معيار داخلي لمصنع KGC، مبني على قراءاتكم الفعلية — يتحدّث تلقائياً مع كل معايرة.</p>
-    <p class="secsub std-note-en" data-i18n="std.arabicOnly" style="padding-right:0"></p>
 
-    <p class="panel-label" data-i18n="std.live.title" style="margin:6px 0 12px">الحالة الحية لأحواض الحمض والفلكس</p>
+    <p class="panel-label" data-i18n="std.live.title" style="margin:6px 0 12px">الحالة الحية لكل حوض مقابل معياره</p>
     <div class="std-grid" id="std-live"></div>
   </section>
 
   <div class="notice">
     <h2><span class="tag">مصدر المعيار</span> هذا معيار داخلي، وليس اعتماداً هندسياً مستقلاً</h2>
     <p>
-      الأرقام والبروتوكول أدناه مبنية على مادة فنية أرسلها مسؤول المصنع كمرجع لبناء ستاندر تشغيلي داخلي لمصنع KGC.
-      لم يتحقق منها Claude من جهة هندسية أو معيارية مستقلة — اعتمادها النهائي قرار إدارة الجودة والمهندس الكيميائي بالمصنع.
-    </p>
-    <p>
-      <strong>ملاحظة تحويل الوحدات:</strong> النسبة المئوية للحمض الحر (وزناً) تُحوَّل إلى جم/لتر باستخدام
-      <b>كثافة محلول HCl الفعلية</b> عند كل تركيز (بيانات فيزيائية معروفة)، وليس بافتراض كثافة = 1 — لأن هذا الافتراض
-      يقلّل قيمة جم/لتر بنسبة تصل 5–8%.
+      النطاقات والحدود الحرجة مبنية على مواصفات التشغيل التي اعتمدها المصنع لكل حوض (إزالة الشحوم، الرينس، أحواض الحمض،
+      الستريبنج، والفلكس). لم يتحقق منها Claude من جهة هندسية مستقلة — اعتمادها النهائي قرار إدارة الجودة والمهندس الكيميائي.
+      يمكن تعديل أي حد من قسم «تعديل حدود المعايير» أدناه دون تعديل الكود، ويُطبَّق التغيير فوراً.
     </p>
   </div>
 
   <section>
-    <div class="sechead"><span class="secnum">٢</span><h2 class="sectitle">المعيار المرجعي — أحواض الحمض 1-4 والستريبنج</h2></div>
-    <div class="tablewrap">
-      <table>
-        <thead><tr><th>المعامل</th><th>النطاق المستهدف</th><th>ملاحظة تشغيلية</th></tr></thead>
-        <tbody>
-          <tr>
-            <td class="name">الحمض الحر (Free HCl)</td>
-            <td class="num">10% – 16% وزناً<br><span style="color:var(--ink-3); font-size:11.5px">≈ 105 – 172 جم/لتر</span></td>
-            <td>يُسمح بالعمل حتى 20% تشغيلياً. فوق ذلك فقط لإزالة قشور ثقيلة (Heavy Mill Scale) مع مثبط قوي.</td>
-          </tr>
-          <tr>
-            <td class="name">الحديد الذائب (Fe²⁺)</td>
-            <td class="num">أقل من 120 جم/لتر مثالي<br>120 – 150 نهاية العمر</td>
-            <td>هذا هو المؤشر الأساسي لعمر الحوض — وليس عدد الأيام. عند 220 جم/لتر فأكثر يصل الحوض للتشبع التام ويتوقف التفاعل حتى مع إضافة حمض جديد.</td>
-          </tr>
-          <tr>
-            <td class="name">درجة حرارة التشغيل</td>
-            <td class="num">15°م – 40°م</td>
-            <td>يعمل بارداً بدون سخانات؛ HCl متطاير، والتسخين يرفع تركيز الأبخرة الحمضية في الصالة.</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="flag flag-warn">
-      <span class="fi">↓</span>
-      <span><b>تحت 10%:</b> تخليل بطيء (يمتد زمن الشحنة من 10–15 دقيقة إلى 30+ دقيقة)، وتخليل ناقص يترك بقع صدأ مجهرية تحت الطلاء (Bare Spots) لأن الحمض الضعيف لا يفكك طبقة الأكسيد الداخلية بالكامل.</span>
-    </div>
-    <div class="flag flag-crit">
-      <span class="fi">↑</span>
-      <span><b>فوق 20%:</b> خطر التقصف الهيدروجيني للصلب عالي المقاومة (هيدروجين ذري يتراكم عند الحدود البلورية للمعدن)، بالإضافة لزيادة الأبخرة الحمضية التي تسرّع تآكل هياكل الصالة والرافعات.</span>
-    </div>
-  </section>
-
-  <section>
-    <div class="sechead"><span class="secnum">٣</span><h2 class="sectitle">بروتوكول إطالة عمر حوض الحمض</h2></div>
-    <p class="secsub" style="padding-right:0">ثلاث ممارسات ميتالورجية تضاعف عمر الحوض التشغيلي عند تطبيقها معاً.</p>
-    <div class="legend">
-      <dl>
-        <div class="row"><span class="chip chip-std">المثبط SI 400 (H)</span><dd>يشكّل غشاءً جزيئياً واقياً يحمي الفولاذ النقي بنسبة تصل 80% بمجرد إذابة الصدأ، فيمنع ذوبان الحديد في الحمام بلا طائل ويحافظ على تركيز الحمض الحر.</dd></div>
-        <div class="row"><span class="chip chip-std">تحضير مسبق SUPERCLEAN 150 PLUS</span><dd>تأمين خلو الفولاذ الوارد كلياً من الزيوت قبل دخول الحمض — الزيوت الهيدروكربونية تعزل الأكسيد عن الحمض، فيضطر المشغّل لإطالة زمن المكوث ويتضاعف استهلاك كيمياء الحوض.</dd></div>
-        <div class="row"><span class="chip chip-std">التصريف الميكانيكي (60–90 ثانية)</span><dd>تعليق الشحنة بزاوية مائلة فوق حوض الحمض لهذه المدة قبل الانتقال، لمنع سحب كميات كبيرة من الحمض إلى حوض الغسيل التالي (Drag-out).</dd></div>
-      </dl>
-    </div>
-  </section>
-
-  <section>
-    <div class="sechead"><span class="secnum">٤</span><h2 class="sectitle">معيار حوض الفلكس</h2></div>
-    <p class="secsub" style="padding-right:0">نفس الحدود المعتمدة أصلاً في قسم حاسبة الفلكس بهذا الموقع — لا حدود جديدة.</p>
-    <div class="legend">
-      <dl>
-        <div class="row"><span class="chip chip-std">حد مصنعي معتمد</span><dd>pH 4–5 · حديد 0.5–1.5 g/L · بوميه 15–20 · SG 1.13–1.18 — مأخوذة من صفحة Targets في شيتكم نفسه.</dd></div>
-      </dl>
-    </div>
-  </section>
-
-  <section>
-    <div class="sechead"><span class="secnum">٥</span><h2 class="sectitle">أحواض بانتظار تحديد المعيار</h2></div>
-    <p class="secsub" style="padding-right:0">ما وصلني بعد مرجع فني لتحديد نطاقات مستهدفة لهذه الأحواض. أرسل القيم المعتمدة عندكم (إن وجدت) أو مصدراً فنياً وأضيفها فوراً بنفس الأسلوب أعلاه.</p>
-    <p>
-      <span class="chip chip-tbd" style="margin:0 4px 8px">تانك إزالة الشحوم</span>
-      <span class="chip chip-tbd" style="margin:0 4px 8px">رينسينج قبل الحمض</span>
-      <span class="chip chip-tbd" style="margin:0 4px 8px">رينسينج بعد الحمض</span>
-      <span class="chip chip-tbd" style="margin:0 4px 8px">تانك الدراينج</span>
-      <span class="chip chip-tbd" style="margin:0 4px 8px">حوض الزنك (الفرن)</span>
-    </p>
+    <div class="sechead"><span class="secnum">٢</span><h2 class="sectitle" data-i18n="spec.editor.title">تعديل حدود المعايير</h2></div>
+    <p class="secsub" style="padding-right:0" data-i18n="spec.editor.sub">اختر الحوض وعدّل النطاق التشغيلي والحدود الحرجة والقيمة المثلى لأي معامل. التغيير يُحفظ في قاعدة البيانات ويُطبَّق فوراً على تلوين القراءات والتنبيهات — بدون تعديل الكود.</p>
+    <div id="spec-editor" class="editor-only"></div>
+    <p class="secsub spec-view-note" style="padding-right:0" data-i18n="spec.editor.viewOnly">سجّل الدخول كمحرِّر لتعديل الحدود.</p>
   </section>
 
 </div>
@@ -2487,7 +2470,7 @@ setInterval(function() {
 
 </div>
 
-<script src="standards.js"></script>
+<script src="specs.js"></script>
 <div id="page-zinc" class="app-page wrap">
 
   <section class="lab-section">

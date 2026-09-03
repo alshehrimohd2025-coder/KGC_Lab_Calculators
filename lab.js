@@ -30,7 +30,15 @@
   }
 
   const ACID_IDS = [3, 4, 5, 6, 7];          // acid tanks + stripping
-  const FE_WARN = 120, FE_CRIT = 150;         // g/L — the plant's own limits
+  // Fe limits come from the spec engine so they track any plant-side override.
+  // The fallback (120/150) matches the original plant document.
+  function feLimits(tankId) {
+    if (window.KGCSpecs) {
+      const lim = window.KGCSpecs.feLimits(tankId);
+      if (lim) return { warn: lim.warn || 120, crit: lim.crit || 150 };
+    }
+    return { warn: 120, crit: 150 };
+  }
   const MIN_POINTS = 3;                       // below this a slope is noise
   const MIN_SPAN_DAYS = 5;
 
@@ -137,6 +145,7 @@
     const currentFe = Number(pts[pts.length - 1].fe);
     if (f.slope <= 0) return { state: 'flat', currentFe: currentFe, r2: f.r2, n: f.n };
 
+    const L = feLimits(tankId);
     const daysTo = target => Math.round((target - currentFe) / f.slope);
     return {
       state: 'ok',
@@ -145,14 +154,15 @@
       r2: f.r2,
       n: f.n,
       spanDays: f.spanDays,
-      daysToWarn: daysTo(FE_WARN),
-      daysToCrit: daysTo(FE_CRIT)
+      daysToWarn: daysTo(L.warn),
+      daysToCrit: daysTo(L.crit)
     };
   }
 
   /* ---------------- chart ---------------- */
 
-  function chartSVG(pts, f) {
+  function chartSVG(pts, f, lim) {
+    const FE_WARN = lim ? lim.warn : 120, FE_CRIT = lim ? lim.crit : 150;
     const W = 640, H = 190, PL = 42, PR = 12, PT = 12, PB = 26;
     const iw = W - PL - PR, ih = H - PT - PB;
 
@@ -219,7 +229,7 @@
         : t('lab.noReadings');
 
       const body = pts.length >= 2
-        ? chartSVG(pts, f)
+        ? chartSVG(pts, f, feLimits(id))
         : '<div class="lab-empty">' + esc(t('lab.needTwo')) + '</div>';
 
       return '<div class="lab-chart-card">' +

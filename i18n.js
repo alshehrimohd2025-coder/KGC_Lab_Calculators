@@ -135,6 +135,8 @@
       /* tank field labels */
       'f.ph': 'pH', 'f.fe': 'Fe', 'f.baume': 'Baumé',
       'f.acidPercent': 'حمض %', 'f.time': 'زمن', 'f.t': 'T', 'f.sp': 'SP',
+      'f.conc': 'التركيز', 'f.sg': 'الكثافة النوعية', 'f.temp': 'الحرارة',
+      'f.ec': 'التوصيلية', 'f.zn': 'الزنك', 'f.salt': 'الأملاح',
 
       /* tank names */
       'tank.Flux Tank': 'تانك الفلكس',
@@ -415,6 +417,27 @@
       'std.short.good': 'ضمن المعيار',
       'std.short.warn': 'يحتاج مراقبة',
       'std.short.crit': 'يحتاج إجراء',
+      /* spec engine */
+      'spec.optimum': 'الأمثل',
+      'spec.critical': 'حرج',
+      'spec.noReading': 'لا توجد قراءة',
+      'spec.tier.good': 'ضمن المعيار',
+      'spec.tier.warn': 'خارج النطاق',
+      'spec.tier.crit': 'حرج',
+      'spec.editor.title': 'تعديل حدود المعايير',
+      'spec.editor.sub': 'اختر الحوض وعدّل النطاق التشغيلي والحدود الحرجة والقيمة المثلى لأي معامل. التغيير يُحفظ في قاعدة البيانات ويُطبَّق فوراً على تلوين القراءات والتنبيهات — بدون تعديل الكود.',
+      'spec.editor.viewOnly': 'سجّل الدخول كمحرِّر لتعديل الحدود.',
+      'spec.param': 'المعامل',
+      'spec.min': 'أدنى النطاق',
+      'spec.max': 'أعلى النطاق',
+      'spec.critMin': 'حد حرج أدنى',
+      'spec.critMax': 'حد حرج أعلى',
+      'spec.save': 'حفظ',
+      'spec.reset': 'استرجاع الافتراضي',
+      'spec.saved': 'تم الحفظ ✓',
+      'spec.failed': 'فشل الحفظ:',
+      'spec.confirmReset': 'استرجاع الحدود الافتراضية لهذا الحوض وحذف التعديلات؟',
+      'spec.wasReset': 'تمت الاستعادة للافتراضي ✓',
       'u.h': 'س', 'u.m': 'د', 'u.s': 'ث'
     },
 
@@ -536,6 +559,8 @@
 
       'f.ph': 'pH', 'f.fe': 'Fe', 'f.baume': 'Baumé',
       'f.acidPercent': 'Acid %', 'f.time': 'Time', 'f.t': 'T', 'f.sp': 'SP',
+      'f.conc': 'Conc', 'f.sg': 'SG', 'f.temp': 'Temp',
+      'f.ec': 'EC', 'f.zn': 'Zn', 'f.salt': 'Salt',
 
       'tank.Flux Tank': 'Flux tank',
       'tank.Rinsing Tank 1': 'Rinsing tank 1',
@@ -811,6 +836,27 @@
       'std.short.good': 'On target',
       'std.short.warn': 'Monitor',
       'std.short.crit': 'Action needed',
+      /* spec engine */
+      'spec.optimum': 'Optimum',
+      'spec.critical': 'Critical',
+      'spec.noReading': 'No reading',
+      'spec.tier.good': 'On target',
+      'spec.tier.warn': 'Out of range',
+      'spec.tier.crit': 'Critical',
+      'spec.editor.title': 'Edit specification limits',
+      'spec.editor.sub': 'Pick a tank and edit the operating range, critical limits and optimum for any parameter. Changes are saved to the database and applied instantly to reading colours and alerts — no code change needed.',
+      'spec.editor.viewOnly': 'Sign in as an editor to change the limits.',
+      'spec.param': 'Parameter',
+      'spec.min': 'Range min',
+      'spec.max': 'Range max',
+      'spec.critMin': 'Crit. min',
+      'spec.critMax': 'Crit. max',
+      'spec.save': 'Save',
+      'spec.reset': 'Reset to default',
+      'spec.saved': 'Saved ✓',
+      'spec.failed': 'Save failed:',
+      'spec.confirmReset': 'Restore default limits for this tank and delete overrides?',
+      'spec.wasReset': 'Restored to default ✓',
       'u.h': 'h', 'u.m': 'm', 'u.s': 's'
     }
   };
