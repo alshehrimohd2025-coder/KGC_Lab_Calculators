@@ -438,7 +438,8 @@ html[dir="ltr"] .input-label .unit{margin-left:0; margin-right:0}
 .mode-view #page-flux,
 .mode-view #page-timing,
 .mode-view #page-standards,
-.mode-view #page-lab{display:none !important}
+.mode-view #page-lab,
+.mode-view #page-zinc{display:none !important}
 .mode-view #page-tanks{display:block !important}
 .mode-view .data-value{cursor:default; pointer-events:none}
 .mode-view .data-value:hover{background:transparent; color:var(--ink)}
@@ -529,6 +530,10 @@ html[dir="ltr"] .input-label .unit{margin-left:0; margin-right:0}
     <button type="button" data-page="page-lab" onclick="showAppPage('page-lab', this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l5-5 4 3 6-7"/><path d="M3 21h18"/></svg>
       <span data-i18n="nav.lab">صحة الأحواض</span>
+    </button>
+    <button type="button" data-page="page-zinc" onclick="showAppPage('page-zinc', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18"/><path d="M5 8h14"/><path d="M7 8l-2.5 6a3.5 3.5 0 0 0 5 0L7 8z"/><path d="M17 8l-2.5 6a3.5 3.5 0 0 0 5 0L17 8z"/></svg>
+      <span data-i18n="nav.zinc">كفاءة الزنك</span>
     </button>
     <span style="flex:1 1 auto"></span>
     <button type="button" class="signout-btn" onclick="authSignOut()" data-i18n="auth.signout">تسجيل الخروج</button>
@@ -2336,7 +2341,24 @@ setInterval(function() {
 </div>
 
 <script src="standards.js"></script>
+<div id="page-zinc" class="app-page wrap">
+
+  <section class="lab-section">
+    <div class="sechead"><span class="secnum">١</span><h2 class="sectitle" data-i18n="zn.title">كفاءة استهلاك الزنك</h2></div>
+    <p class="secsub" data-i18n="zn.sub">ارفع تقرير الإنتاج الشهري (Excel) — يُقرأ في المتصفح مباشرة ويُقارن بحدّ المصنع 4%–9% المكتوب في الملف نفسه.</p>
+
+    <div class="zn-upload">
+      <input type="file" id="zn-file" accept=".xlsx" aria-label="Daily production report">
+      <p id="zn-status"></p>
+    </div>
+
+    <div id="zn-body"></div>
+  </section>
+
+</div>
+
 <script src="lab.js"></script>
+<script src="zinc.js"></script>
 
 </body>
 </html>

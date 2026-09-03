@@ -130,3 +130,27 @@ html:not(.authed) .lab-form,
 }
 .pill-renewal { background: var(--fact-soft); color: var(--fact); border: 1px solid var(--fact-line); }
 .pill-addition { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line); }
+
+/* ---------- zinc efficiency ---------- */
+.zn-pill {
+  display: inline-block; font-size: 11px; font-weight: 600;
+  padding: 2px 9px; border-radius: 999px; border: 1px solid;
+  white-space: nowrap; font-family: var(--mono);
+  font-variant-numeric: tabular-nums; direction: ltr;
+}
+.zn-upload {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--recess); border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md); padding: 16px; margin-bottom: 16px;
+}
+.zn-upload input[type="file"] { font-size: 13px; font-family: var(--sans); color: var(--ink-2); flex: 1 1 220px; }
+.zn-upload input[type="file"]::file-selector-button {
+  font-family: var(--sans); font-size: 13px; font-weight: 600; cursor: pointer;
+  padding: 8px 15px; margin-inline-end: 10px;
+  border: 1px solid transparent; border-radius: var(--r-sm);
+  background: var(--accent); color: #fff;
+}
+.zn-upload input[type="file"]::file-selector-button:hover { filter: brightness(1.08); }
+#zn-status { font-size: 12.5px; font-weight: 600; flex: 1 1 100%; min-height: 17px; }
+html:not(.authed) .zn-upload,
+.mode-view .zn-upload { display: none; }
