@@ -132,6 +132,8 @@
       'tanks.col.tank': 'الحوض',
       'tanks.col.readings': 'القراءات',
       'tanks.col.status': 'الحالة',
+      'tanks.col.standards': 'النطاق التشغيلي',
+      'tanks.stdTitle': 'معايير التشغيل — النطاق المرجعي',
       'tanks.savenote': 'التغييرات تُحفظ تلقائياً وتتزامن مع كل الأجهزة',
 
       /* tank field labels */
@@ -559,6 +561,8 @@
       'tanks.col.tank': 'Tank',
       'tanks.col.readings': 'Readings',
       'tanks.col.status': 'Status',
+      'tanks.col.standards': 'Operating range',
+      'tanks.stdTitle': 'Operating standards — reference ranges',
       'tanks.savenote': 'Changes save automatically and sync to every device',
 
       'f.ph': 'pH', 'f.fe': 'Fe', 'f.baume': 'Baumé',
