@@ -274,27 +274,46 @@
 
   function chart(list) {
     if (!list.length) return '';
-    const W = 680, H = 215, PL = 44, PR = 16, PT = 18, PB = 42;
+    const W = 680, H = 244, PL = 46, PR = 48, PT = 26, PB = 44;
     const iw = W - PL - PR, ih = H - PT - PB;
+
+    // left scale — zinc consumption %  (full plot height)
     const maxP = Math.max(12, Math.ceil(Math.max(...list.map(d => d.totalPct || 0)) + 1));
     const X = i => PL + (list.length === 1 ? iw / 2 : i / (list.length - 1) * iw);
-    const Y = v => PT + ih - (v / maxP) * ih;
+    const Yp = v => PT + ih - (v / maxP) * ih;
 
+    // right scale — daily tonnage, held to the lower half of the plot so it
+    // sits *beneath* the % line as a second series to compare against by eye
+    const rawT = Math.max(1, ...list.map(d => d.totalTon || 0));
+    const magT = Math.pow(10, Math.floor(Math.log10(rawT)));
+    const maxT = Math.max(magT, Math.ceil((rawT * 1.08) / magT) * magT);
+    const tTop = PT + ih * 0.5;                          // tonnage never climbs above the midline
+    const Yt = v => (PT + ih) - (v / maxT) * (PT + ih - tTop);
+
+    // horizontal % gridlines + left axis
     let grid = '';
     for (let v = 0; v <= maxP; v += 2) {
-      grid += '<line class="grid" x1="' + PL + '" y1="' + Y(v).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Y(v).toFixed(1) + '"/>' +
-              '<text class="axis-label" x="' + (PL - 8) + '" y="' + (Y(v) + 3.5).toFixed(1) + '" text-anchor="end">' + v + '%</text>';
+      grid += '<line class="grid" x1="' + PL + '" y1="' + Yp(v).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Yp(v).toFixed(1) + '"/>' +
+              '<text class="axis-label" x="' + (PL - 8) + '" y="' + (Yp(v) + 3.5).toFixed(1) + '" text-anchor="end">' + v + '%</text>';
     }
 
-    // the acceptable 4-9% band, straight from the plant's own sheet
-    const band = '<rect x="' + PL + '" y="' + Y(PCT_MAX).toFixed(1) + '" width="' + iw +
-      '" height="' + Math.max(0, Y(PCT_MIN) - Y(PCT_MAX)).toFixed(1) + '" fill="var(--accent)" opacity=".09" rx="2"/>' +
-      '<line class="limit-line" stroke="var(--crit)" x1="' + PL + '" y1="' + Y(PCT_MAX).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Y(PCT_MAX).toFixed(1) + '"/>' +
-      '<line class="limit-line" stroke="var(--warn)" x1="' + PL + '" y1="' + Y(PCT_MIN).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Y(PCT_MIN).toFixed(1) + '"/>' +
-      '<text class="axis-limit" x="' + (W - PR - 3) + '" y="' + (Y(PCT_MAX) - 5).toFixed(1) + '" text-anchor="end" fill="var(--crit)">' + PCT_MAX + '%</text>' +
-      '<text class="axis-limit" x="' + (W - PR - 3) + '" y="' + (Y(PCT_MIN) + 11).toFixed(1) + '" text-anchor="end" fill="var(--warn)">' + PCT_MIN + '%</text>';
+    // right axis — tonnage ticks, in the tonnage colour
+    let raxis = '';
+    [0, maxT / 2, maxT].forEach(function (v) {
+      raxis += '<text class="axis-label" x="' + (W - PR + 7) + '" y="' + (Yt(v) + 3.5).toFixed(1) +
+        '" text-anchor="start" fill="var(--fact)">' + shortTon(v) + '</text>';
+    });
 
-    const pts = list.map((d, i) => ({ x: X(i), y: Y(d.totalPct || 0), d: d }));
+    // the acceptable 4-9% band, straight from the plant's own sheet
+    const band = '<rect x="' + PL + '" y="' + Yp(PCT_MAX).toFixed(1) + '" width="' + iw +
+      '" height="' + Math.max(0, Yp(PCT_MIN) - Yp(PCT_MAX)).toFixed(1) + '" fill="var(--accent)" opacity=".09" rx="2"/>' +
+      '<line class="limit-line" stroke="var(--crit)" x1="' + PL + '" y1="' + Yp(PCT_MAX).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Yp(PCT_MAX).toFixed(1) + '"/>' +
+      '<line class="limit-line" stroke="var(--warn)" x1="' + PL + '" y1="' + Yp(PCT_MIN).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Yp(PCT_MIN).toFixed(1) + '"/>' +
+      '<text class="axis-limit" x="' + (PL + 4) + '" y="' + (Yp(PCT_MAX) - 4).toFixed(1) + '" text-anchor="start" fill="var(--crit)">' + PCT_MAX + '%</text>' +
+      '<text class="axis-limit" x="' + (PL + 4) + '" y="' + (Yp(PCT_MIN) + 11).toFixed(1) + '" text-anchor="start" fill="var(--warn)">' + PCT_MIN + '%</text>';
+
+    // ---- zinc % series (left scale) ----
+    const pts = list.map((d, i) => ({ x: X(i), y: Yp(d.totalPct || 0), d: d }));
     const line = pts.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' ');
     const area = pts.length > 1
       ? '<path d="' + line + ' L' + pts[pts.length - 1].x.toFixed(1) + ' ' + (PT + ih) + ' L' + pts[0].x.toFixed(1) + ' ' + (PT + ih) + ' Z" fill="var(--accent)" opacity=".07"/>'
@@ -304,12 +323,35 @@
       const tr = tier(p.d.totalPct);
       const col = tr ? 'var(' + TIER_VAR[tr] + ')' : 'var(--ink-3)';
       const tip = '<b>' + p.d.date + '</b>' +
-        '<i>' + (p.d.totalPct || 0).toFixed(2) + '% · ' + (tr ? esc(t('zn.tier.' + tr)) : '—') + '</i>' +
-        '<i>' + (p.d.totalTon || 0).toLocaleString() + ' ' + esc(t('mgr.ton')) + '</i>';
-      return '<circle class="pt-dot" r="4" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) +
-             '" fill="var(--surface)" stroke="' + col + '" stroke-width="2.2"/>' +
-             '<circle class="hit" r="14" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) +
-             '" fill="transparent" data-tip="' + esc(tip) + '"/>';
+        '<i>' + esc(t('zn.legend.pct')) + ': ' + (p.d.totalPct || 0).toFixed(2) + '% · ' + (tr ? esc(t('zn.tier.' + tr)) : '—') + '</i>' +
+        '<i>' + esc(t('zn.legend.ton')) + ': ' + (p.d.totalTon || 0).toLocaleString() + ' ' + esc(t('mgr.ton')) + '</i>';
+      // dot + hit grouped, so hovering anywhere in the group grows this dot
+      return '<g class="pt-g">' +
+        '<circle class="pt-dot" r="4" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) +
+          '" fill="var(--surface)" stroke="' + col + '" stroke-width="2.2"/>' +
+        '<circle class="hit" r="13" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) +
+          '" fill="transparent" data-tip="' + esc(tip) + '"/>' +
+      '</g>';
+    }).join('');
+
+    // ---- tonnage series (right scale, lower band) ----
+    const tpts = list.map((d, i) => ({ x: X(i), y: Yt(d.totalTon || 0), d: d }));
+    const tline = tpts.length > 1
+      ? '<path class="ton-line" d="' + tpts.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' ') + '"/>'
+      : '';
+    const tdots = tpts.map(function (p) {
+      const tip = '<b>' + p.d.date + '</b>' +
+        '<i>' + esc(t('zn.legend.ton')) + ': ' + (p.d.totalTon || 0).toLocaleString() + ' ' + esc(t('mgr.ton')) + '</i>' +
+        '<i>' + esc(t('zn.col.dayTon')) + ' ' + (p.d.dayTon || 0).toLocaleString() +
+          ' · ' + esc(t('zn.col.nightTon')) + ' ' + (p.d.nightTon || 0).toLocaleString() + '</i>' +
+        '<i>' + esc(t('zn.legend.pct')) + ': ' + (p.d.totalPct || 0).toFixed(2) + '%</i>';
+      // square marker to tell it apart from the round % dots at a glance
+      return '<g class="pt-g">' +
+        '<rect class="ton-dot" x="' + (p.x - 3.2).toFixed(1) + '" y="' + (p.y - 3.2).toFixed(1) +
+          '" width="6.4" height="6.4" rx="1.3"/>' +
+        '<circle class="hit" r="13" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) +
+          '" fill="transparent" data-tip="' + esc(tip) + '"/>' +
+      '</g>';
     }).join('');
 
     // one date under every point, thinned out when they would collide
@@ -319,9 +361,13 @@
       return '<text class="axis-label" x="' + X(i).toFixed(1) + '" y="' + (H - 14) + '" text-anchor="middle">' + d.date.slice(5) + '</text>';
     }).join('');
 
-    return '<div class="chart-wrap"><div class="chart-tip"></div>' +
+    const legend = '<div class="chart-legend">' +
+      '<span class="lg"><i class="sw sw-pct"></i>' + esc(t('zn.legend.pct')) + '</span>' +
+      '<span class="lg"><i class="sw sw-ton"></i>' + esc(t('zn.legend.ton')) + '</span></div>';
+
+    return '<div class="chart-wrap">' + legend + '<div class="chart-tip"></div>' +
       '<svg class="lab-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" preserveAspectRatio="xMidYMid meet">' +
-      grid + band + area + '<path class="series" d="' + line + '"/>' + dots + xlabels + '</svg></div>';
+      grid + raxis + band + area + tline + '<path class="series" d="' + line + '"/>' + tdots + dots + xlabels + '</svg></div>';
   }
 
   function render() {
