@@ -549,8 +549,156 @@ function showAppPage(pageId, btn) {
   document.getElementById(pageId).classList.add('active');
   document.querySelectorAll('.topnav button').forEach(function(b) { b.classList.remove('active'); });
   btn.classList.add('active');
+  currentPage = pageId;
+  renderPageStrip();
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
+
+/* ---------- per-page header strip ----------
+   Each page gets figures that belong to it. The flux tank specs used to sit
+   in the shared masthead, so they showed up on the zinc and acid pages too. */
+let currentPage = 'page-tanks';
+
+function stripCell(key, value, unit) {
+  return '<div class="idcell"><span class="k">' + key + '</span><span class="v">' + value +
+    (unit ? ' <small>' + unit + '</small>' : '') + '</span></div>';
+}
+
+const PAGE_STRIPS = {
+  'page-tanks': function () {
+    if (typeof tanks === 'undefined') return [];
+    const total = tanks.length;
+    const inService = tanks.filter(x => normalizeStatus(x.status) === 'in_service').length;
+    let attention = 0;
+    const S = window.KGCStandards;
+    if (S) {
+      tanks.forEach(function (x) {
+        if (S.TRACKED_IDS.indexOf(x.id) === -1) return;
+        const st = S.worstStatus(x);
+        if (st && st.tier === 'crit') attention++;
+      });
+    }
+    return [
+      stripCell(t('strip.tanks'), total),
+      stripCell(t('strip.inService'), inService),
+      stripCell(t('strip.needsAction'), attention)
+    ];
+  },
+
+  'page-acid': function () {
+    const cells = [stripCell(t('strip.targetBand'), '10 – 16', '%')];
+    // lastTitrationSnapshot lives in a later script block — reading it before
+    // that block runs would throw, so isolate the access.
+    try {
+      const rows = Object.values(lastTitrationSnapshot || {});
+      if (rows.length) {
+        const last = rows.slice().sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))[0];
+        cells.push(stripCell(t('strip.lastTitration'), last.date));
+        cells.push(stripCell(t('strip.titrations'), rows.length));
+      }
+    } catch (e) { /* not loaded yet */ }
+    return cells;
+  },
+
+  // the specs that were previously shown everywhere — they belong here
+  'page-flux': function () {
+    return [
+      stripCell('FLUX TANK', 'FL-01'),
+      stripCell('WORKING VOLUME', '27,720', 'L'),
+      stripCell('DIMENSIONS', '6.6×1.2×3.5', 'm'),
+      stripCell('LAST REGENERATION', '2026-08-19'),
+      stripCell(t('strip.opsLogged'), (document.getElementById('id-count') || {}).textContent || '0')
+    ];
+  },
+
+  'page-timing': function () {
+    const P = window.KGCProduction;
+    if (!P) return [];
+    const all = Object.values(P._batches() || {});
+    const active = all.filter(b => b && b.status === 'active').length;
+    const done = all.filter(b => b && b.status === 'done');
+    const cells = [
+      stripCell(t('strip.activeBatches'), active),
+      stripCell(t('strip.doneBatches'), done.length)
+    ];
+    if (done.length) {
+      const avg = done.reduce((s, b) => s + ((b.endTs || 0) - (b.startTs || 0)), 0) / done.length;
+      const h = Math.floor(avg / 3600000), m = Math.floor(avg / 60000) % 60;
+      cells.push(stripCell(t('strip.avgCycle'), h + ':' + (m < 10 ? '0' : '') + m));
+    }
+    return cells;
+  },
+
+  'page-standards': function () {
+    const S = window.KGCStandards;
+    if (!S || typeof tanks === 'undefined') return [];
+    let good = 0, warn = 0, crit = 0;
+    tanks.forEach(function (x) {
+      if (S.TRACKED_IDS.indexOf(x.id) === -1) return;
+      const st = S.worstStatus(x);
+      if (!st) return;
+      if (st.tier === 'good') good++; else if (st.tier === 'warn') warn++; else crit++;
+    });
+    return [
+      stripCell(t('std.short.good'), good),
+      stripCell(t('std.short.warn'), warn),
+      stripCell(t('std.short.crit'), crit)
+    ];
+  },
+
+  'page-lab': function () {
+    const L = window.KGCLab;
+    if (!L) return [];
+    const readings = Object.keys(L._readings() || {}).length;
+    const cells = [stripCell(t('strip.readings'), readings)];
+    // soonest tank to reach the 120 g/L limit, if any estimate is available
+    let soonest = null;
+    [3, 4, 5, 6, 7].forEach(function (id) {
+      const e = L.lifeEstimate(id);
+      if (e && e.state === 'ok' && (soonest === null || e.daysToWarn < soonest)) soonest = e.daysToWarn;
+    });
+    cells.push(stripCell(t('strip.soonestRenewal'), soonest === null ? '—' : Math.max(0, soonest),
+      soonest === null ? '' : t('lab.days')));
+    cells.push(stripCell(t('strip.renewals'), Object.keys(L._renewals() || {}).length));
+    return cells;
+  },
+
+  'page-zinc': function () {
+    const Z = window.KGCZinc;
+    const cells = [stripCell(t('strip.zincBand'), '4 – 9', '%')];
+    if (!Z) return cells;
+    const list = Object.values(Z._days() || {}).filter(d => d && d.date);
+    if (!list.length) return cells;
+    const withPct = list.filter(d => d.totalPct > 0);
+    const mean = withPct.length ? withPct.reduce((s, d) => s + d.totalPct, 0) / withPct.length : 0;
+    const outside = withPct.filter(d => d.totalPct < 4 || d.totalPct > 9).length;
+    cells.push(stripCell(t('strip.daysLogged'), list.length));
+    cells.push(stripCell(t('zn.avgPct'), mean.toFixed(2), '%'));
+    cells.push(stripCell(t('strip.outsideDays'), outside));
+    return cells;
+  }
+};
+
+function renderPageStrip() {
+  const box = document.getElementById('idstrip');
+  if (!box) return;
+  const build = PAGE_STRIPS[currentPage];
+  let cells = [];
+  try { cells = build ? build() : []; } catch (e) { cells = []; }
+  box.innerHTML = cells.join('');
+  box.style.display = cells.length ? '' : 'none';
+}
+
+// The figures are live, so refresh the strip whenever the underlying data or
+// the language changes — not only on page switches.
+document.addEventListener('DOMContentLoaded', function () {
+  renderPageStrip();
+  if (window.I18N) I18N.onChange(renderPageStrip);
+  ['tanks_data', 'titration_log', 'production/batches', 'readings_log', 'renewals', 'zinc_daily']
+    .forEach(function (path) {
+      try { database.ref(path).on('value', function () { renderPageStrip(); }); } catch (e) {}
+    });
+});
 </script>
 
 <header class="masthead">
@@ -572,13 +720,9 @@ function showAppPage(pageId, btn) {
       <span class="dot"></span>
       <span id="syncmsg" data-i18n-html="sync.live"></span>
     </div>
-    <div class="idstrip">
-      <div class="idcell"><span class="k">FLUX TANK</span><span class="v">FL-01</span></div>
-      <div class="idcell"><span class="k">WORKING VOLUME</span><span class="v">27,720 <small>L</small></span></div>
-      <div class="idcell"><span class="k">DIMENSIONS</span><span class="v">6.6×1.2×3.5 <small>m</small></span></div>
-      <div class="idcell"><span class="k">LAST REGENERATION</span><span class="v">2026-08-19</span></div>
-      <div class="idcell"><span class="k">OPERATIONS LOGGED</span><span class="v" id="id-count">0</span></div>
-    </div>
+    <!-- filled per page by renderPageStrip(); the flux specs only belong on the flux page -->
+    <div class="idstrip" id="idstrip"></div>
+    <span id="id-count" hidden>0</span>
   </div>
 </header>
 
