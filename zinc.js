@@ -269,37 +269,59 @@
     return Object.values(days).filter(d => d && d.date).sort((a, b) => a.date < b.date ? -1 : 1);
   }
 
+  /* Charts carry their own labels and hover detail. The hit targets are much
+     larger than the visible dots so pointing at a value is easy on a phone. */
+
   function chart(list) {
-    if (list.length < 2) return '';
-    const W = 640, H = 170, PL = 38, PR = 12, PT = 12, PB = 24;
+    if (!list.length) return '';
+    const W = 680, H = 215, PL = 44, PR = 16, PT = 18, PB = 42;
     const iw = W - PL - PR, ih = H - PT - PB;
-    const maxP = Math.max(12, ...list.map(d => d.totalPct || 0));
+    const maxP = Math.max(12, Math.ceil(Math.max(...list.map(d => d.totalPct || 0)) + 1));
     const X = i => PL + (list.length === 1 ? iw / 2 : i / (list.length - 1) * iw);
     const Y = v => PT + ih - (v / maxP) * ih;
 
     let grid = '';
     for (let v = 0; v <= maxP; v += 2) {
       grid += '<line class="grid" x1="' + PL + '" y1="' + Y(v).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Y(v).toFixed(1) + '"/>' +
-              '<text class="axis-label" x="' + (PL - 6) + '" y="' + (Y(v) + 3).toFixed(1) + '" text-anchor="end">' + v + '</text>';
+              '<text class="axis-label" x="' + (PL - 8) + '" y="' + (Y(v) + 3.5).toFixed(1) + '" text-anchor="end">' + v + '%</text>';
     }
-    // the acceptable 4-9% band from the plant's own sheet
-    const band = '<rect x="' + PL + '" y="' + Y(PCT_MAX).toFixed(1) + '" width="' + iw +
-      '" height="' + Math.max(0, Y(PCT_MIN) - Y(PCT_MAX)).toFixed(1) + '" fill="var(--accent)" opacity=".08"/>' +
-      '<line class="limit-line" stroke="var(--crit)" x1="' + PL + '" y1="' + Y(PCT_MAX).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Y(PCT_MAX).toFixed(1) + '"/>' +
-      '<line class="limit-line" stroke="var(--warn)" x1="' + PL + '" y1="' + Y(PCT_MIN).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Y(PCT_MIN).toFixed(1) + '"/>';
 
-    const path = list.map((d, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(d.totalPct || 0).toFixed(1)).join(' ');
-    const dots = list.map((d, i) => {
-      const tr = tier(d.totalPct);
+    // the acceptable 4-9% band, straight from the plant's own sheet
+    const band = '<rect x="' + PL + '" y="' + Y(PCT_MAX).toFixed(1) + '" width="' + iw +
+      '" height="' + Math.max(0, Y(PCT_MIN) - Y(PCT_MAX)).toFixed(1) + '" fill="var(--accent)" opacity=".09" rx="2"/>' +
+      '<line class="limit-line" stroke="var(--crit)" x1="' + PL + '" y1="' + Y(PCT_MAX).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Y(PCT_MAX).toFixed(1) + '"/>' +
+      '<line class="limit-line" stroke="var(--warn)" x1="' + PL + '" y1="' + Y(PCT_MIN).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Y(PCT_MIN).toFixed(1) + '"/>' +
+      '<text class="axis-limit" x="' + (W - PR - 3) + '" y="' + (Y(PCT_MAX) - 5).toFixed(1) + '" text-anchor="end" fill="var(--crit)">' + PCT_MAX + '%</text>' +
+      '<text class="axis-limit" x="' + (W - PR - 3) + '" y="' + (Y(PCT_MIN) + 11).toFixed(1) + '" text-anchor="end" fill="var(--warn)">' + PCT_MIN + '%</text>';
+
+    const pts = list.map((d, i) => ({ x: X(i), y: Y(d.totalPct || 0), d: d }));
+    const line = pts.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' ');
+    const area = pts.length > 1
+      ? '<path d="' + line + ' L' + pts[pts.length - 1].x.toFixed(1) + ' ' + (PT + ih) + ' L' + pts[0].x.toFixed(1) + ' ' + (PT + ih) + ' Z" fill="var(--accent)" opacity=".07"/>'
+      : '';
+
+    const dots = pts.map(function (p) {
+      const tr = tier(p.d.totalPct);
       const col = tr ? 'var(' + TIER_VAR[tr] + ')' : 'var(--ink-3)';
-      return '<circle r="3.2" cx="' + X(i).toFixed(1) + '" cy="' + Y(d.totalPct || 0).toFixed(1) + '" fill="var(--surface)" stroke="' + col + '" stroke-width="2"/>';
+      const tip = '<b>' + p.d.date + '</b>' +
+        '<i>' + (p.d.totalPct || 0).toFixed(2) + '% · ' + (tr ? esc(t('zn.tier.' + tr)) : '—') + '</i>' +
+        '<i>' + (p.d.totalTon || 0).toLocaleString() + ' ' + esc(t('mgr.ton')) + '</i>';
+      return '<circle class="pt-dot" r="4" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) +
+             '" fill="var(--surface)" stroke="' + col + '" stroke-width="2.2"/>' +
+             '<circle class="hit" r="14" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) +
+             '" fill="transparent" data-tip="' + esc(tip) + '"/>';
     }).join('');
 
-    const axis = '<text class="axis-label" x="' + PL + '" y="' + (H - 7) + '" text-anchor="start">' + list[0].date.slice(5) + '</text>' +
-                 '<text class="axis-label" x="' + (W - PR) + '" y="' + (H - 7) + '" text-anchor="end">' + list[list.length - 1].date.slice(5) + '</text>';
+    // one date under every point, thinned out when they would collide
+    const every = Math.ceil(list.length / 12);
+    const xlabels = list.map(function (d, i) {
+      if (i % every !== 0 && i !== list.length - 1) return '';
+      return '<text class="axis-label" x="' + X(i).toFixed(1) + '" y="' + (H - 14) + '" text-anchor="middle">' + d.date.slice(5) + '</text>';
+    }).join('');
 
-    return '<svg class="lab-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" preserveAspectRatio="xMidYMid meet">' +
-      grid + band + '<path class="series" d="' + path + '"/>' + dots + axis + '</svg>';
+    return '<div class="chart-wrap"><div class="chart-tip"></div>' +
+      '<svg class="lab-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" preserveAspectRatio="xMidYMid meet">' +
+      grid + band + area + '<path class="series" d="' + line + '"/>' + dots + xlabels + '</svg></div>';
   }
 
   function render() {
@@ -354,39 +376,86 @@
         '<th>' + esc(t('zn.col.nightPct')) + '</th>' +
         '<th>' + esc(t('zn.col.totalPct')) + '</th>' +
       '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+
+    attachChartTips(mount);
   }
 
   /* ---------------- manager overview (on the tanks page) ----------------
      Managers only ever see the tanks page, so the production figures have to
      come to them there rather than living on a page they can't open. */
 
+  const shortTon = v => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(Math.round(v));
+
   function tonnageChart(list) {
     if (!list.length) return '';
-    const W = 640, H = 150, PL = 46, PR = 12, PT = 12, PB = 24;
+    // No y-axis numbers here: every bar is labelled with its own value, so an
+    // axis scale would just be a second set of numbers competing with them.
+    const W = 680, H = 225, PL = 14, PR = 14, PT = 26, PB = 44;   // top room for value labels
     const iw = W - PL - PR, ih = H - PT - PB;
-    const maxT = Math.max(1, ...list.map(d => d.totalTon || 0));
-    const bw = Math.max(2, Math.min(22, iw / list.length * 0.62));
-    const X = i => PL + (list.length === 1 ? iw / 2 : i / (list.length - 1) * iw);
+    const maxT = Math.max(1, ...list.map(d => d.totalTon || 0)) * 1.12;
+    const slot = iw / Math.max(1, list.length);
+    const bw = Math.max(6, Math.min(30, slot * 0.6));
+    const X = i => PL + slot * (i + 0.5);
     const Y = v => PT + ih - (v / maxT) * ih;
 
     let grid = '';
-    const step = Math.pow(10, Math.floor(Math.log10(maxT))) * (maxT / Math.pow(10, Math.floor(Math.log10(maxT))) > 5 ? 2 : 1);
+    const rawStep = maxT / 4;
+    const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+    const step = Math.ceil(rawStep / mag) * mag;
     for (let v = 0; v <= maxT; v += step) {
-      grid += '<line class="grid" x1="' + PL + '" y1="' + Y(v).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Y(v).toFixed(1) + '"/>' +
-              '<text class="axis-label" x="' + (PL - 6) + '" y="' + (Y(v) + 3).toFixed(1) + '" text-anchor="end">' + Math.round(v / 1000) + 'k</text>';
+      grid += '<line class="grid" x1="' + PL + '" y1="' + Y(v).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Y(v).toFixed(1) + '"/>';
     }
+    grid += '<line class="grid" x1="' + PL + '" y1="' + (PT + ih) + '" x2="' + (W - PR) + '" y2="' + (PT + ih) + '" stroke="var(--line-strong)"/>';
 
+    const every = Math.ceil(list.length / 12);
     const bars = list.map(function (d, i) {
-      const h = Math.max(0, ih - (Y(d.totalTon || 0) - PT));
-      return '<rect x="' + (X(i) - bw / 2).toFixed(1) + '" y="' + Y(d.totalTon || 0).toFixed(1) +
-        '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="2" fill="var(--accent)" opacity=".75"/>';
+      const val = d.totalTon || 0;
+      const y = Y(val), h = Math.max(1, PT + ih - y);
+      const tip = '<b>' + d.date + '</b>' +
+        '<i>' + esc(t('mgr.tonChart')) + ': ' + val.toLocaleString() + '</i>' +
+        '<i>' + esc(t('zn.col.dayTon')) + ' ' + (d.dayTon || 0).toLocaleString() +
+        ' · ' + esc(t('zn.col.nightTon')) + ' ' + (d.nightTon || 0).toLocaleString() + '</i>' +
+        '<i>' + esc(t('zn.avgPct')) + ': ' + (d.totalPct || 0).toFixed(2) + '%</i>';
+      const showDate = i % every === 0 || i === list.length - 1;
+      return '<g class="bar-g">' +
+        '<rect class="bar" x="' + (X(i) - bw / 2).toFixed(1) + '" y="' + y.toFixed(1) +
+          '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="3"/>' +
+        '<text class="bar-val" x="' + X(i).toFixed(1) + '" y="' + (y - 7).toFixed(1) + '" text-anchor="middle">' + shortTon(val) + '</text>' +
+        (showDate ? '<text class="axis-label" x="' + X(i).toFixed(1) + '" y="' + (H - 15) + '" text-anchor="middle">' + d.date.slice(5) + '</text>' : '') +
+        '<rect class="hit" x="' + (X(i) - slot / 2).toFixed(1) + '" y="' + PT + '" width="' + slot.toFixed(1) +
+          '" height="' + ih + '" fill="transparent" data-tip="' + esc(tip) + '"/>' +
+      '</g>';
     }).join('');
 
-    const axis = '<text class="axis-label" x="' + PL + '" y="' + (H - 7) + '" text-anchor="start">' + list[0].date.slice(5) + '</text>' +
-                 '<text class="axis-label" x="' + (W - PR) + '" y="' + (H - 7) + '" text-anchor="end">' + list[list.length - 1].date.slice(5) + '</text>';
+    return '<div class="chart-wrap"><div class="chart-tip"></div>' +
+      '<svg class="lab-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" preserveAspectRatio="xMidYMid meet">' +
+      grid + bars + '</svg></div>';
+  }
 
-    return '<svg class="lab-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" preserveAspectRatio="xMidYMid meet">' +
-      grid + bars + axis + '</svg>';
+  /** Wire hover/touch tooltips for any chart inside `root`. */
+  function attachChartTips(root) {
+    if (!root) return;
+    root.querySelectorAll('.chart-wrap').forEach(function (wrap) {
+      const tip = wrap.querySelector('.chart-tip');
+      if (!tip) return;
+      const show = function (el) {
+        tip.innerHTML = el.getAttribute('data-tip');
+        const wr = wrap.getBoundingClientRect(), er = el.getBoundingClientRect();
+        // clamp so the bubble never spills outside the card
+        const half = tip.offsetWidth / 2;
+        let cx = er.left + er.width / 2 - wr.left;
+        cx = Math.max(half + 4, Math.min(wr.width - half - 4, cx));
+        tip.style.left = cx + 'px';
+        tip.style.top = Math.max(0, er.top - wr.top) + 'px';
+        tip.classList.add('on');
+      };
+      wrap.querySelectorAll('[data-tip]').forEach(function (el) {
+        el.addEventListener('mouseenter', function () { show(el); });
+        el.addEventListener('mouseleave', function () { tip.classList.remove('on'); });
+        el.addEventListener('touchstart', function (e) { show(el); e.stopPropagation(); }, { passive: true });
+      });
+      wrap.addEventListener('mouseleave', function () { tip.classList.remove('on'); });
+    });
   }
 
   /** Where each running batch currently sits on the line. */
@@ -464,6 +533,8 @@
         '<span class="lab-chart-meta">' + PCT_MIN + '% – ' + PCT_MAX + '%</span>' +
       '</div>' + chart(recent) + '</div>' +
       line;
+
+    attachChartTips(mount);
   }
 
   /* ---------------- wiring ---------------- */
