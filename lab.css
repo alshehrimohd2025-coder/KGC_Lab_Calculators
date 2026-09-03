@@ -235,3 +235,14 @@ html:not(.authed) .zn-upload,
   background: var(--recess); border: 1px dashed var(--line-strong); border-radius: var(--r-sm);
 }
 .fx-msg { min-height: 16px; margin: 10px 2px 0; font-size: 12.5px; font-weight: 600; }
+.fx-check {
+  display: flex; align-items: center; gap: 8px; margin-top: 14px;
+  font-size: 12.5px; color: var(--ink-2); line-height: 1.5; cursor: pointer;
+}
+.fx-check input { width: 16px; height: 16px; flex: 0 0 auto; accent-color: var(--accent); }
+.fx-tag {
+  display: inline-block; font-size: 10.5px; font-weight: 600;
+  padding: 2px 8px; border-radius: 999px;
+  color: var(--ink-3); background: var(--recess); border: 1px solid var(--line);
+}
+.fx-excluded { opacity: .72; }

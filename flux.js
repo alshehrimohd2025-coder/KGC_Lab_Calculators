@@ -43,10 +43,14 @@
     }).filter(r => r.ts).sort((a, b) => (a.ts < b.ts ? -1 : 1));
   }
 
+  /** Treatments that count toward the prediction model (outliers such as
+      emergency neutralisation from very low pH can be flagged out). */
+  function modelList() { return list().filter(r => !r.excludeFromModel); }
+
   /** Litres of ammonia per +1.0 pH, one factor per treatment that
       actually raised the pH by a meaningful amount. */
   function factors() {
-    return list().map(function (r) {
+    return modelList().map(function (r) {
       const d = num(r.phAfter) - num(r.phBefore);
       const L = num(r.liters);
       if (!isFinite(d) || d < 0.05 || !isFinite(L) || L <= 0) return null;
@@ -55,17 +59,19 @@
   }
 
   function stats() {
+    const logged = list().length;
+    const excluded = list().filter(r => r.excludeFromModel).length;
     const fs = factors();
-    if (!fs.length) return { n: 0 };
+    if (!fs.length) return { n: 0, logged: logged, excluded: excluded };
     const per = fs.map(f => f.perPh);
     const mean = per.reduce((s, v) => s + v, 0) / per.length;
     const min = Math.min.apply(null, per);
     const max = Math.max.apply(null, per);
-    // average Baumé rise, informational only
-    const beRises = list().map(r => num(r.beAfter) - num(r.beBefore)).filter(v => isFinite(v) && v > 0);
+    // average Baumé rise, informational only — model treatments only
+    const beRises = modelList().map(r => num(r.beAfter) - num(r.beBefore)).filter(v => isFinite(v) && v > 0);
     const beMean = beRises.length ? beRises.reduce((s, v) => s + v, 0) / beRises.length : NaN;
-    const lastAfter = list().map(r => num(r.phAfter)).filter(isFinite).pop();
-    return { n: fs.length, mean: mean, min: min, max: max, beMean: beMean, lastPh: lastAfter };
+    const lastAfter = modelList().map(r => num(r.phAfter)).filter(isFinite).pop();
+    return { n: fs.length, logged: logged, excluded: excluded, mean: mean, min: min, max: max, beMean: beMean, lastPh: lastAfter };
   }
 
   const round = (v, s) => Math.round(v / s) * s;
@@ -120,7 +126,8 @@
           '<span class="rv">' + (st.n ? st.mean.toFixed(1) : '—') + '<span class="u">L</span></span></div>' +
         '<div class="res"><span class="rk">' + esc(t('flux.d.avgBe')) + '</span>' +
           '<span class="rv">' + (isFinite(st.beMean) ? '+' + st.beMean.toFixed(2) : '—') + '</span></div>' +
-      '</div>';
+      '</div>' +
+      (st.excluded ? '<p class="fx-basis">' + esc(t('flux.d.excludedNote', { n: st.excluded })) + '</p>' : '');
 
     // ---- log form (editor only) ----
     const chainPh = isFinite(st.lastPh) ? st.lastPh : '';
@@ -137,6 +144,7 @@
             fieldHTML('fx-bea', t('flux.d.beAfter'), '', '0.5', '') +
             fieldHTML('fx-pct', t('flux.d.pct'), '', '1', 25) +
           '</div>' +
+          '<label class="fx-check"><input type="checkbox" id="fx-excl"> ' + esc(t('flux.d.exclude')) + '</label>' +
           '<div class="saverow" style="border-top:none;padding-top:14px">' +
             '<div class="field"><label>' + esc(t('flux.d.operator')) + '</label><input type="text" id="fx-op" placeholder="' + esc(t('flux.d.name')) + '"></div>' +
             '<div class="field"><label>' + esc(t('flux.d.note')) + '</label><input type="text" id="fx-note" placeholder="' + esc(t('flux.d.optional')) + '"></div>' +
@@ -152,13 +160,16 @@
       const perPh = (isFinite(d) && d >= 0.05 && num(r.liters) > 0) ? (num(r.liters) / d).toFixed(1) : '—';
       const be = (isFinite(num(r.beBefore)) && isFinite(num(r.beAfter)))
         ? (num(r.beBefore).toFixed(1) + ' → ' + num(r.beAfter).toFixed(1)) : '—';
-      return '<tr>' +
+      const perCell = r.excludeFromModel
+        ? '<span class="fx-tag">' + esc(t('flux.d.logOnly')) + '</span>'
+        : perPh;
+      return '<tr' + (r.excludeFromModel ? ' class="fx-excluded"' : '') + '>' +
         '<td class="num">' + esc(r.date || '') + '</td>' +
         '<td class="num">' + (isFinite(num(r.liters)) ? num(r.liters).toLocaleString() : '—') + '</td>' +
         '<td class="num">' + (isFinite(num(r.phBefore)) ? num(r.phBefore).toFixed(2) : '—') +
           ' → ' + (isFinite(num(r.phAfter)) ? num(r.phAfter).toFixed(2) : '—') + '</td>' +
         '<td class="num">' + be + '</td>' +
-        '<td class="num">' + perPh + '</td>' +
+        '<td class="num">' + perCell + '</td>' +
         '<td>' + esc(r.operator || '—') + '</td>' +
         '<td>' + esc(r.note || '') + '</td>' +
         (canEdit() ? '<td><button class="btn mini danger" data-fx-del="' + esc(r._k) + '">' + esc(t('flux.d.delete')) + '</button></td>' : '') +
@@ -255,6 +266,7 @@
     const pct = num((document.getElementById('fx-pct') || {}).value);
     const op = ((document.getElementById('fx-op') || {}).value || '').trim();
     const note = ((document.getElementById('fx-note') || {}).value || '').trim();
+    const excl = !!(document.getElementById('fx-excl') || {}).checked;
 
     if (!isFinite(before) || !isFinite(after) || !isFinite(liters) || liters <= 0) {
       flash(t('flux.d.errRequired'), true); return;
@@ -269,6 +281,7 @@
       beBefore: isFinite(beB) ? beB : null,
       beAfter: isFinite(beA) ? beA : null,
       ammoniaPct: isFinite(pct) ? pct : null,
+      excludeFromModel: excl,
       operator: op || null, note: note || null
     };
     database.ref('flux_treatments').push(rec)
