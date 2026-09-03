@@ -356,6 +356,116 @@
       '</tr></thead><tbody>' + rows + '</tbody></table></div>';
   }
 
+  /* ---------------- manager overview (on the tanks page) ----------------
+     Managers only ever see the tanks page, so the production figures have to
+     come to them there rather than living on a page they can't open. */
+
+  function tonnageChart(list) {
+    if (!list.length) return '';
+    const W = 640, H = 150, PL = 46, PR = 12, PT = 12, PB = 24;
+    const iw = W - PL - PR, ih = H - PT - PB;
+    const maxT = Math.max(1, ...list.map(d => d.totalTon || 0));
+    const bw = Math.max(2, Math.min(22, iw / list.length * 0.62));
+    const X = i => PL + (list.length === 1 ? iw / 2 : i / (list.length - 1) * iw);
+    const Y = v => PT + ih - (v / maxT) * ih;
+
+    let grid = '';
+    const step = Math.pow(10, Math.floor(Math.log10(maxT))) * (maxT / Math.pow(10, Math.floor(Math.log10(maxT))) > 5 ? 2 : 1);
+    for (let v = 0; v <= maxT; v += step) {
+      grid += '<line class="grid" x1="' + PL + '" y1="' + Y(v).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Y(v).toFixed(1) + '"/>' +
+              '<text class="axis-label" x="' + (PL - 6) + '" y="' + (Y(v) + 3).toFixed(1) + '" text-anchor="end">' + Math.round(v / 1000) + 'k</text>';
+    }
+
+    const bars = list.map(function (d, i) {
+      const h = Math.max(0, ih - (Y(d.totalTon || 0) - PT));
+      return '<rect x="' + (X(i) - bw / 2).toFixed(1) + '" y="' + Y(d.totalTon || 0).toFixed(1) +
+        '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="2" fill="var(--accent)" opacity=".75"/>';
+    }).join('');
+
+    const axis = '<text class="axis-label" x="' + PL + '" y="' + (H - 7) + '" text-anchor="start">' + list[0].date.slice(5) + '</text>' +
+                 '<text class="axis-label" x="' + (W - PR) + '" y="' + (H - 7) + '" text-anchor="end">' + list[list.length - 1].date.slice(5) + '</text>';
+
+    return '<svg class="lab-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" preserveAspectRatio="xMidYMid meet">' +
+      grid + bars + axis + '</svg>';
+  }
+
+  /** Where each running batch currently sits on the line. */
+  function lineStatusHTML() {
+    const P = window.KGCProduction;
+    if (!P) return '';
+    let batches = [];
+    try { batches = Object.values(P._batches() || {}).filter(b => b && b.status === 'active'); } catch (e) { return ''; }
+    if (!batches.length) {
+      return '<p class="panel-label" style="margin:22px 0 10px">' + esc(t('mgr.line')) + '</p>' +
+             '<div class="lab-empty">' + esc(t('mgr.noActive')) + '</div>';
+    }
+    const rows = batches.sort((a, b) => (a.startTs || 0) - (b.startTs || 0)).map(function (b) {
+      const segs = Array.isArray(b.segments) ? b.segments : [];
+      const open = segs.find(s => s && !s.endTs);
+      const stageKey = open ? open.stageKey : '';
+      const stage = stageKey ? (t('pt.stage.' + stageKey) === 'pt.stage.' + stageKey ? (open.stageName || stageKey) : t('pt.stage.' + stageKey)) : '—';
+      const since = open ? open.startTs : b.startTs;
+      const mins = since ? Math.round((Date.now() - since) / 60000) : 0;
+      return '<tr>' +
+        '<td class="name">' + esc(b.batchNumber || '—') + '</td>' +
+        '<td>' + esc(b.product || t('pt.noProduct')) + '</td>' +
+        '<td class="num">' + (Number(b.weight) || 0).toLocaleString() + '</td>' +
+        '<td>' + esc(stage) + '</td>' +
+        '<td class="num">' + mins + ' ' + esc(t('mgr.min')) + '</td>' +
+      '</tr>';
+    }).join('');
+
+    return '<p class="panel-label" style="margin:22px 0 10px">' + esc(t('mgr.line')) + '</p>' +
+      '<div class="tablewrap"><table><thead><tr>' +
+      '<th>' + esc(t('pt.h.batch')) + '</th><th>' + esc(t('pt.h.product')) + '</th>' +
+      '<th>' + esc(t('pt.h.weight')) + '</th><th>' + esc(t('pt.currentStage')) + '</th>' +
+      '<th>' + esc(t('mgr.elapsed')) + '</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
+
+  function renderOverview() {
+    const mount = document.getElementById('mgr-production');
+    if (!mount) return;
+    const list = sorted();
+    const line = lineStatusHTML();
+
+    if (!list.length) {
+      mount.innerHTML = line
+        ? '<div class="sechead"><span class="secnum">٢</span><h2 class="sectitle">' + esc(t('mgr.title')) + '</h2></div>' + line
+        : '';
+      return;
+    }
+
+    const recent = list.slice(-14);           // last two weeks keeps it readable
+    const totTon = list.reduce((s, d) => s + (d.totalTon || 0), 0);
+    const withPct = list.filter(d => d.totalPct > 0);
+    const mean = withPct.length ? withPct.reduce((s, d) => s + d.totalPct, 0) / withPct.length : 0;
+    const last = list[list.length - 1];
+
+    const stat = (k, v, unit, hot) =>
+      '<div class="pt-stat' + (hot ? ' hot' : '') + '"><span class="k">' + esc(k) + '</span>' +
+      '<span class="v">' + v + (unit ? '<small>' + esc(unit) + '</small>' : '') + '</span></div>';
+
+    mount.innerHTML =
+      '<div class="sechead"><span class="secnum">٢</span><h2 class="sectitle">' + esc(t('mgr.title')) + '</h2></div>' +
+      '<p class="secsub">' + esc(t('mgr.sub')) + '</p>' +
+      '<div class="pt-stats">' +
+        stat(t('mgr.lastDay'), (last.totalTon || 0).toLocaleString(), t('mgr.ton')) +
+        stat(t('zn.totalTon'), Math.round(totTon).toLocaleString(), t('mgr.ton')) +
+        stat(t('zn.avgPct'), mean.toFixed(2), '%', tier(mean) !== 'ok') +
+        stat(t('mgr.lastPct'), (last.totalPct || 0).toFixed(2), '%', tier(last.totalPct) !== 'ok') +
+      '</div>' +
+      '<div class="lab-chart-card"><div class="lab-chart-head">' +
+        '<span class="lab-chart-title">' + esc(t('mgr.tonChart')) + '</span>' +
+        '<span class="lab-chart-meta">' + esc(t('mgr.lastN', { n: recent.length })) + '</span>' +
+      '</div>' + tonnageChart(recent) + '</div>' +
+      '<div class="lab-chart-card"><div class="lab-chart-head">' +
+        '<span class="lab-chart-title">' + esc(t('zn.chartTitle')) + '</span>' +
+        '<span class="lab-chart-meta">' + PCT_MIN + '% – ' + PCT_MAX + '%</span>' +
+      '</div>' + chart(recent) + '</div>' +
+      line;
+  }
+
   /* ---------------- wiring ---------------- */
 
   function wire() {
@@ -368,9 +478,15 @@
     });
   }
 
-  database.ref('zinc_daily').on('value', s => { days = s.val() || {}; render(); });
-  if (window.I18N) I18N.onChange(render);
-  document.addEventListener('DOMContentLoaded', function () { wire(); render(); });
+  function renderAll() { render(); renderOverview(); }
 
-  window.KGCZinc = { _days: () => days, render: render, _buildDays: buildDays, _readWorkbook: readWorkbook };
+  database.ref('zinc_daily').on('value', s => { days = s.val() || {}; renderAll(); });
+  // the line status reflects live batches, so follow those too
+  database.ref('production/batches').on('value', renderOverview);
+  if (window.I18N) I18N.onChange(renderAll);
+  document.addEventListener('DOMContentLoaded', function () { wire(); renderAll(); });
+  // keep the "elapsed" column honest without redrawing the charts
+  setInterval(renderOverview, 60000);
+
+  window.KGCZinc = { _days: () => days, render: renderAll, _buildDays: buildDays, _readWorkbook: readWorkbook };
 })();
