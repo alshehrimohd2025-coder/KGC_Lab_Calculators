@@ -381,6 +381,12 @@ td.name{color:var(--ink); font-weight:500}
 .brandrow{display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:12px; position:relative; z-index:1}
 .brandrow h1{margin:0}
 
+/* the header title follows the role: editors get the "calculators" title,
+   managers get the monitoring-dashboard title */
+.title-view{display:none}
+.mode-view .title-edit{display:none}
+.mode-view .title-view{display:block}
+
 /* company logo as a faint watermark behind the header text, not an inline
    icon — the mark carries its own wordmark, so it stays subtle rather than
    competing with the page's own title. */
@@ -705,7 +711,8 @@ document.addEventListener('DOMContentLoaded', function () {
   <img class="brand-watermark" src="logo.png" alt="" aria-hidden="true" onerror="this.remove()">
   <div class="wrap">
     <div class="brandrow">
-      <h1 data-i18n="head.title">حاسبات مختبر جلفنة KGC</h1>
+      <h1 class="title-edit" data-i18n="head.title">حاسبات مختبر جلفنة KGC</h1>
+      <h1 class="title-view" data-i18n="head.titleMgr">لوحة مراقبة مختبر الجلفنة</h1>
       <div class="langtog" role="group" aria-label="Language">
         <button type="button" data-lang-btn="ar" onclick="I18N.set('ar')">ع</button>
         <button type="button" data-lang-btn="en" onclick="I18N.set('en')">EN</button>
@@ -1362,6 +1369,13 @@ renderAll();
 window.renderTanksAll = renderAll;
 // re-render the tank cards and table when the language flips
 I18N.onChange(renderAll);
+
+// the browser-tab title follows the role too, in the current language
+function syncDocTitle() {
+  try { document.title = t(IS_EDITOR ? 'head.title' : 'head.titleMgr'); } catch (e) {}
+}
+syncDocTitle();
+I18N.onChange(syncDocTitle);
 </script><style>
 .acid-calc-section {
   background: var(--surface);

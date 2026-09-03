@@ -123,6 +123,7 @@
       'auth.badPassword': 'كلمة المرور غير صحيحة.',
       'head.eyebrow': 'KGC · جلفنة بالغمس الساخن · المختبر',
       'head.title': 'حاسبات مختبر جلفنة KGC',
+      'head.titleMgr': 'لوحة مراقبة مختبر الجلفنة',
       'head.lede': 'حاسبات تشغيلية لحوض الفلكس FL-01 وأحواض الحمض وحوض الزنك، مبنية على وحدات ومصطلحات شيت المصنع نفسه. القراءات وسجل العمليات مشتركة بين كل جهاز يفتح الرابط.',
 
       /* tanks dashboard */
@@ -553,6 +554,7 @@
       'auth.badPassword': 'Incorrect password.',
       'head.eyebrow': 'KGC · HOT-DIP GALVANIZING · LAB',
       'head.title': 'KGC galvanizing lab calculators',
+      'head.titleMgr': 'Galvanizing Lab — Monitoring Dashboard',
       'head.lede': 'Operational calculators for flux tank FL-01, the acid tanks and the zinc kettle, built on the plant sheet’s own units and terms. Readings and the operations log are shared across every device that opens the link.',
 
       'tanks.title': 'Live tank dashboard',
