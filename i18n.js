@@ -194,6 +194,7 @@
       /* tank names */
       'tank.Flux Tank': 'تانك الفلكس',
       'tank.Rinsing Tank 1': 'تانك غسيل 1',
+      'tank.Temporary Acid Tank': 'حوض حمض مؤقت',
       'tank.Rinsing Tank 2': 'تانك غسيل 2',
       'tank.Rinsing Before Acid': 'رينسينج قبل الحمض',
       'tank.Stripping Acid': 'تانك حمض التعرية',
@@ -670,6 +671,7 @@
 
       'tank.Flux Tank': 'Flux tank',
       'tank.Rinsing Tank 1': 'Rinsing tank 1',
+      'tank.Temporary Acid Tank': 'Temporary Acid Tank',
       'tank.Rinsing Tank 2': 'Rinsing tank 2',
       'tank.Rinsing Before Acid': 'Rinsing before acid',
       'tank.Stripping Acid': 'Stripping acid',
