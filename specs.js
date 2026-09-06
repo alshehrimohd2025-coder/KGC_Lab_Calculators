@@ -46,17 +46,13 @@
     ],
     // 3-6 — HCl acid tanks 1..4
     3: ACID, 4: ACID, 5: ACID, 6: ACID,
+    // 8 — Rinse 1 after acid, monitored like an acid tank (per plant request)
+    8: ACID,
     // 7 — Stripping acid
     7: [
       { key: 'acidPercent', min: 8, max: 20, unit: '% w/w' },
       { key: 'zn', max: 120, unit: 'g/L' },
       { key: 'fe', max: 50,  unit: 'g/L' }
-    ],
-    // 8 — Rinse 1, after acid
-    8: [
-      { key: 'ph', min: 4.5, max: 5.5 },
-      { key: 'fe', max: 2.0,  unit: 'g/L' },
-      { key: 'ec', max: 3000, unit: 'µS/cm' }
     ],
     // 9 — Rinse 2, before flux
     9: [
