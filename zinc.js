@@ -370,6 +370,15 @@
       grid + raxis + band + area + tline + '<path class="series" d="' + line + '"/>' + tdots + dots + xlabels + '</svg></div>';
   }
 
+  /** Average output per jig for one shift, over the days that logged both. */
+  function jigTon(list, tonKey, jigKey) {
+    let ton = 0, jigs = 0;
+    list.forEach(function (d) {
+      if ((d[jigKey] || 0) > 0 && (d[tonKey] || 0) > 0) { ton += d[tonKey]; jigs += d[jigKey]; }
+    });
+    return jigs ? ton / jigs : 0;
+  }
+
   function render() {
     const mount = document.getElementById('zn-body');
     if (!mount) return;
@@ -386,20 +395,50 @@
     const mean = avgPct.length ? avgPct.reduce((s, d) => s + d.totalPct, 0) / avgPct.length : 0;
     const outside = avgPct.filter(d => tier(d.totalPct) !== 'ok').length;
 
+    /* Jigs, drossing and zinc release come in with every import but were never
+       surfaced. Output per jig is the plant's own productivity measure, and a
+       shift can breach the limit while the day's total still looks fine — so
+       the shifts are counted separately from the daily totals. */
+    const totDross = list.reduce((s, d) => s + (d.dross || 0), 0);
+    const totRelease = list.reduce((s, d) => s + (d.release || 0), 0);
+    const totJigs = list.reduce((s, d) => s + (d.dayJigs || 0) + (d.nightJigs || 0), 0);
+    const perJig = totJigs ? totTon / totJigs : 0;
+
+    const dayJigTon = jigTon(list, 'dayTon', 'dayJigs');
+    const nightJigTon = jigTon(list, 'nightTon', 'nightJigs');
+
+    // shifts outside the band, counted one by one
+    let shiftBad = 0, hiddenDays = 0;
+    list.forEach(function (d) {
+      const bad = (d.dayPct > 0 && tier(d.dayPct) !== 'ok' ? 1 : 0) +
+                  (d.nightPct > 0 && tier(d.nightPct) !== 'ok' ? 1 : 0);
+      shiftBad += bad;
+      // the day's total hides the breach — the case worth flagging
+      if (bad && d.totalPct > 0 && tier(d.totalPct) === 'ok') hiddenDays++;
+    });
+
     const stat = (k, v, unit, hot) =>
       '<div class="pt-stat' + (hot ? ' hot' : '') + '"><span class="k">' + esc(k) + '</span>' +
       '<span class="v">' + v + (unit ? '<small>' + esc(unit) + '</small>' : '') + '</span></div>';
 
-    const rows = list.slice().reverse().map(d =>
-      '<tr>' +
-        '<td class="num">' + esc(d.date) + '</td>' +
+    const rows = list.slice().reverse().map(function (d) {
+      const jigs = (d.dayJigs || 0) + (d.nightJigs || 0);
+      const pj = jigs ? (d.totalTon || 0) / jigs : 0;
+      const shiftIssue = (d.dayPct > 0 && tier(d.dayPct) !== 'ok') || (d.nightPct > 0 && tier(d.nightPct) !== 'ok');
+      const masked = shiftIssue && d.totalPct > 0 && tier(d.totalPct) === 'ok';
+      return '<tr' + (masked ? ' class="zn-masked"' : '') + '>' +
+        '<td class="num">' + esc(d.date) +
+          (masked ? ' <span class="zn-flag" title="' + esc(t('zn.maskedHint')) + '">!</span>' : '') + '</td>' +
         '<td class="num">' + (d.dayTon || 0).toLocaleString() + '</td>' +
         '<td class="num">' + (d.nightTon || 0).toLocaleString() + '</td>' +
         '<td class="num">' + (d.totalTon || 0).toLocaleString() + '</td>' +
+        '<td class="num">' + (jigs ? (d.dayJigs || 0) + ' / ' + (d.nightJigs || 0) : '—') + '</td>' +
+        '<td class="num">' + (pj ? Math.round(pj).toLocaleString() : '—') + '</td>' +
         '<td>' + pill(d.dayPct) + '</td>' +
         '<td>' + pill(d.nightPct) + '</td>' +
         '<td>' + pill(d.totalPct) + '</td>' +
-      '</tr>').join('');
+      '</tr>';
+    }).join('');
 
     mount.innerHTML =
       '<div class="pt-stats">' +
@@ -408,7 +447,22 @@
         stat(t('zn.totalCM'), totCM.toFixed(2)) +
         stat(t('zn.avgPct'), mean.toFixed(2), '%', tier(mean) !== 'ok') +
         stat(t('zn.outside'), outside, '', outside > 0) +
+        stat(t('zn.shiftOutside'), shiftBad, '', shiftBad > 0) +
+        stat(t('zn.perJig'), perJig ? Math.round(perJig).toLocaleString() : '—') +
+        stat(t('zn.release'), Math.round(totRelease).toLocaleString()) +
+        stat(t('zn.dross'), totDross ? Math.round(totDross).toLocaleString() : '0') +
       '</div>' +
+      (hiddenDays ? '<div class="zn-note">' + esc(t('zn.maskedNote', { n: hiddenDays })) + '</div>' : '') +
+      ((dayJigTon && nightJigTon) ? '<div class="zn-shifts">' +
+        '<span class="zn-shift"><b>' + esc(t('zn.shift.day')) + '</b> ' +
+          Math.round(dayJigTon).toLocaleString() + ' <small>' + esc(t('zn.perJigUnit')) + '</small></span>' +
+        '<span class="zn-shift"><b>' + esc(t('zn.shift.night')) + '</b> ' +
+          Math.round(nightJigTon).toLocaleString() + ' <small>' + esc(t('zn.perJigUnit')) + '</small></span>' +
+        '<span class="zn-gap">' + esc(t('zn.shiftGap', {
+          p: (Math.abs(dayJigTon - nightJigTon) / Math.max(dayJigTon, nightJigTon) * 100).toFixed(1),
+          s: dayJigTon >= nightJigTon ? t('zn.shift.day') : t('zn.shift.night')
+        })) + '</span>' +
+      '</div>' : '') +
       (list.length >= 2 ? '<div class="lab-chart-card"><div class="lab-chart-head">' +
         '<span class="lab-chart-title">' + esc(t('zn.chartTitle')) + '</span>' +
         '<span class="lab-chart-meta">' + PCT_MIN + '% – ' + PCT_MAX + '%</span>' +
@@ -418,6 +472,8 @@
         '<th>' + esc(t('zn.col.dayTon')) + '</th>' +
         '<th>' + esc(t('zn.col.nightTon')) + '</th>' +
         '<th>' + esc(t('zn.col.totalTon')) + '</th>' +
+        '<th>' + esc(t('zn.col.jigs')) + '</th>' +
+        '<th>' + esc(t('zn.col.perJig')) + '</th>' +
         '<th>' + esc(t('zn.col.dayPct')) + '</th>' +
         '<th>' + esc(t('zn.col.nightPct')) + '</th>' +
         '<th>' + esc(t('zn.col.totalPct')) + '</th>' +
