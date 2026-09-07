@@ -201,6 +201,7 @@
   function totals(b) {
     const tt = {
       cycle: (b.endTs || Date.now()) - b.startTs,
+      net: 0,          // cycle minus downtime — the clock a full stop freezes
       processing: 0,   // simple stages + immersion
       draining: 0,
       waiting: 0,
@@ -228,6 +229,7 @@
       if (s.stageKey === 'crane_wait') tt.craneWait += d;
       if (s.stageKey === 'crane_move') tt.craneMove += d;
     });
+    tt.net = Math.max(0, tt.cycle - tt.downtime);
     return tt;
   }
 
@@ -370,7 +372,9 @@
     save(b); render();
   }
 
-  /** Close the current segment and open the next stage (or finish). */
+  /** Close the current segment and move to whichever stage the operator picks.
+      The line does not always run strictly in order — a batch may skip a rinse
+      or go back for another dip — so the stage is chosen, not assumed. */
   function next(id) {
     const b = batches[id]; if (!b || !IS_EDITOR || !IS_AUTHED) return;
     const cur = openSeg(b);
@@ -378,25 +382,27 @@
     if (cur.kind === 'immersion') return;                 // must lift out first
     if (cur.kind === 'downtime') return;                  // must resume first
 
-    const nextIdx = b.stageIdx + 1;
-    const st = stageAt(nextIdx);
+    askStage(b, choice => {
+      if (choice === 'finish') { finishBatch(id); return; }
+      const idx = Number(choice);
+      const st = stageAt(idx);
+      if (!st) return;
 
-    if (!st) { finishBatch(id); return; }
-
-    // A tank stage may need its tank chosen before it starts.
-    if (st.type === 'tank' && st.tankGroup) {
-      askTank(st, b.reworkActive, tank => {
-        const now = Date.now();
-        closeOpen(b, now);
-        openStage(b, nextIdx, now, tank);
-        afterAdvance(b);
-      });
-      return;
-    }
-    const now = Date.now();
-    closeOpen(b, now);
-    openStage(b, nextIdx, now);
-    afterAdvance(b);
+      // A tank stage may need its tank chosen before it starts.
+      if (st.type === 'tank' && st.tankGroup) {
+        askTank(st, b.reworkActive, tank => {
+          const now = Date.now();
+          closeOpen(b, now);
+          openStage(b, idx, now, tank);
+          afterAdvance(b);
+        });
+        return;
+      }
+      const now = Date.now();
+      closeOpen(b, now);
+      openStage(b, idx, now);
+      afterAdvance(b);
+    });
   }
 
   /** Close an open rework once the batch returns to where it left off. */
@@ -553,6 +559,33 @@
     m.el.querySelectorAll('.pt-reason').forEach(btn => {
       btn.addEventListener('click', () => { m.close(); cb(list[Number(btn.dataset.i)]); });
     });
+  }
+
+  /* Every stage is offered, with its position marked, so the operator can jump
+     forward, repeat the current stage, or step back for a re-dip. */
+  function askStage(b, cb) {
+    const rows = STAGES.map(function (s, i) {
+      const state = i < b.stageIdx ? 'done' : i === b.stageIdx ? 'now' : 'todo';
+      const hint = state === 'done' ? t('pt.stageDone') : state === 'now' ? t('pt.stageNow') : '';
+      return '<button class="pt-stage-opt is-' + state + '" data-i="' + i + '">' +
+          '<span class="n">' + (i + 1) + '</span>' +
+          '<span class="s">' + esc(stageName(s.key)) + '</span>' +
+          (hint ? '<span class="h">' + esc(hint) + '</span>' : '') +
+        '</button>';
+    }).join('');
+
+    const m = modal(
+      headHtml(t('pt.selectStage')) +
+      '<div class="pt-modal-body"><div class="pt-stage-list">' + rows + '</div></div>' +
+      '<div class="pt-modal-foot">' +
+        '<button class="btn" id="pt-stage-finish">' + esc(t('pt.btn.finish')) + '</button>' +
+        '<button class="btn ghost" data-close>' + esc(t('pt.cancel')) + '</button>' +
+      '</div>'
+    );
+    m.el.querySelectorAll('.pt-stage-opt').forEach(btn => {
+      btn.addEventListener('click', () => { m.close(); cb(Number(btn.dataset.i)); });
+    });
+    m.el.querySelector('#pt-stage-finish').addEventListener('click', () => { m.close(); cb('finish'); });
   }
 
   function askTank(stage, allowStripping, cb) {
@@ -872,7 +905,8 @@
           '<button class="btn ghost" data-act="pause" data-id="' + b.id + '">' + esc(t('pt.btn.pause')) + '</button>' +
           '<button class="btn ghost" data-act="undo" data-id="' + b.id + '">' + esc(t('pt.btn.undo')) + '</button>';
       }
-      actions += '<button class="btn ghost" data-act="rework" data-id="' + b.id + '">' + esc(t('pt.btn.rework')) + '</button>';
+      actions += '<button class="btn ghost" data-act="rework" data-id="' + b.id + '">' + esc(t('pt.btn.rework')) + '</button>' +
+        '<button class="btn ghost danger" data-act="delete" data-id="' + b.id + '">' + esc(t('pt.btn.delete')) + '</button>';
     }
 
     return '<div class="pt-batch ' + cls + '" data-batch="' + b.id + '">' +
@@ -888,7 +922,9 @@
         '<div class="pt-stage-name">' + esc(stageTitle) + '</div>' +
         '<div class="pt-elapsed" data-live="stage" data-since="' + (cur ? cur.startTs : b.startTs) + '">' +
           hms(cur ? segLen(cur) : 0) + '</div>' +
-        '<div class="pt-elapsed-sub">' + esc(t('pt.batchTotal')) + ' <span data-live="total" data-since="' + b.startTs + '">' + hms(tt.cycle) + '</span></div>' +
+        '<div class="pt-elapsed-sub">' + esc(t('pt.batchTotal')) + ' <span data-live="total" data-since="' + b.startTs +
+          '" data-offset="' + tt.downtime + '"' + (kind === 'downtime' ? ' data-frozen="1"' : '') + '>' + hms(tt.net) + '</span>' +
+          (tt.downtime ? ' <small class="pt-stopped">' + esc(t('pt.stoppedFor', { d: hms(tt.downtime) })) + '</small>' : '') + '</div>' +
         (exp ? '<div class="pt-expected"><span>' + esc(t('pt.expected')) + ' <b>' + hms(exp.ms) + '</b></span>' +
                '<span>' + esc(t('pt.fromNBatches', { n: exp.n })) + '</span></div>' : '') +
       '</div>' +
@@ -1080,6 +1116,7 @@
           case 'resume': resume(id); break;
           case 'undo': undo(id); break;
           case 'rework': startRework(id); break;
+          case 'delete': deleteBatch(id); break;
         }
       });
     });
@@ -1109,9 +1146,11 @@
   setInterval(() => {
     if (!mounted || !root) return;
     root.querySelectorAll('[data-live]').forEach(el => {
+      if (el.dataset.frozen === '1') return;   // batch is stopped — the clock stands still
       const since = Number(el.dataset.since);
       if (!since) return;
-      el.textContent = hms(Date.now() - since);
+      const off = Number(el.dataset.offset) || 0;
+      el.textContent = hms(Math.max(0, Date.now() - since - off));
     });
   }, 1000);
 
