@@ -1046,6 +1046,9 @@ html[dir="rtl"] .std-table td.std-cell { text-align: right; }
     <span data-i18n="tanks.viewonly">عرض فقط — القراءات تتحدّث مباشرة من المختبر</span>
   </div>
 
+  <!-- what needs acting on, gathered from every module -->
+  <section id="attention" class="att"></section>
+
   <!-- Tanks Cards View -->
   <div class="tanks-grid" id="tanks-container"></div>
 
@@ -1275,6 +1278,20 @@ function flowArrowHTML() {
 // is one it tracks — same box as the reading, no separate page to visit.
 // Short wording + no-wrap: the dashboard card is much narrower than the
 // full Standards page card the long label was written for.
+/* How fresh the reading is — a green status means nothing if the number
+   behind it was entered weeks ago. */
+function readingAgeHTML(tank) {
+  const L = window.KGCLab, SP = window.KGCSpecs;
+  if (!L || !L.daysSinceReading || !SP || !SP.hasSpec(tank.id)) return '';
+  const info = L.daysSinceReading(tank.id);
+  if (!info) return '';        // no logged history yet — say nothing rather than guess
+  const cls = info.days >= 7 ? ' bad' : info.days >= 3 ? ' warn' : '';
+  const txt = info.days === 0 ? t('att.measuredToday')
+            : info.days === 1 ? t('att.measuredYesterday')
+            : t('att.measuredAgo', { n: info.days });
+  return '<div class="tank-age' + cls + '" title="' + info.date + '">' + txt + '</div>';
+}
+
 function standardsFlagHTML(tank) {
   const SP = window.KGCSpecs;
   if (!SP || !SP.hasSpec(tank.id)) return '';
@@ -1309,6 +1326,7 @@ function renderCards() {
       </div>
       <div class="tank-name">${tankLabel(tank.name)}</div>
       <div class="tank-data">${tankDataRowsHTML(tank)}</div>
+      ${readingAgeHTML(tank)}
       ${standardsFlagHTML(tank)}
       <select class="status-select" style="background:${color}1a; border-color:${color}59; color:${color};" onchange="setStatus(${tank.id}, this.value)">
         ${statusOptionsHTML(tank.status)}
@@ -2533,6 +2551,7 @@ html:not(.authed) .spec-view-note{display:block}
 
 <script src="lab.js"></script>
 <script src="zinc.js"></script>
+<script src="attention.js"></script>
 <script src="flux.js"></script>
 
 </body>

@@ -276,3 +276,59 @@ html:not(.authed) .zn-upload,
   color: #fff; background: var(--warn); margin-inline-start: 5px;
 }
 tr.zn-masked { background: color-mix(in srgb, var(--warn) 5%, transparent); }
+
+/* ---------- "needs your attention" panel ---------- */
+.att { margin: 0 0 26px; }
+.att-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.att-title { font-size: 14px; font-weight: 700; color: var(--ink); }
+.att-count {
+  font-family: var(--mono); font-size: 11.5px; font-weight: 700;
+  min-width: 22px; text-align: center; padding: 2px 8px; border-radius: 999px;
+  color: var(--ink-3); background: var(--recess); border: 1px solid var(--line);
+}
+.att-count.hot { color: #fff; background: var(--crit); border-color: var(--crit); }
+
+.att-list {
+  display: grid; gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+.att-item {
+  --ac: var(--warn);
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 11px 13px; border-radius: var(--r-md);
+  background: var(--surface); border: 1px solid var(--line);
+  border-inline-start: 3px solid var(--ac);
+  box-shadow: var(--e1);
+}
+.att-item.sev-2 { --ac: var(--crit); }
+.att-ico { flex: 0 0 auto; font-size: 14px; line-height: 1.5; color: var(--ac); }
+.att-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.att-body b { font-size: 13px; font-weight: 700; color: var(--ink); }
+.att-body span {
+  font-size: 11.5px; line-height: 1.6; color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+
+.att-clear {
+  display: flex; align-items: center; gap: 9px;
+  padding: 13px 16px; border-radius: var(--r-md);
+  font-size: 13px; color: var(--ink-2);
+  background: var(--accent-soft); border: 1px solid var(--accent-line);
+}
+.att-ok { color: var(--accent); font-weight: 700; }
+
+/* ---------- reading freshness on the tank card ---------- */
+.tank-age {
+  margin: 0 10px 8px; text-align: center;
+  font-size: 10.5px; font-weight: 600; color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.tank-age.warn { color: var(--warn); }
+.tank-age.bad { color: var(--crit); }
+.tank-age.none { color: var(--ink-3); font-style: italic; }
+
+.att-group { margin-bottom: 12px; }
+.att-cat {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .1em;
+  color: var(--ink-3); margin-bottom: 6px; text-transform: uppercase;
+}

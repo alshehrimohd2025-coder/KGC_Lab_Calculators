@@ -68,24 +68,66 @@
 
   /* Keyed by tank+date so repeated edits on the same day overwrite rather
      than pile up — the log stays exactly one row per tank per day. */
+  /* Every measured parameter is snapshotted, for every tank that has a spec —
+     tanks_data only ever holds the latest value, so without this there is no
+     history to trend and no way to tell a fresh reading from a stale one.
+
+     saveToStorage() also fires on a status change, which is not a measurement,
+     so a tank whose numbers are unchanged is skipped. That keeps the log an
+     honest record of when a reading was actually taken. */
+  const LOGGED_FIELDS = ['ph', 'fe', 'baume', 'acidPercent', 'sg', 'conc', 'temp', 'ec', 'zn', 'salt'];
+
+  function latestReadingFor(tankId) {
+    let best = null;
+    Object.keys(readings).forEach(function (k) {
+      const r = readings[k];
+      if (!r || Number(r.tankId) !== tankId) return;
+      if (!best || (r.date || '') > (best.date || '')) best = r;
+    });
+    return best;
+  }
+
   function captureReadings() {
     if (!IS_EDITOR || !IS_AUTHED || typeof tanks === 'undefined') return;
+    const SP = window.KGCSpecs;
     const date = dayKey();
     const now = Date.now();
     const updates = {};
+
     tanks.forEach(function (tk) {
-      if (ACID_IDS.indexOf(tk.id) === -1 && tk.id !== 10) return;
-      updates['readings_log/' + tk.id + '_' + date] = {
-        tankId: tk.id, date: date, ts: now,
-        ph: Number(tk.ph) || 0,
-        fe: Number(tk.fe) || 0,
-        baume: Number(tk.baume) || 0,
-        acidPercent: Number(tk.acidPercent) || 0
-      };
+      const tracked = SP && SP.hasSpec(tk.id) ? true : (ACID_IDS.indexOf(tk.id) !== -1 || tk.id === 10);
+      if (!tracked) return;
+
+      const row = { tankId: tk.id, date: date, ts: now };
+      let hasValue = false;
+      LOGGED_FIELDS.forEach(function (f) {
+        const v = Number(tk[f]) || 0;
+        row[f] = v;
+        if (v) hasValue = true;
+      });
+      if (!hasValue) return;                       // nothing measured yet
+
+      // unchanged numbers mean this save was a status edit, not a reading
+      const prev = latestReadingFor(tk.id);
+      if (prev && prev.date !== date &&
+          LOGGED_FIELDS.every(f => (Number(prev[f]) || 0) === row[f])) return;
+
+      updates['readings_log/' + tk.id + '_' + date] = row;
     });
+
     if (!Object.keys(updates).length) return;
     database.ref().update(updates)
       .catch(e => console.error('[lab] readings capture failed', e));
+  }
+
+  /** Days since this tank last had a reading recorded — null if never. */
+  function daysSinceReading(tankId) {
+    const r = latestReadingFor(tankId);
+    if (!r || !r.date) return null;
+    const then = new Date(r.date + 'T00:00:00');
+    const today = new Date(dayKey() + 'T00:00:00');
+    if (isNaN(then)) return null;
+    return { days: Math.max(0, Math.round((today - then) / 86400000)), date: r.date };
   }
 
   /* ---------------- 2/3. trend + life ---------------- */
@@ -390,7 +432,12 @@
 
   /* ---------------- wiring ---------------- */
 
-  database.ref('readings_log').on('value', s => { readings = s.val() || {}; renderTrends(); renderLife(); });
+  database.ref('readings_log').on('value', s => {
+    readings = s.val() || {};
+    renderTrends(); renderLife();
+    // the tank cards show reading freshness, so they need the history too
+    if (typeof window.renderTanksAll === 'function') window.renderTanksAll();
+  });
   database.ref('renewals').on('value', s => { renewals = s.val() || {}; renderTrends(); renderLife(); renderRenewals(); });
   database.ref('inventory').on('value', s => { inventory = s.val() || {}; renderInventory(); });
   database.ref('tanks_data').on('value', function () { renderTrends(); renderLife(); renderRenewals(); wireForm(); });
@@ -400,6 +447,7 @@
 
   window.KGCLab = {
     captureReadings: captureReadings,
+    daysSinceReading: daysSinceReading,
     lifeEstimate: lifeEstimate,
     render: renderAllLab,
     _readings: () => readings,
