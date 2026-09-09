@@ -112,6 +112,31 @@
       'zn.totalCM': 'إجمالي استهلاك الزنك',
       'zn.avgPct': 'متوسط الاستهلاك',
       'zn.outside': 'أيام خارج الحد',
+      'rep.button': 'تصدير تقرير الأحواض (Excel)',
+      'rep.hint': 'يُنشئ نفس نموذج التقرير المعتمد، معبّأً بقراءات الأحواض ١–١٠ الحالية.',
+      'rep.title': 'BATH STATUS REPORT',
+      'rep.date': 'REPORT DATE',
+      'rep.results': 'DAILY TEST RESULTS',
+      'rep.col.tank': 'Tank No.',
+      'rep.col.name': 'Tank Name',
+      'rep.col.readings': 'Readings',
+      'rep.col.status': 'Status',
+      'rep.tankNo': 'Tank {n}',
+      'rep.summaryHead': 'SUMMARY',
+      'rep.summary': 'Out of {n} process baths: {ok} within standard, {warn} require monitoring, {crit} outside the critical limit.',
+      'rep.preparedBy': 'PREPARED BY',
+      'rep.preparerName': 'Eng.Mohammed Alshehri\nChemical Engineer',
+      'rep.st.ok': 'In Service',
+      'rep.st.warn': 'In Service – Monitor',
+      'rep.st.crit': 'Out of Limit – Action Required',
+      'rep.st.out': 'Out of Service',
+      'rep.st.maint': 'Under Maintenance',
+      'rep.st.noData': 'No Reading',
+      'rep.working': 'جارٍ إنشاء التقرير…',
+      'rep.done': 'تم إنشاء التقرير بـ {n} حوض.',
+      'rep.failed': 'تعذّر إنشاء التقرير:',
+      'rep.noTanks': 'لا توجد بيانات أحواض للتصدير.',
+      'rep.unsupported': 'المتصفح لا يدعم إنشاء الملف — استخدم Chrome أو Safari حديث.',
       'att.title': 'يحتاج انتباهك',
       'att.allClear': 'لا يوجد ما يحتاج تدخّلاً — كل المؤشرات ضمن الحدود.',
       'att.cat.spec': 'خارج المعيار',
@@ -626,6 +651,31 @@
       'zn.totalCM': 'Total zinc consumed',
       'zn.avgPct': 'Average consumption',
       'zn.outside': 'Days outside limit',
+      'rep.button': 'Export bath report (Excel)',
+      'rep.hint': 'Produces the approved report template, filled with the current readings for tanks 1-10.',
+      'rep.title': 'BATH STATUS REPORT',
+      'rep.date': 'REPORT DATE',
+      'rep.results': 'DAILY TEST RESULTS',
+      'rep.col.tank': 'Tank No.',
+      'rep.col.name': 'Tank Name',
+      'rep.col.readings': 'Readings',
+      'rep.col.status': 'Status',
+      'rep.tankNo': 'Tank {n}',
+      'rep.summaryHead': 'SUMMARY',
+      'rep.summary': 'Out of {n} process baths: {ok} within standard, {warn} require monitoring, {crit} outside the critical limit.',
+      'rep.preparedBy': 'PREPARED BY',
+      'rep.preparerName': 'Eng.Mohammed Alshehri\nChemical Engineer',
+      'rep.st.ok': 'In Service',
+      'rep.st.warn': 'In Service – Monitor',
+      'rep.st.crit': 'Out of Limit – Action Required',
+      'rep.st.out': 'Out of Service',
+      'rep.st.maint': 'Under Maintenance',
+      'rep.st.noData': 'No Reading',
+      'rep.working': 'Building the report…',
+      'rep.done': 'Report created with {n} tanks.',
+      'rep.failed': 'Could not build the report:',
+      'rep.noTanks': 'No tank data to export.',
+      'rep.unsupported': 'This browser cannot build the file — use a recent Chrome or Safari.',
       'att.title': 'Needs your attention',
       'att.allClear': 'Nothing needs action — every indicator is within limits.',
       'att.cat.spec': 'Outside standard',
@@ -1090,8 +1140,18 @@
     apply();
   }
 
+  /** Look a key up in a specific language — used by exported documents, which
+      must read the same whatever language the operator is browsing in. */
+  function tIn(l, key, vars) {
+    let s = (DICT[l] && DICT[l][key]);
+    if (s == null) s = (DICT.en[key] != null ? DICT.en[key] : (DICT.ar[key] != null ? DICT.ar[key] : key));
+    if (vars) Object.keys(vars).forEach(k => { s = s.split('{' + k + '}').join(vars[k]); });
+    return s;
+  }
+
   window.I18N = {
     t: t,
+    tIn: tIn,
     set: set,
     apply: apply,
     applyStatic: applyStatic,

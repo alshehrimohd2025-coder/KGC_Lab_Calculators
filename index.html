@@ -1052,6 +1052,13 @@ html[dir="rtl"] .std-table td.std-cell { text-align: right; }
   <!-- Tanks Cards View -->
   <div class="tanks-grid" id="tanks-container"></div>
 
+  <!-- one-click report in the lab's own template, filled with today's readings -->
+  <div class="rep-bar">
+    <button class="btn" id="rep-export" data-i18n="rep.button">تصدير تقرير الأحواض (Excel)</button>
+    <span class="rep-hint" data-i18n="rep.hint">يُنشئ نفس نموذج التقرير المعتمد، معبّأً بقراءات الأحواض ١–١٠ الحالية.</span>
+    <span id="rep-msg"></span>
+  </div>
+
   <!-- Operating standards — a concise reference of each tank's target ranges -->
   <p class="panel-label" data-i18n="tanks.stdTitle" style="margin:24px 0 10px">معايير التشغيل — النطاق المرجعي</p>
   <div class="tanks-table-container">
@@ -2552,6 +2559,8 @@ html:not(.authed) .spec-view-note{display:block}
 <script src="lab.js"></script>
 <script src="zinc.js"></script>
 <script src="attention.js"></script>
+<script src="report_template.js"></script>
+<script src="report.js"></script>
 <script src="flux.js"></script>
 
 </body>
