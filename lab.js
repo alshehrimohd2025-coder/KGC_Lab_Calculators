@@ -480,6 +480,22 @@
     lifeEstimate: lifeEstimate,
     render: renderAllLab,
     _readings: () => readings,
-    _renewals: () => renewals
+    _renewals: () => renewals,
+    /* The effective inventory, not just the stored overrides: an item nobody
+       has edited yet still has the level the inventory page shows for it, and
+       anything reading stock needs to see the same number the operator does. */
+    _inventory: function () {
+      const out = {};
+      DEFAULT_INVENTORY.forEach(function (d) {
+        const saved = inventory[d.key] || {};
+        out[d.key] = {
+          qty: saved.qty != null ? Number(saved.qty) : d.qty,
+          min: saved.min != null ? Number(saved.min) : d.min,
+          unit: d.unit
+        };
+      });
+      Object.keys(inventory).forEach(function (k) { if (!out[k]) out[k] = inventory[k]; });
+      return out;
+    }
   };
 })();
