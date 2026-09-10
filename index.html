@@ -1299,6 +1299,20 @@ function readingAgeHTML(tank) {
   return '<div class="tank-age' + cls + '" title="' + info.date + '">' + txt + '</div>';
 }
 
+/* When the bath itself was last changed — an old charge explains a drifting
+   reading far better than the reading does on its own. */
+function bathAgeHTML(tank) {
+  const L = window.KGCLab;
+  if (!L || !L.lastChange) return '';
+  const info = L.lastChange(tank.id);
+  if (!info) return '';
+  const cls = info.days >= 120 ? ' bad' : info.days >= 60 ? ' warn' : '';
+  const label = info.type === 'cleaning' ? t('tank.lastClean') : t('tank.lastChange');
+  return '<div class="tank-bath' + cls + '" title="' + info.date +
+    (info.note ? ' — ' + info.note.replace(/"/g, '') : '') + '">' +
+    label + ' <b>' + info.date + '</b> · ' + t('tank.ageDays', { n: info.days }) + '</div>';
+}
+
 function standardsFlagHTML(tank) {
   const SP = window.KGCSpecs;
   if (!SP || !SP.hasSpec(tank.id)) return '';
@@ -1333,6 +1347,7 @@ function renderCards() {
       </div>
       <div class="tank-name">${tankLabel(tank.name)}</div>
       <div class="tank-data">${tankDataRowsHTML(tank)}</div>
+      ${bathAgeHTML(tank)}
       ${readingAgeHTML(tank)}
       ${standardsFlagHTML(tank)}
       <select class="status-select" style="background:${color}1a; border-color:${color}59; color:${color};" onchange="setStatus(${tank.id}, this.value)">
@@ -2517,11 +2532,18 @@ html:not(.authed) .spec-view-note{display:block}
   <section class="lab-section">
     <div class="sechead"><span class="secnum">٣</span><h2 class="sectitle" data-i18n="lab.rn.title">سجل التجديد والإضافات</h2></div>
     <p class="secsub" data-i18n="lab.rn.sub">سجّل تجديد الحوض أو إضافة الحمض — التجديد يعيد حساب اتجاه الحديد من تاريخه.</p>
+    <div class="zn-upload" id="sched-upload">
+      <input type="file" id="sched-file" accept=".xlsx">
+      <span class="rep-hint" data-i18n="sched.hint">ارفع ملف جدول تغيير الأحواض (Acid tank Schedules) — تُقرأ كل السنوات وتُسجَّل تواريخ التغيير تلقائياً.</span>
+      <span id="sched-status"></span>
+    </div>
+
     <div class="lab-form" id="lab-renewal-form">
       <div><label data-i18n="lab.col.tank">الحوض</label><select id="lab-rn-tank"></select></div>
       <div><label data-i18n="lab.col.type">النوع</label><select id="lab-rn-type">
         <option value="renewal" data-i18n="lab.type.renewal">تجديد كامل</option>
         <option value="addition" data-i18n="lab.type.addition">إضافة حمض</option>
+        <option value="cleaning" data-i18n="lab.type.cleaning">تنظيف الحوض</option>
       </select></div>
       <div><label data-i18n="lab.col.date">التاريخ</label><input type="date" id="lab-rn-date"></div>
       <div><label data-i18n="lab.col.qty">الكمية (لتر)</label><input type="number" id="lab-rn-qty" step="1" placeholder="0"></div>
@@ -2561,6 +2583,7 @@ html:not(.authed) .spec-view-note{display:block}
 <script src="attention.js"></script>
 <script src="report_template.js"></script>
 <script src="report.js"></script>
+<script src="schedule.js"></script>
 <script src="flux.js"></script>
 
 </body>

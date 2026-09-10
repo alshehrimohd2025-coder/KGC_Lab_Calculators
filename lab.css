@@ -346,3 +346,17 @@ tr.zn-masked { background: color-mix(in srgb, var(--warn) 5%, transparent); }
 /* viewers get the readings, not the paperwork */
 html:not(.authed) .rep-bar,
 .mode-view .rep-bar { display: none; }
+
+/* bath age on the tank card — how long the current charge has been in */
+.tank-bath {
+  margin: 0 10px 4px; text-align: center;
+  font-size: 10.5px; color: var(--ink-3); line-height: 1.5;
+}
+.tank-bath b { font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.tank-bath.warn { color: var(--warn); }
+.tank-bath.warn b { color: var(--warn); }
+.tank-bath.bad { color: var(--crit); }
+.tank-bath.bad b { color: var(--crit); }
+.pill-cleaning { background: var(--recess); color: var(--ink-2); border: 1px solid var(--line-strong); }
+html:not(.authed) #sched-upload,
+.mode-view #sched-upload { display: none; }

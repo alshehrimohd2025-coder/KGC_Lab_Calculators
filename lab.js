@@ -132,13 +132,36 @@
 
   /* ---------------- 2/3. trend + life ---------------- */
 
+  /* A flux clean-out strips the iron just as a renewal does, so both start a
+     fresh bath cycle; a top-up addition does not. */
+  const RESETS_BATH = { renewal: 1, cleaning: 1 };
+
   function lastRenewalDay(tankId) {
     let latest = null;
     Object.values(renewals).forEach(function (r) {
-      if (!r || Number(r.tankId) !== tankId || r.type !== 'renewal') return;
+      if (!r || Number(r.tankId) !== tankId || !RESETS_BATH[r.type]) return;
       if (!latest || r.date > latest) latest = r.date;
     });
     return latest;
+  }
+
+  /** When this bath was last changed, and how many days ago. */
+  function lastChange(tankId) {
+    let best = null;
+    Object.values(renewals).forEach(function (r) {
+      if (!r || Number(r.tankId) !== tankId || !RESETS_BATH[r.type]) return;
+      if (!best || r.date > best.date) best = r;
+    });
+    if (!best) return null;
+    const then = new Date(best.date + 'T00:00:00');
+    const today = new Date(dayKey() + 'T00:00:00');
+    if (isNaN(then)) return null;
+    return {
+      date: best.date,
+      days: Math.max(0, Math.round((today - then) / 86400000)),
+      type: best.type,
+      note: best.note || ''
+    };
   }
 
   /** Readings for one tank, ascending, limited to the current bath cycle. */
@@ -438,7 +461,12 @@
     // the tank cards show reading freshness, so they need the history too
     if (typeof window.renderTanksAll === 'function') window.renderTanksAll();
   });
-  database.ref('renewals').on('value', s => { renewals = s.val() || {}; renderTrends(); renderLife(); renderRenewals(); });
+  database.ref('renewals').on('value', s => {
+    renewals = s.val() || {};
+    renderTrends(); renderLife(); renderRenewals();
+    // the tank cards carry the bath age, so they follow this log
+    if (typeof window.renderTanksAll === 'function') window.renderTanksAll();
+  });
   database.ref('inventory').on('value', s => { inventory = s.val() || {}; renderInventory(); });
   database.ref('tanks_data').on('value', function () { renderTrends(); renderLife(); renderRenewals(); wireForm(); });
 
@@ -448,6 +476,7 @@
   window.KGCLab = {
     captureReadings: captureReadings,
     daysSinceReading: daysSinceReading,
+    lastChange: lastChange,
     lifeEstimate: lifeEstimate,
     render: renderAllLab,
     _readings: () => readings,
