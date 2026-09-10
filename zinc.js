@@ -233,9 +233,13 @@
       rec.nightPct = pct(get('night', 'consPct'));
       rec.totalPct = pct(get('total', 'consPct'));
 
-      // Only keep days that actually have production — the template ships
-      // pre-filled with zeros for the whole month.
-      if (rec.totalTon > 0 || rec.dayTon > 0 || rec.nightTon > 0) out[date] = rec;
+      /* Keep any day that carries a figure, not just a day that produced.
+         The template ships pre-filled with zeros for the whole month, which
+         is what this filter is for — but dross is pulled during the weekly
+         maintenance stop, on precisely the days that produce nothing, so a
+         production-only test threw those readings away. */
+      if (rec.totalTon > 0 || rec.dayTon > 0 || rec.nightTon > 0 ||
+          rec.dross > 0 || rec.release > 0 || rec.totalCM > 0) out[date] = rec;
     });
     return { period: period, days: out };
   }

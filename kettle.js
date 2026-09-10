@@ -77,19 +77,31 @@
   const bathList = () => Object.keys(bath).map(k => Object.assign({ _k: k }, bath[k]))
     .filter(x => x && x.date).sort((a, b) => a.date < b.date ? 1 : -1);
 
-  /** Dross as a share of zinc consumed, from the production import. */
+  /* Dross is reported two ways because they answer different questions.
+     As a share of the zinc consumed it says how much of the zinc bought ends
+     up as dross rather than on the steel. Per tonne of steel it is the figure
+     that compares across plants, since it does not move with how thick the
+     coating happens to be. The production rows are in kilograms. */
+  const DROSS_KG_PER_T_OK = 3.0;
+
   function drossRate() {
     const Z = window.KGCZinc;
     if (!Z || !Z._days) return null;
     const days = Object.values(Z._days() || {});
-    let dross = 0, consumed = 0;
+    let dross = 0, consumed = 0, producedKg = 0;
     days.forEach(function (d) {
       if (!d) return;
       dross += Number(d.dross) || 0;
-      consumed += Number(d.release) || 0;      // zinc actually added to the kettle
+      consumed += Number(d.release) || 0;      // zinc released onto the product
+      producedKg += Number(d.totalTon) || 0;
     });
     if (!consumed) return null;
-    return { dross: dross, consumed: consumed, pct: dross / consumed * 100 };
+    const tonnes = producedKg / 1000;
+    return {
+      dross: dross, consumed: consumed, tonnes: tonnes,
+      pct: dross / consumed * 100,
+      perTonne: tonnes ? dross / tonnes : null
+    };
   }
 
   /** Calibration status of one instrument. */
@@ -166,8 +178,10 @@
     const drossBlock = dr
       ? '<div class="pt-stats">' +
           stat(t('kettle.dross.rate'), dr.pct.toFixed(2), '%', dr.pct > DROSS_OK) +
-          stat(t('kettle.dross.total'), Math.round(dr.dross).toLocaleString()) +
-          stat(t('kettle.dross.zinc'), Math.round(dr.consumed).toLocaleString()) +
+          stat(t('kettle.dross.perT'), dr.perTonne == null ? '—' : dr.perTonne.toFixed(2), 'kg/t',
+               dr.perTonne != null && dr.perTonne > DROSS_KG_PER_T_OK) +
+          stat(t('kettle.dross.total'), Math.round(dr.dross).toLocaleString(), 'kg') +
+          stat(t('kettle.dross.zinc'), Math.round(dr.consumed).toLocaleString(), 'kg') +
         '</div>' +
         (dr.dross === 0
           ? '<div class="zn-note">' + esc(t('kettle.dross.none')) + '</div>'
