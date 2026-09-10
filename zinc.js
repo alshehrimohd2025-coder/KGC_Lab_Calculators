@@ -28,6 +28,16 @@
 
   let days = {};   // 'YYYY-MM-DD' -> {dayTon, nightTon, totalTon, dayPct, nightPct, totalPct, ...}
 
+  /* The report's "Tonnage" rows are kilograms despite the name: a month
+     reading 1.8 million cannot be tonnes, the zinc added divides into it at
+     the consumption percentage the same sheet reports, and it puts a jig at
+     about a tonne. The stored records keep the sheet's own numbers, so old
+     and new imports stay consistent; the conversion happens here, on the way
+     to the screen. Output per jig stays in kg, which is what a jig load is. */
+  const KG_PER_TONNE = 1000;
+  const toT = kg => (Number(kg) || 0) / KG_PER_TONNE;
+  const fmtT = kg => toT(kg).toLocaleString(undefined, { maximumFractionDigits: 1 });
+
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -334,7 +344,7 @@
       const col = tr ? 'var(' + TIER_VAR[tr] + ')' : 'var(--ink-3)';
       const tip = '<b>' + p.d.date + '</b>' +
         '<i>' + esc(t('zn.legend.pct')) + ': ' + (p.d.totalPct || 0).toFixed(2) + '% · ' + (tr ? esc(t('zn.tier.' + tr)) : '—') + '</i>' +
-        '<i>' + esc(t('zn.legend.ton')) + ': ' + (p.d.totalTon || 0).toLocaleString() + ' ' + esc(t('mgr.ton')) + '</i>';
+        '<i>' + esc(t('zn.legend.ton')) + ': ' + fmtT(p.d.totalTon) + ' ' + esc(t('mgr.ton')) + '</i>';
       // dot + hit grouped, so hovering anywhere in the group grows this dot
       return '<g class="pt-g">' +
         '<circle class="pt-dot" r="4" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) +
@@ -351,9 +361,9 @@
       : '';
     const tdots = tpts.map(function (p) {
       const tip = '<b>' + p.d.date + '</b>' +
-        '<i>' + esc(t('zn.legend.ton')) + ': ' + (p.d.totalTon || 0).toLocaleString() + ' ' + esc(t('mgr.ton')) + '</i>' +
-        '<i>' + esc(t('zn.col.dayTon')) + ' ' + (p.d.dayTon || 0).toLocaleString() +
-          ' · ' + esc(t('zn.col.nightTon')) + ' ' + (p.d.nightTon || 0).toLocaleString() + '</i>' +
+        '<i>' + esc(t('zn.legend.ton')) + ': ' + fmtT(p.d.totalTon) + ' ' + esc(t('mgr.ton')) + '</i>' +
+        '<i>' + esc(t('zn.col.dayTon')) + ' ' + fmtT(p.d.dayTon) +
+          ' · ' + esc(t('zn.col.nightTon')) + ' ' + fmtT(p.d.nightTon) + '</i>' +
         '<i>' + esc(t('zn.legend.pct')) + ': ' + (p.d.totalPct || 0).toFixed(2) + '%</i>';
       // square marker to tell it apart from the round % dots at a glance
       return '<g class="pt-g">' +
@@ -500,9 +510,9 @@
       return '<tr' + (masked ? ' class="zn-masked"' : '') + '>' +
         '<td class="num">' + esc(d.date) +
           (masked ? ' <span class="zn-flag" title="' + esc(t('zn.maskedHint')) + '">!</span>' : '') + '</td>' +
-        '<td class="num">' + (d.dayTon || 0).toLocaleString() + '</td>' +
-        '<td class="num">' + (d.nightTon || 0).toLocaleString() + '</td>' +
-        '<td class="num">' + (d.totalTon || 0).toLocaleString() + '</td>' +
+        '<td class="num">' + fmtT(d.dayTon) + '</td>' +
+        '<td class="num">' + fmtT(d.nightTon) + '</td>' +
+        '<td class="num">' + fmtT(d.totalTon) + '</td>' +
         '<td class="num">' + (jigs ? (d.dayJigs || 0) + ' / ' + (d.nightJigs || 0) : '—') + '</td>' +
         '<td class="num">' + (pj ? Math.round(pj).toLocaleString() : '—') + '</td>' +
         '<td>' + pill(d.dayPct) + '</td>' +
@@ -514,7 +524,7 @@
     mount.innerHTML =
       '<div class="pt-stats">' +
         stat(t('zn.days'), list.length) +
-        stat(t('zn.totalTon'), Math.round(totTon).toLocaleString()) +
+        stat(t('zn.totalTon'), fmtT(totTon), t('mgr.ton')) +
         stat(t('zn.totalCM'), totCM.toFixed(2)) +
         stat(t('zn.avgPct'), mean.toFixed(2), '%', tier(mean) !== 'ok') +
         stat(t('zn.outside'), outside, '', outside > 0) +
@@ -558,7 +568,8 @@
      Managers only ever see the tanks page, so the production figures have to
      come to them there rather than living on a page they can't open. */
 
-  const shortTon = v => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(Math.round(v));
+  // bars are drawn from the raw kg but always labelled in tonnes
+  const shortTon = kg => { const t = toT(kg); return t >= 1000 ? (t / 1000).toFixed(1) + 'k' : t.toFixed(t < 10 ? 1 : 0); };
 
   function tonnageChart(list) {
     if (!list.length) return '';
@@ -586,9 +597,9 @@
       const val = d.totalTon || 0;
       const y = Y(val), h = Math.max(1, PT + ih - y);
       const tip = '<b>' + d.date + '</b>' +
-        '<i>' + esc(t('mgr.tonChart')) + ': ' + val.toLocaleString() + '</i>' +
-        '<i>' + esc(t('zn.col.dayTon')) + ' ' + (d.dayTon || 0).toLocaleString() +
-        ' · ' + esc(t('zn.col.nightTon')) + ' ' + (d.nightTon || 0).toLocaleString() + '</i>' +
+        '<i>' + esc(t('mgr.tonChart')) + ': ' + fmtT(val) + ' ' + esc(t('mgr.ton')) + '</i>' +
+        '<i>' + esc(t('zn.col.dayTon')) + ' ' + fmtT(d.dayTon) +
+        ' · ' + esc(t('zn.col.nightTon')) + ' ' + fmtT(d.nightTon) + '</i>' +
         '<i>' + esc(t('zn.avgPct')) + ': ' + (d.totalPct || 0).toFixed(2) + '%</i>';
       const showDate = i % every === 0 || i === list.length - 1;
       return '<g class="bar-g">' +
@@ -693,8 +704,8 @@
       '<div class="sechead"><span class="secnum">٢</span><h2 class="sectitle">' + esc(t('mgr.title')) + '</h2></div>' +
       '<p class="secsub">' + esc(t('mgr.sub')) + '</p>' +
       '<div class="pt-stats">' +
-        stat(t('mgr.lastDay'), (last.totalTon || 0).toLocaleString(), t('mgr.ton')) +
-        stat(t('zn.totalTon'), Math.round(totTon).toLocaleString(), t('mgr.ton')) +
+        stat(t('mgr.lastDay'), fmtT(last.totalTon), t('mgr.ton')) +
+        stat(t('zn.totalTon'), fmtT(totTon), t('mgr.ton')) +
         stat(t('zn.avgPct'), mean.toFixed(2), '%', tier(mean) !== 'ok') +
         stat(t('mgr.lastPct'), (last.totalPct || 0).toFixed(2), '%', tier(last.totalPct) !== 'ok') +
       '</div>' +
