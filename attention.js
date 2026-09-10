@@ -192,6 +192,23 @@
     });
   }
 
+  /** Baths past, or close to, their usual replacement interval. */
+  function dueForChange() {
+    const F = window.KGCForecast;
+    if (!F || !F.overdue) return [];
+    return F.overdue().map(function (o) {
+      return {
+        cat: 'forecast',
+        sev: o.tier === 'crit' ? 2 : 1,
+        icon: '⟳',
+        title: o.name,
+        detail: o.tier === 'crit'
+          ? t('att.fcOverdue', { m: o.mean, n: o.since })
+          : t('att.fcSoon', { d: o.due })
+      };
+    });
+  }
+
   /* ---------------- rendering ---------------- */
 
   function render() {
@@ -199,7 +216,7 @@
     if (!mount) return;
 
     let items = [];
-    [outOfSpec, staleReadings, zincBreaches, stuckBatches, lowStock, bathLife, calibration]
+    [outOfSpec, staleReadings, zincBreaches, stuckBatches, lowStock, bathLife, calibration, dueForChange]
       .forEach(function (fn) { try { items = items.concat(fn() || []); } catch (e) { console.warn('[attention]', e); } });
 
     if (!items.length) {
@@ -212,7 +229,7 @@
     const acts = items.filter(i => i.sev === 2).length;
 
     // grouped so one tank appearing under two headings still reads clearly
-    const ORDER = ['spec', 'zinc', 'life', 'batch', 'stale', 'stock', 'calib'];
+    const ORDER = ['spec', 'zinc', 'life', 'forecast', 'batch', 'stale', 'stock', 'calib'];
     const groups = ORDER.map(function (c) {
       return { cat: c, list: items.filter(i => i.cat === c) };
     }).filter(g => g.list.length);

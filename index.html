@@ -2200,19 +2200,25 @@ html:not(.authed) .spec-view-note{display:block}
 <div id="page-lab" class="app-page wrap">
 
   <section class="lab-section">
-    <div class="sechead"><span class="secnum">١</span><h2 class="sectitle" data-i18n="lab.trend.title">اتجاه الحديد الذائب</h2></div>
+    <div class="sechead"><span class="secnum">١</span><h2 class="sectitle" data-i18n="fc.title">توقّع مواعيد التغيير</h2></div>
+    <p class="secsub" data-i18n="fc.sub">مبني على فترات التغيير المسجّلة منذ 2023 — الموعد المتوقع هو آخر تغيير زائد متوسط الفترة، ونطاق الثقة من تشتّت الفترات نفسها.</p>
+    <div id="forecast-body"></div>
+  </section>
+
+  <section class="lab-section">
+    <div class="sechead"><span class="secnum">٢</span><h2 class="sectitle" data-i18n="lab.trend.title">اتجاه الحديد الذائب</h2></div>
     <p class="secsub" data-i18n="lab.trend.sub">يُرسم من قراءاتكم اليومية، ويبدأ من آخر تجديد للحوض — التجديد يعيد الحمام لنقطة الصفر.</p>
     <div id="lab-trends"></div>
   </section>
 
   <section class="lab-section">
-    <div class="sechead"><span class="secnum">٢</span><h2 class="sectitle" data-i18n="lab.life.title">العمر المتبقي التقديري</h2></div>
+    <div class="sechead"><span class="secnum">٣</span><h2 class="sectitle" data-i18n="lab.life.title">العمر المتبقي التقديري</h2></div>
     <p class="secsub" data-i18n="lab.life.sub">تقدير إحصائي من معدل ارتفاع الحديد — يظهر فقط عند توفر قراءات كافية.</p>
     <div class="lab-life-grid" id="lab-life"></div>
   </section>
 
   <section class="lab-section">
-    <div class="sechead"><span class="secnum">٣</span><h2 class="sectitle" data-i18n="lab.rn.title">سجل التجديد والإضافات</h2></div>
+    <div class="sechead"><span class="secnum">٤</span><h2 class="sectitle" data-i18n="lab.rn.title">سجل التجديد والإضافات</h2></div>
     <p class="secsub" data-i18n="lab.rn.sub">سجّل تجديد الحوض أو إضافة الحمض — التجديد يعيد حساب اتجاه الحديد من تاريخه.</p>
     <div class="zn-upload" id="sched-upload">
       <input type="file" id="sched-file" accept=".xlsx">
@@ -2236,7 +2242,7 @@ html:not(.authed) .spec-view-note{display:block}
   </section>
 
   <section class="lab-section">
-    <div class="sechead"><span class="secnum">٤</span><h2 class="sectitle" data-i18n="lab.inv.title">المخزون الكيميائي</h2></div>
+    <div class="sechead"><span class="secnum">٥</span><h2 class="sectitle" data-i18n="lab.inv.title">المخزون الكيميائي</h2></div>
     <p class="secsub" data-i18n="lab.inv.sub">حدّث الكمية بعد كل استلام أو صرف — التنبيه يظهر تلقائياً عند بلوغ الحد الأدنى.</p>
     <div class="lab-inv-grid" id="lab-inventory"></div>
   </section>
@@ -2267,6 +2273,7 @@ html:not(.authed) .spec-view-note{display:block}
 <script src="report.js"></script>
 <script src="schedule.js"></script>
 <script src="coating.js"></script>
+<script src="forecast.js"></script>
 <script src="kettle.js"></script>
 <script src="cost.js"></script>
 <script src="flux.js"></script>
