@@ -149,6 +149,9 @@
      lose rows without breaking the import. */
   const WANTED = [
     { key: 'jigs',    re: /^jigs$/i },
+    { key: 'znOpen',  re: /^zinc\s*opening$/i },
+    { key: 'actOpen', re: /^actual\s*opening$/i },
+    { key: 'actClose',re: /^actual\s*closing$/i },
     { key: 'ton',     re: /^tonnage$/i },
     { key: 'consCM',  re: /^consumption\s*cm$/i },
     { key: 'consPct', re: /^consumption\s*%$/i },
@@ -203,7 +206,14 @@
         nightCM: get('night', 'consCM'),
         totalCM: get('total', 'consCM'),
         dross: get('total', 'dross'),
-        release: get('total', 'release')
+        release: get('total', 'release'),
+        // bath level, theoretical vs measured — the basis of the reconciliation
+        dayZnOpen: get('day', 'znOpen'),
+        dayActOpen: get('day', 'actOpen'),
+        dayActClose: get('day', 'actClose'),
+        nightZnOpen: get('night', 'znOpen'),
+        nightActOpen: get('night', 'actOpen'),
+        nightActClose: get('night', 'actClose')
       };
       rec.totalTon = get('total', 'totTon') || (rec.dayTon + rec.nightTon);
 
@@ -379,6 +389,67 @@
     return jigs ? ton / jigs : 0;
   }
 
+  /* ---------------- zinc reconciliation ----------------
+     The report records a theoretical opening level for each shift alongside
+     the level actually measured. Where they part company is zinc that left
+     the kettle without being booked — the figure that goes unnoticed while
+     only consumption % is watched. */
+
+  function reconcile(list) {
+    const rows = [];
+    list.forEach(function (d) {
+      [['day', d.dayZnOpen, d.dayActOpen], ['night', d.nightZnOpen, d.nightActOpen]].forEach(function (p) {
+        const theo = num(p[1]), act = num(p[2]);
+        if (!theo || !act) return;            // shift not recorded
+        rows.push({ date: d.date, shift: p[0], theo: theo, act: act, diff: act - theo });
+      });
+    });
+    if (!rows.length) return null;
+
+    const diffs = rows.map(r => r.diff);
+    const net = diffs.reduce((s, v) => s + v, 0);
+    const absSum = diffs.reduce((s, v) => s + Math.abs(v), 0);
+    const worst = rows.slice().sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff))[0];
+    return { rows: rows, net: net, absSum: absSum, mean: net / rows.length, worst: worst };
+  }
+
+  function reconcileHTML(list) {
+    const r = reconcile(list);
+    if (!r) return '';
+    const stat = (k, v, unit, hot) =>
+      '<div class="pt-stat' + (hot ? ' hot' : '') + '"><span class="k">' + esc(k) + '</span>' +
+      '<span class="v">' + v + (unit ? '<small>' + esc(unit) + '</small>' : '') + '</span></div>';
+    const sign = v => (v > 0 ? '+' : '') + v.toFixed(2);
+    // a persistent one-way gap matters more than noise that cancels out
+    const biased = Math.abs(r.net) > r.absSum * 0.5 && Math.abs(r.net) > 1;
+
+    const worstRows = r.rows.slice().sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff)).slice(0, 8);
+    return '<p class="panel-label" style="margin:26px 0 10px">' + esc(t('zn.rec.title')) + '</p>' +
+      '<div class="pt-stats">' +
+        stat(t('zn.rec.shifts'), r.rows.length) +
+        stat(t('zn.rec.net'), sign(r.net), 'cm', biased) +
+        stat(t('zn.rec.mean'), sign(r.mean), 'cm') +
+        stat(t('zn.rec.gross'), r.absSum.toFixed(2), 'cm') +
+      '</div>' +
+      '<div class="zn-note" style="' + (biased ? '' : 'color:var(--ink-3);background:var(--recess);border-color:var(--line)') + '">' +
+        esc(biased ? t('zn.rec.biased', { d: sign(r.net) }) : t('zn.rec.balanced')) + '</div>' +
+      '<div class="tablewrap"><table><thead><tr>' +
+        '<th>' + esc(t('zn.col.date')) + '</th><th>' + esc(t('zn.rec.shift')) + '</th>' +
+        '<th>' + esc(t('zn.rec.theo')) + '</th><th>' + esc(t('zn.rec.act')) + '</th>' +
+        '<th>' + esc(t('zn.rec.diff')) + '</th>' +
+      '</tr></thead><tbody>' +
+      worstRows.map(function (x) {
+        const col = Math.abs(x.diff) >= 0.5 ? (x.diff < 0 ? 'var(--crit)' : 'var(--warn)') : 'var(--ink)';
+        return '<tr>' +
+          '<td class="num">' + esc(x.date) + '</td>' +
+          '<td>' + esc(t(x.shift === 'day' ? 'zn.shift.day' : 'zn.shift.night')) + '</td>' +
+          '<td class="num">' + x.theo.toFixed(2) + '</td>' +
+          '<td class="num">' + x.act.toFixed(2) + '</td>' +
+          '<td class="num" style="color:' + col + '">' + sign(x.diff) + '</td>' +
+        '</tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+
   function render() {
     const mount = document.getElementById('zn-body');
     if (!mount) return;
@@ -477,7 +548,8 @@
         '<th>' + esc(t('zn.col.dayPct')) + '</th>' +
         '<th>' + esc(t('zn.col.nightPct')) + '</th>' +
         '<th>' + esc(t('zn.col.totalPct')) + '</th>' +
-      '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      reconcileHTML(list);
 
     attachChartTips(mount);
   }
@@ -661,5 +733,5 @@
   // keep the "elapsed" column honest without redrawing the charts
   setInterval(renderOverview, 60000);
 
-  window.KGCZinc = { _days: () => days, render: renderAll, _buildDays: buildDays, _readWorkbook: readWorkbook };
+  window.KGCZinc = { _days: () => days, reconcile: reconcile, render: renderAll, _buildDays: buildDays, _readWorkbook: readWorkbook };
 })();
