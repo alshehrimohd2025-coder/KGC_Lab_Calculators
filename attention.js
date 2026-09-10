@@ -209,6 +209,22 @@
     });
   }
 
+  /** Parameters the plant has no instrument for. Reported on its own, because
+      the action is procurement, not process — and management should see the
+      difference rather than read it as the line running out of control. */
+  function noInstrument() {
+    const SP = window.KGCSpecs;
+    if (!SP || !SP.unavailable || typeof tanks === 'undefined') return [];
+    return SP.unavailable().map(function (u) {
+      const tk = tanks.find(x => x.id === u.tankId);
+      return {
+        cat: 'noinst', sev: 1, icon: '⌀',
+        title: tk ? tankLabel(tk.name) : String(u.tankId),
+        detail: t('att.noInstrument', { p: u.params.join(' · ') })
+      };
+    });
+  }
+
   /* ---------------- rendering ---------------- */
 
   function render() {
@@ -216,7 +232,7 @@
     if (!mount) return;
 
     let items = [];
-    [outOfSpec, staleReadings, zincBreaches, stuckBatches, lowStock, bathLife, calibration, dueForChange]
+    [outOfSpec, staleReadings, zincBreaches, stuckBatches, lowStock, bathLife, calibration, dueForChange, noInstrument]
       .forEach(function (fn) { try { items = items.concat(fn() || []); } catch (e) { console.warn('[attention]', e); } });
 
     if (!items.length) {
@@ -229,7 +245,7 @@
     const acts = items.filter(i => i.sev === 2).length;
 
     // grouped so one tank appearing under two headings still reads clearly
-    const ORDER = ['spec', 'zinc', 'life', 'forecast', 'batch', 'stale', 'stock', 'calib'];
+    const ORDER = ['spec', 'zinc', 'life', 'forecast', 'batch', 'stale', 'stock', 'calib', 'noinst'];
     const groups = ORDER.map(function (c) {
       return { cat: c, list: items.filter(i => i.cat === c) };
     }).filter(g => g.list.length);

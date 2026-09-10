@@ -72,6 +72,13 @@
 
   const EDITABLE = ['min', 'max', 'critMin', 'critMax', 'optimum'];
 
+  /* A parameter the plant has no instrument for is not a bath running out of
+     spec — it is a measurement that cannot be taken. Reporting the two the
+     same way blames the process for a procurement gap, and buries the real
+     breaches among readings that were never possible to make. This flag keeps
+     them apart, and is stored per parameter alongside the limits. */
+  const FLAGS = ['unavailable'];
+
   let overrides = {};   // tankId -> [param, ...]
 
   const esc = s => String(s == null ? '' : s)
@@ -91,6 +98,7 @@
         if (hit[f] !== undefined && hit[f] !== null && hit[f] !== '') merged[f] = Number(hit[f]);
         else if (hit[f] === null) delete merged[f];
       });
+      FLAGS.forEach(function (f) { merged[f] = !!hit[f]; });
       return merged;
     });
   }
@@ -99,6 +107,7 @@
 
   /** Compare one reading against its parameter limits. */
   function evaluate(value, p) {
+    if (p && p.unavailable) return { tier: 'na' };
     const v = Number(value);
     if (!isFinite(v) || value === null || value === '' || v === 0) return { tier: 'none' };
     if (p.critMax != null && v >= p.critMax) return { tier: 'crit' };
@@ -116,7 +125,7 @@
     let worst = null;
     paramsFor(tank.id).forEach(function (p) {
       const r = evaluate(tank[p.key], p);
-      if (r.tier === 'none') return;
+      if (r.tier === 'none' || r.tier === 'na') return;
       if (!worst || RANK[r.tier] > RANK[worst.tier]) worst = r;
     });
     return worst;
@@ -140,10 +149,13 @@
     return '';
   }
 
-  const TIER_VAR = { good: '--accent', warn: '--warn', crit: '--crit' };
+  const TIER_VAR = { good: '--accent', warn: '--warn', crit: '--crit', na: '--ink-3' };
   const tierColor = tier => TIER_VAR[tier] ? 'var(' + TIER_VAR[tier] + ')' : 'var(--ink-3)';
 
   function badge(tier) {
+    if (tier === 'na') {
+      return '<span class="sp-badge sp-na">' + esc(t('spec.noInstrument')) + '</span>';
+    }
     if (!tier || tier === 'none') {
       return '<span class="sp-badge" style="color:var(--ink-3);border-color:var(--line);background:var(--recess)">' +
         esc(t('spec.noReading')) + '</span>';
@@ -220,9 +232,11 @@
     const fields = ps.map(function (p) {
       const cell = f => '<td><input type="number" step="any" data-key="' + esc(p.key) + '" data-f="' + f +
         '" value="' + (p[f] != null ? p[f] : '') + '" placeholder="—"></td>';
-      return '<tr>' +
+      return '<tr' + (p.unavailable ? ' class="sp-off"' : '') + '>' +
         '<td class="name">' + esc(paramLabel(p.key)) + (p.unit ? ' <small style="color:var(--ink-3)">' + esc(p.unit) + '</small>' : '') + '</td>' +
         cell('min') + cell('max') + cell('critMin') + cell('critMax') + cell('optimum') +
+        '<td><input type="checkbox" data-key="' + esc(p.key) + '" data-f="unavailable"' +
+          (p.unavailable ? ' checked' : '') + ' aria-label="' + esc(t('spec.noInstrument')) + '"></td>' +
       '</tr>';
     }).join('');
 
@@ -238,6 +252,7 @@
         '<th>' + esc(t('spec.min')) + '</th><th>' + esc(t('spec.max')) + '</th>' +
         '<th>' + esc(t('spec.critMin')) + '</th><th>' + esc(t('spec.critMax')) + '</th>' +
         '<th>' + esc(t('spec.optimum')) + '</th>' +
+        '<th title="' + esc(t('spec.noInstrumentHelp')) + '">' + esc(t('spec.noInstrumentCol')) + '</th>' +
       '</tr></thead><tbody>' + fields + '</tbody></table></div>';
 
     const sel = mount.querySelector('#spec-tank');
@@ -252,6 +267,10 @@
           const inp = mount.querySelector('[data-key="' + p.key + '"][data-f="' + f + '"]');
           const v = inp && inp.value !== '' ? Number(inp.value) : null;
           rec[f] = (v != null && isFinite(v)) ? v : null;
+        });
+        FLAGS.forEach(function (f) {
+          const inp = mount.querySelector('[data-key="' + p.key + '"][data-f="' + f + '"]');
+          rec[f] = !!(inp && inp.checked);
         });
         return rec;
       });
@@ -304,6 +323,15 @@
     tierColor: tierColor,
     badge: badge,
     render: renderAll,
+    /** Parameters with no instrument, per tank — a procurement gap, not a breach. */
+    unavailable: function () {
+      const out = [];
+      Object.keys(DEFAULT_SPECS).forEach(function (id) {
+        const miss = paramsFor(Number(id)).filter(p => p.unavailable);
+        if (miss.length) out.push({ tankId: Number(id), params: miss.map(p => paramLabel(p.key)) });
+      });
+      return out;
+    },
     // Fe limits are needed by the bath-health projection
     feLimits: function (tankId) {
       const p = paramsFor(tankId).find(x => x.key === 'fe');

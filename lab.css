@@ -368,3 +368,11 @@ html:not(.authed) #sched-upload,
 }
 .coat-preview b { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .coat-preview:empty { display: none; }
+
+/* a parameter with no instrument reads as pending, never as a breach */
+.sp-badge.sp-na {
+  color: var(--ink-3); background: var(--recess);
+  border: 1px dashed var(--line-strong); font-style: italic;
+}
+tr.sp-off { opacity: .6; }
+tr.sp-off .name { font-style: italic; }
