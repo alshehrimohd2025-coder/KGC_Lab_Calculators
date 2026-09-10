@@ -445,6 +445,7 @@ html[dir="ltr"] .input-label .unit{margin-left:0; margin-right:0}
 .mode-view #page-flux,
 .mode-view #page-timing,
 .mode-view #page-standards,
+.mode-view #page-coating,
 .mode-view #page-lab,
 .mode-view #page-zinc{display:none !important}
 .mode-view #page-tanks{display:block !important}
@@ -537,6 +538,10 @@ html[dir="ltr"] .input-label .unit{margin-left:0; margin-right:0}
     <button type="button" data-page="page-lab" onclick="showAppPage('page-lab', this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l5-5 4 3 6-7"/><path d="M3 21h18"/></svg>
       <span data-i18n="nav.lab">صحة الأحواض</span>
+    </button>
+    <button type="button" data-page="page-coating" onclick="showAppPage('page-coating', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="8" rx="1"/><path d="M3 6h18"/><path d="M7 16v3"/><path d="M17 16v3"/></svg>
+      <span data-i18n="nav.coating">سماكة الطلاء</span>
     </button>
     <button type="button" data-page="page-zinc" onclick="showAppPage('page-zinc', this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18"/><path d="M5 8h14"/><path d="M7 8l-2.5 6a3.5 3.5 0 0 0 5 0L7 8z"/><path d="M17 8l-2.5 6a3.5 3.5 0 0 0 5 0L17 8z"/></svg>
@@ -2515,6 +2520,14 @@ html:not(.authed) .spec-view-note{display:block}
   </section>
 
 </div>
+<div id="page-coating" class="app-page wrap">
+  <section class="lab-section">
+    <div class="sechead"><span class="secnum">١</span><h2 class="sectitle" data-i18n="coat.title">سماكة الطلاء ومطابقة ISO 1461</h2></div>
+    <p class="secsub" data-i18n="coat.sub">سجّل قراءات جهاز السماكة لكل دفعة. يقارنها النظام تلقائياً بحدَّي المعيار — متوسط الدفعة والقراءة الموضعية الدنيا — ويصدر الحكم.</p>
+    <div id="coat-body"></div>
+  </section>
+</div>
+
 <div id="page-lab" class="app-page wrap">
 
   <section class="lab-section">
@@ -2584,6 +2597,7 @@ html:not(.authed) .spec-view-note{display:block}
 <script src="report_template.js"></script>
 <script src="report.js"></script>
 <script src="schedule.js"></script>
+<script src="coating.js"></script>
 <script src="flux.js"></script>
 
 </body>
