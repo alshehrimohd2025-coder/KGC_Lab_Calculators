@@ -84,6 +84,14 @@
      coating happens to be. The production rows are in kilograms. */
   const DROSS_KG_PER_T_OK = 3.0;
 
+  /* The dross is weighed, but roughly: the plant puts the figure at 90-95%
+     accurate. That is carried through to the numbers rather than left out,
+     so the rate is shown as the band it honestly is. The band is worth
+     computing because it answers the only question the uncertainty raises —
+     whether the reading is high enough to matter. It is: even taking the
+     favourable end, the rate stays well clear of the normal range. */
+  const DROSS_ACCURACY = 0.90;
+
   function drossRate() {
     const Z = window.KGCZinc;
     if (!Z || !Z._days) return null;
@@ -97,10 +105,16 @@
     });
     if (!consumed) return null;
     const tonnes = producedKg / 1000;
+    const pct = dross / consumed * 100;
+    const perTonne = tonnes ? dross / tonnes : null;
+    const band = v => (v == null ? null : { lo: v * DROSS_ACCURACY, hi: v / DROSS_ACCURACY });
     return {
       dross: dross, consumed: consumed, tonnes: tonnes,
-      pct: dross / consumed * 100,
-      perTonne: tonnes ? dross / tonnes : null
+      pct: pct, perTonne: perTonne,
+      pctBand: band(pct), perTonneBand: band(perTonne),
+      accuracy: DROSS_ACCURACY,
+      // does the uncertainty reach down into the normal range, or not?
+      aboveNormalEvenAtBest: pct * DROSS_ACCURACY > DROSS_OK
     };
   }
 
@@ -185,9 +199,17 @@
         '</div>' +
         (dr.dross === 0
           ? '<div class="zn-note">' + esc(t('kettle.dross.none')) + '</div>'
-          : dr.pct > DROSS_HIGH
-            ? '<div class="zn-note">' + esc(t('kettle.dross.high', { p: dr.pct.toFixed(1) })) + '</div>'
-            : '')
+          : '<p class="lab-life-sub" style="margin:0 2px 12px">' +
+              esc(t('kettle.dross.band', {
+                a: dr.pctBand.lo.toFixed(2), b: dr.pctBand.hi.toFixed(2),
+                c: dr.perTonneBand.lo.toFixed(2), d: dr.perTonneBand.hi.toFixed(2),
+                acc: Math.round(dr.accuracy * 100)
+              })) + '</p>' +
+            (dr.pct > DROSS_HIGH
+              ? '<div class="zn-note">' + esc(t('kettle.dross.high', { p: dr.pct.toFixed(1) })) +
+                (dr.aboveNormalEvenAtBest ? ' ' + esc(t('kettle.dross.stillHigh', { a: dr.pctBand.lo.toFixed(1) })) : '') +
+                '</div>'
+              : ''))
       : '';
 
     return '<div class="lab-life-grid">' + cards + '</div>' +
