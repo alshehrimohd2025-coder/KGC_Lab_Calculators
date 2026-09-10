@@ -39,8 +39,20 @@
     }
     return { warn: 120, crit: 150 };
   }
-  const MIN_POINTS = 3;                       // below this a slope is noise
-  const MIN_SPAN_DAYS = 5;
+  /* These guards decide when the projection is allowed to speak, and the
+     first version set them far too low. Five points over five days passed,
+     which let the estimate fit a line through what were really data-entry
+     corrections — one tank read 42 g/L then 140 three days later because the
+     number was updated, not because iron rose 98 g/L — and then report the
+     bath as finished. A bath that lives about ninety days needs a window long
+     enough to show a real slope, so the estimate now stays quiet until it has
+     one rather than producing a confident wrong answer. */
+  const MIN_POINTS = 6;                       // below this a slope is noise
+  const MIN_SPAN_DAYS = 14;
+
+  /* A jump this large between consecutive readings is a correction, not
+     chemistry: iron cannot climb that fast in a working bath. */
+  const MAX_DAILY_FE_JUMP = 15;               // g/L per day
 
   const DEFAULT_INVENTORY = [
     { key: 'flux_salt', qty: 2500, min: 1000, unit: 'kg' },
@@ -167,10 +179,26 @@
   /** Readings for one tank, ascending, limited to the current bath cycle. */
   function seriesFor(tankId) {
     const since = lastRenewalDay(tankId);
-    return Object.values(readings)
+    const pts = Object.values(readings)
       .filter(r => r && Number(r.tankId) === tankId && Number(r.fe) > 0)
       .filter(r => !since || r.date >= since)
       .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+
+    /* Drop steps that are physically impossible for a working bath. They are
+       corrections to a previously wrong figure, and leaving them in lets a
+       single keystroke set the slope for the whole projection. The reading is
+       kept in the log either way — it is only excluded from the fit. */
+    const out = [];
+    for (let i = 0; i < pts.length; i++) {
+      if (out.length) {
+        const prev = out[out.length - 1];
+        const gap = Math.max(1, Math.round((dayNum(pts[i].date) - dayNum(prev.date))));
+        const jump = Math.abs(Number(pts[i].fe) - Number(prev.fe)) / gap;
+        if (jump > MAX_DAILY_FE_JUMP) { out.length = 0; out.push(pts[i]); continue; }
+      }
+      out.push(pts[i]);
+    }
+    return out;
   }
 
   /** Least-squares fit of Fe against day number. */
@@ -212,6 +240,17 @@
 
     const L = feLimits(tankId);
     const daysTo = target => Math.round((target - currentFe) / f.slope);
+
+    /* Iron accumulates because steel is pickled, not because time passes, so a
+       rate in g/L per day silently assumes the line runs at a constant pace.
+       Dividing the same rise by the tonnage actually put through over the same
+       window gives the honest figure — and the remaining life in tonnes, which
+       does not move when the plant has a slow week or a shutdown. */
+    const tpd = tonnesPerDayOver(pts[0].date, pts[pts.length - 1].date);
+    const perTonne = tpd ? f.slope / tpd : null;          // g/L per tonne
+    const tonnesTo = target => (perTonne && perTonne > 0)
+      ? Math.round((target - currentFe) / perTonne) : null;
+
     return {
       state: 'ok',
       currentFe: currentFe,
@@ -220,8 +259,27 @@
       n: f.n,
       spanDays: f.spanDays,
       daysToWarn: daysTo(L.warn),
-      daysToCrit: daysTo(L.crit)
+      daysToCrit: daysTo(L.crit),
+      tonnesPerDay: tpd,
+      fePerTonne: perTonne,
+      tonnesToWarn: tonnesTo(L.warn),
+      tonnesToCrit: tonnesTo(L.crit)
     };
+  }
+
+  /** Average tonnes of steel put through per day between two dates.
+      The production rows are kilograms despite the column name. */
+  function tonnesPerDayOver(fromDate, toDate) {
+    const Z = window.KGCZinc;
+    if (!Z || !Z._days) return null;
+    let kg = 0, days = 0;
+    Object.values(Z._days() || {}).forEach(function (d) {
+      if (!d || !d.date || d.date < fromDate || d.date > toDate) return;
+      kg += Number(d.totalTon) || 0;
+      days++;
+    });
+    if (!days || !kg) return null;
+    return (kg / 1000) / days;
   }
 
   /* ---------------- chart ---------------- */
@@ -333,6 +391,13 @@
               ' · ' + t('lab.currentFe') + ': ' + e.currentFe.toFixed(1) +
               '<br>' + t('lab.toCrit') + ': ' + (e.daysToCrit <= 0 ? 0 : e.daysToCrit) + ' ' + t('lab.days') +
               ' · R² ' + e.r2.toFixed(2) + ' · n=' + e.n;
+        /* The tonnage view only appears once production covers the same window,
+           because without it the figure would be a guess dressed as a number. */
+        if (e.tonnesToWarn != null) {
+          sub += '<br><b>' + esc(t('lab.tonnesLeft', {
+            n: Math.max(0, e.tonnesToWarn).toLocaleString()
+          })) + '</b> · ' + esc(t('lab.fePerTonne', { v: e.fePerTonne.toFixed(3) }));
+        }
       }
 
       return '<div class="lab-life ' + tier + '">' +
@@ -478,6 +543,7 @@
     daysSinceReading: daysSinceReading,
     lastChange: lastChange,
     lifeEstimate: lifeEstimate,
+    tonnesPerDayOver: tonnesPerDayOver,
     render: renderAllLab,
     _readings: () => readings,
     _renewals: () => renewals,
