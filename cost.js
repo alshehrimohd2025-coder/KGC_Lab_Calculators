@@ -85,7 +85,10 @@
     const ammoniaL = treat.reduce((s, r) => s + num(r.liters), 0);
     const ammoniaCost = ammoniaL * priceOf('ammonia');
 
-    const total = zincCost + acidCost + ammoniaCost;
+    const saltKg = treat.reduce((s, r) => s + num(r.saltKg), 0);
+    const saltCost = saltKg * priceOf('flux');
+
+    const total = zincCost + acidCost + ammoniaCost + saltCost;
 
     return {
       from: from, to: to, days: days.length,
@@ -94,7 +97,8 @@
       lines: [
         { key: 'zinc',    qty: zincKg,     unit: 'kg', cost: zincCost },
         { key: 'acid',    qty: acidTonnes, unit: 't',  cost: acidCost, n: acidEvents.length },
-        { key: 'ammonia', qty: ammoniaL,   unit: 'L',  cost: ammoniaCost, n: treat.length }
+        { key: 'ammonia', qty: ammoniaL,   unit: 'L',  cost: ammoniaCost, n: treat.length },
+        { key: 'flux',    qty: saltKg,     unit: 'kg', cost: saltCost }
       ],
       total: total,
       perTon: total / tonnage,

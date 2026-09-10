@@ -62,7 +62,8 @@
     const logged = list().length;
     const excluded = list().filter(r => r.excludeFromModel).length;
     const fs = factors();
-    if (!fs.length) return { n: 0, logged: logged, excluded: excluded };
+    if (!fs.length) return { n: 0, logged: logged, excluded: excluded,
+      salt: list().reduce((s2, r) => s2 + (num(r.saltKg) || 0), 0) };
     const per = fs.map(f => f.perPh);
     const mean = per.reduce((s, v) => s + v, 0) / per.length;
     const min = Math.min.apply(null, per);
@@ -71,7 +72,8 @@
     const beRises = modelList().map(r => num(r.beAfter) - num(r.beBefore)).filter(v => isFinite(v) && v > 0);
     const beMean = beRises.length ? beRises.reduce((s, v) => s + v, 0) / beRises.length : NaN;
     const lastAfter = modelList().map(r => num(r.phAfter)).filter(isFinite).pop();
-    return { n: fs.length, logged: logged, excluded: excluded, mean: mean, min: min, max: max, beMean: beMean, lastPh: lastAfter };
+    const salt = list().reduce((s2, r) => s2 + (num(r.saltKg) || 0), 0);
+    return { n: fs.length, salt: salt, logged: logged, excluded: excluded, mean: mean, min: min, max: max, beMean: beMean, lastPh: lastAfter };
   }
 
   const round = (v, s) => Math.round(v / s) * s;
@@ -126,6 +128,8 @@
           '<span class="rv">' + (st.n ? st.mean.toFixed(1) : '—') + '<span class="u">L</span></span></div>' +
         '<div class="res"><span class="rk">' + esc(t('flux.d.avgBe')) + '</span>' +
           '<span class="rv">' + (isFinite(st.beMean) ? '+' + st.beMean.toFixed(2) : '—') + '</span></div>' +
+        '<div class="res"><span class="rk">' + esc(t('flux.d.totalSalt')) + '</span>' +
+          '<span class="rv">' + (st.salt ? st.salt.toLocaleString() : '—') + '<span class="u">kg</span></span></div>' +
       '</div>' +
       (st.excluded ? '<p class="fx-basis">' + esc(t('flux.d.excludedNote', { n: st.excluded })) + '</p>' : '');
 
@@ -143,6 +147,9 @@
             fieldHTML('fx-beb', t('flux.d.beBefore'), '', '0.5', '') +
             fieldHTML('fx-bea', t('flux.d.beAfter'), '', '0.5', '') +
             fieldHTML('fx-pct', t('flux.d.pct'), '', '1', 25) +
+          '</div>' +
+          '<div class="grid g3" style="margin-top:14px">' +
+            fieldHTML('fx-salt', t('flux.d.salt'), t('flux.d.saltHint'), '1', '') +
           '</div>' +
           '<label class="fx-check"><input type="checkbox" id="fx-excl"> ' + esc(t('flux.d.exclude')) + '</label>' +
           '<div class="saverow" style="border-top:none;padding-top:14px">' +
@@ -169,6 +176,7 @@
         '<td class="num">' + (isFinite(num(r.phBefore)) ? num(r.phBefore).toFixed(2) : '—') +
           ' → ' + (isFinite(num(r.phAfter)) ? num(r.phAfter).toFixed(2) : '—') + '</td>' +
         '<td class="num">' + be + '</td>' +
+        '<td class="num">' + (num(r.saltKg) ? num(r.saltKg).toLocaleString() : '—') + '</td>' +
         '<td class="num">' + perCell + '</td>' +
         '<td>' + esc(r.operator || '—') + '</td>' +
         '<td>' + esc(r.note || '') + '</td>' +
@@ -182,7 +190,8 @@
           '<th>' + esc(t('flux.d.col.liters')) + '</th>' +
           '<th>' + esc(t('flux.d.col.ph')) + '</th>' +
           '<th>' + esc(t('flux.d.col.be')) + '</th>' +
-          '<th>' + esc(t('flux.d.col.perPh')) + '</th>' +
+          '<th>' + esc(t('flux.d.col.salt')) + '</th>' +
+        '<th>' + esc(t('flux.d.col.perPh')) + '</th>' +
           '<th>' + esc(t('flux.d.col.operator')) + '</th>' +
           '<th>' + esc(t('flux.d.col.note')) + '</th>' +
           (canEdit() ? '<th></th>' : '') +
@@ -267,6 +276,7 @@
     const op = ((document.getElementById('fx-op') || {}).value || '').trim();
     const note = ((document.getElementById('fx-note') || {}).value || '').trim();
     const excl = !!(document.getElementById('fx-excl') || {}).checked;
+    const saltKg = num((document.getElementById('fx-salt') || {}).value);
 
     if (!isFinite(before) || !isFinite(after) || !isFinite(liters) || liters <= 0) {
       flash(t('flux.d.errRequired'), true); return;
@@ -281,6 +291,7 @@
       beBefore: isFinite(beB) ? beB : null,
       beAfter: isFinite(beA) ? beA : null,
       ammoniaPct: isFinite(pct) ? pct : null,
+      saltKg: isFinite(saltKg) && saltKg > 0 ? saltKg : null,
       excludeFromModel: excl,
       operator: op || null, note: note || null
     };
