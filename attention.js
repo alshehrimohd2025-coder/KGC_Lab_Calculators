@@ -177,6 +177,21 @@
     return out;
   }
 
+  /** Instruments whose calibration has lapsed or is about to. */
+  function calibration() {
+    const K = window.KGCKettle;
+    if (!K || !K.calibrationAlerts) return [];
+    return K.calibrationAlerts().map(function (a) {
+      return {
+        cat: 'calib',
+        sev: a.tier === 'crit' ? 2 : 1,
+        icon: '⚙',
+        title: a.name,
+        detail: (a.days < 0 ? t('att.calOverdue', { n: Math.abs(a.days) }) : t('att.calSoon', { n: a.days })) + ' · ' + a.due
+      };
+    });
+  }
+
   /* ---------------- rendering ---------------- */
 
   function render() {
@@ -184,7 +199,7 @@
     if (!mount) return;
 
     let items = [];
-    [outOfSpec, staleReadings, zincBreaches, stuckBatches, lowStock, bathLife]
+    [outOfSpec, staleReadings, zincBreaches, stuckBatches, lowStock, bathLife, calibration]
       .forEach(function (fn) { try { items = items.concat(fn() || []); } catch (e) { console.warn('[attention]', e); } });
 
     if (!items.length) {
@@ -197,7 +212,7 @@
     const acts = items.filter(i => i.sev === 2).length;
 
     // grouped so one tank appearing under two headings still reads clearly
-    const ORDER = ['spec', 'zinc', 'life', 'batch', 'stale', 'stock'];
+    const ORDER = ['spec', 'zinc', 'life', 'batch', 'stale', 'stock', 'calib'];
     const groups = ORDER.map(function (c) {
       return { cat: c, list: items.filter(i => i.cat === c) };
     }).filter(g => g.list.length);
@@ -230,6 +245,7 @@
   database.ref('zinc_daily').on('value', render);
   database.ref('production/batches').on('value', render);
   database.ref('tank_specs').on('value', render);
+  database.ref('calibration').on('value', render);
   if (window.I18N) I18N.onChange(render);
   document.addEventListener('DOMContentLoaded', render);
   setInterval(render, 300000);   // keeps the "open for N hours" figures honest
