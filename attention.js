@@ -263,6 +263,8 @@
   database.ref('production/batches').on('value', render);
   database.ref('tank_specs').on('value', render);
   database.ref('calibration').on('value', render);
+  // the forecast and bath-life alerts are both derived from the renewal log
+  database.ref('renewals').on('value', render);
   if (window.I18N) I18N.onChange(render);
   document.addEventListener('DOMContentLoaded', render);
   setInterval(render, 300000);   // keeps the "open for N hours" figures honest

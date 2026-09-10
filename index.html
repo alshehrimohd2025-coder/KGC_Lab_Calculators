@@ -532,7 +532,7 @@ html[dir="ltr"] .input-label .unit{margin-left:0; margin-right:0}
 .signout-btn:hover{color:var(--crit); border-color:var(--crit-line)}
 .mode-edit:not(.authed) .signout-btn{display:none}
 </style>
-<script id="kgc-state" type="application/json">{"inputs": {}, "log": [], "seq": 0}</script>
+
 </head>
 <body>
 
@@ -2039,62 +2039,6 @@ database.ref('titration_log').limitToLast(50).on('value', function(snapshot) {
 </div>
 
 <script src="fluxcalc.js"></script>
-
-<script>
-// Uses the `database` global initialized in <head>
-
-// Load and sync data from Firebase
-let localState = null;
-let firebaseLoaded = false;
-
-function syncToFirebase() {
-  const stateElement = document.getElementById('kgc-state');
-  if(!stateElement) return;
-
-  try {
-    const state = JSON.parse(stateElement.textContent);
-    database.ref('current_data').set({
-      state: state,
-      timestamp: new Date().toISOString()
-    }).catch(function(error) {
-      console.error("Firebase sync error:", error);
-    });
-  } catch(e) {
-    console.error("Error syncing to Firebase:", e);
-  }
-}
-
-// Load data from Firebase when page loads
-database.ref('current_data').on('value', function(snapshot) {
-  const data = snapshot.val();
-  if(data && data.state) {
-    const state = data.state;
-    const stateElement = document.getElementById('kgc-state');
-    if(stateElement) {
-      // Update local state with Firebase data
-      stateElement.textContent = JSON.stringify(state);
-      localState = state;
-
-      // Trigger UI update if function exists
-      if(typeof renderAll === 'function') {
-        try {
-          renderAll();
-        } catch(e) {
-          console.log("Render update:", e);
-        }
-      }
-    }
-    firebaseLoaded = true;
-  }
-});
-
-// Auto-sync on data changes (every 3 seconds)
-setInterval(function() {
-  if(firebaseLoaded) {
-    syncToFirebase();
-  }
-}, 3000);
-</script>
 
 <div id="page-timing" class="app-page wrap"></div>
 <script src="production.js"></script>

@@ -533,6 +533,9 @@
     if (typeof window.renderTanksAll === 'function') window.renderTanksAll();
   });
   database.ref('inventory').on('value', s => { inventory = s.val() || {}; renderInventory(); });
+  /* The life estimate divides the iron rise by the tonnage put through, so a
+     new production import changes the answer and has to redraw it. */
+  database.ref('zinc_daily').on('value', renderLife);
   database.ref('tanks_data').on('value', function () { renderTrends(); renderLife(); renderRenewals(); wireForm(); });
 
   if (window.I18N) I18N.onChange(renderAllLab);
