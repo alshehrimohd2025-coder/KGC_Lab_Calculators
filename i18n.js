@@ -17,6 +17,10 @@
     ar: {
       /* chrome */
       'nav.tanks': 'لوحة الأحواض',
+      'nav.g.daily': 'يومي',
+      'nav.g.lab': 'المختبر',
+      'nav.g.quality': 'الجودة',
+      'nav.g.mgmt': 'الإدارة',
       'nav.acid': 'حاسبة معايرة الحمض',
       'nav.flux': 'حاسبة الفلكس FL-01',
       'flux.d.title': 'جرعة الأمونيا — من واقع معالجاتك',
@@ -724,6 +728,10 @@
 
     en: {
       'nav.tanks': 'Tank dashboard',
+      'nav.g.daily': 'Daily',
+      'nav.g.lab': 'Lab',
+      'nav.g.quality': 'Quality',
+      'nav.g.mgmt': 'Management',
       'nav.acid': 'Acid titration',
       'nav.flux': 'Flux calculator FL-01',
       'flux.d.title': 'Ammonia dose — learned from your treatments',

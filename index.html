@@ -341,6 +341,23 @@ td.name{color:var(--ink); font-weight:500}
   border-bottom:1px solid var(--line);
 }
 .topnav .wrap{display:flex; gap:4px; padding:9px 20px; flex-wrap:wrap; align-items:center}
+
+/* Pages are grouped by when they get used rather than merged together, so each
+   one keeps its single purpose while the bar stays scannable. */
+.navgroup{display:flex; align-items:center; gap:3px; position:relative; padding-inline-end:7px}
+.navgroup + .navgroup{padding-inline-start:8px; border-inline-start:1px solid var(--line)}
+.navgroup-label{
+  font-family:var(--mono); font-size:9px; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--ink-3); padding-inline-end:1px; white-space:nowrap; user-select:none;
+}
+/* Below this the labels cost more width than they earn — the dividers already
+   show the grouping, so the names step aside and the bar stays one row. */
+@media (max-width:1180px){ .navgroup-label{display:none} }
+
+/* The toggle only exists on narrow screens. Scoped under .topnav so it
+   out-specifies the .topnav button rule above, which also sets display. */
+.topnav .navtoggle{display:none}
+.navtoggle-now{font-weight:600}
 .topnav button{
   font-family:var(--sans); font-size:13.5px; font-weight:600; cursor:pointer;
   padding:9px 17px; border-radius:999px; border:1px solid transparent;
@@ -360,6 +377,29 @@ td.name{color:var(--ink); font-weight:500}
 .app-page.active{display:block}
 @keyframes pageIn{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none}}
 @media print{.topnav{display:none !important} .app-page{display:block !important; animation:none}}
+
+@media (max-width:720px){
+  /* The open list took 34% of a 375px screen before any content appeared, so
+     it is closed by default and the toggle names the page you are on. */
+  .topnav .wrap{display:none; padding-top:4px}
+  .topnav.open .wrap{display:flex}
+  /* Matches the specificity of the .topnav .navtoggle rule that hides it,
+     otherwise the base rule wins here too and the bar cannot be opened. */
+  .topnav .navtoggle{
+    display:flex; align-items:center; gap:9px; width:100%;
+    padding:11px 20px; background:none; border:none; cursor:pointer;
+    font-family:var(--sans); font-size:13.5px; color:var(--ink);
+  }
+  .navtoggle svg{width:18px; height:18px; flex:0 0 auto}
+  .navtoggle:focus-visible{outline:2px solid var(--accent); outline-offset:-2px}
+  .navgroup{
+    width:100%; flex-wrap:wrap; padding:0 0 6px;
+    border-inline-start:none !important; padding-inline-start:0 !important;
+  }
+  .navgroup + .navgroup{border-top:1px solid var(--line); padding-top:8px}
+  .navgroup-label{display:block; width:100%; padding:2px 0 4px}
+  .topnav button[data-page]{flex:1 1 46%}
+}
 
 /* ---------- language toggle ---------- */
 .langtog{
@@ -516,53 +556,71 @@ html[dir="ltr"] .input-label .unit{margin-left:0; margin-right:0}
 </script>
 
 <nav class="topnav">
-  <div class="wrap">
-    <button type="button" class="active" data-page="page-tanks" onclick="showAppPage('page-tanks', this)">
+  <!-- On a phone the full list took a third of the screen before any content,
+       so it collapses behind this toggle; on a wide screen it is always open. -->
+  <button type="button" class="navtoggle" id="navtoggle" aria-expanded="false" aria-controls="navlist" onclick="toggleNav()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg>
+    <span class="navtoggle-now" id="navtoggle-now"></span>
+  </button>
+  <div class="wrap" id="navlist">
+      <div class="navgroup">
+        <span class="navgroup-label" data-i18n="nav.g.daily">يومي</span>
+        <button type="button" class="active" data-page="page-tanks" onclick="showAppPage('page-tanks', this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="18" rx="1.5"/><rect x="14" y="3" width="7" height="10" rx="1.5"/><path d="M14 17h7"/></svg>
       <span data-i18n="nav.tanks">لوحة الأحواض</span>
     </button>
-    <button type="button" data-page="page-acid" onclick="showAppPage('page-acid', this)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6"/><path d="M10 3v6.5L5.2 18a2 2 0 0 0 1.7 3h10.2a2 2 0 0 0 1.7-3L14 9.5V3"/><path d="M7.5 14h9"/></svg>
-      <span data-i18n="nav.acid">حاسبة معايرة الحمض</span>
-    </button>
-    <button type="button" data-page="page-flux" onclick="showAppPage('page-flux', this)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2.5" width="16" height="19" rx="2.5"/><path d="M8 7h8"/><path d="M8 11.5h3M13 11.5h3M8 15.5h3M13 15.5h3"/></svg>
-      <span data-i18n="nav.flux">حاسبة الفلكس FL-01</span>
-    </button>
-    <button type="button" data-page="page-timing" onclick="showAppPage('page-timing', this)">
+        <button type="button" data-page="page-timing" onclick="showAppPage('page-timing', this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9.5V13l2.5 1.5"/><path d="M9 2h6"/></svg>
       <span data-i18n="nav.timing">تتبع زمن الإنتاج</span>
     </button>
-    <button type="button" data-page="page-standards" onclick="showAppPage('page-standards', this)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
-      <span data-i18n="nav.standards">معايير التشغيل</span>
+      </div>
+      <div class="navgroup">
+        <span class="navgroup-label" data-i18n="nav.g.lab">المختبر</span>
+        <button type="button" data-page="page-acid" onclick="showAppPage('page-acid', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6"/><path d="M10 3v6.5L5.2 18a2 2 0 0 0 1.7 3h10.2a2 2 0 0 0 1.7-3L14 9.5V3"/><path d="M7.5 14h9"/></svg>
+      <span data-i18n="nav.acid">حاسبة معايرة الحمض</span>
     </button>
-    <button type="button" data-page="page-lab" onclick="showAppPage('page-lab', this)">
+        <button type="button" data-page="page-flux" onclick="showAppPage('page-flux', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2.5" width="16" height="19" rx="2.5"/><path d="M8 7h8"/><path d="M8 11.5h3M13 11.5h3M8 15.5h3M13 15.5h3"/></svg>
+      <span data-i18n="nav.flux">حاسبة الفلكس FL-01</span>
+    </button>
+        <button type="button" data-page="page-lab" onclick="showAppPage('page-lab', this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l5-5 4 3 6-7"/><path d="M3 21h18"/></svg>
       <span data-i18n="nav.lab">صحة الأحواض</span>
     </button>
-    <button type="button" data-page="page-coating" onclick="showAppPage('page-coating', this)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="8" rx="1"/><path d="M3 6h18"/><path d="M7 16v3"/><path d="M17 16v3"/></svg>
-      <span data-i18n="nav.coating">سماكة الطلاء</span>
-    </button>
-    <button type="button" data-page="page-kettle" onclick="showAppPage('page-kettle', this)">
+        <button type="button" data-page="page-kettle" onclick="showAppPage('page-kettle', this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14l-1.5 12a3 3 0 0 1-3 2.7H9.5a3 3 0 0 1-3-2.7L5 4z"/><path d="M8 9h8"/></svg>
       <span data-i18n="nav.kettle">حمام الزنك والمعايرة</span>
     </button>
-    <button type="button" data-page="page-cost" onclick="showAppPage('page-cost', this)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20"/><path d="M17 6.5A3.5 3.5 0 0 0 13.5 4h-3a3.5 3.5 0 0 0 0 7h3a3.5 3.5 0 0 1 0 7h-3A3.5 3.5 0 0 1 7 17.5"/></svg>
-      <span data-i18n="nav.cost">التكلفة لكل طن</span>
+      </div>
+      <div class="navgroup">
+        <span class="navgroup-label" data-i18n="nav.g.quality">الجودة</span>
+        <button type="button" data-page="page-coating" onclick="showAppPage('page-coating', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="8" rx="1"/><path d="M3 6h18"/><path d="M7 16v3"/><path d="M17 16v3"/></svg>
+      <span data-i18n="nav.coating">سماكة الطلاء</span>
     </button>
-    <button type="button" data-page="page-zinc" onclick="showAppPage('page-zinc', this)">
+        <button type="button" data-page="page-standards" onclick="showAppPage('page-standards', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+      <span data-i18n="nav.standards">معايير التشغيل</span>
+    </button>
+      </div>
+      <div class="navgroup">
+        <span class="navgroup-label" data-i18n="nav.g.mgmt">الإدارة</span>
+        <button type="button" data-page="page-zinc" onclick="showAppPage('page-zinc', this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18"/><path d="M5 8h14"/><path d="M7 8l-2.5 6a3.5 3.5 0 0 0 5 0L7 8z"/><path d="M17 8l-2.5 6a3.5 3.5 0 0 0 5 0L17 8z"/></svg>
       <span data-i18n="nav.zinc">كفاءة الزنك</span>
     </button>
-    <span style="flex:1 1 auto"></span>
-    <button type="button" class="signout-btn" onclick="authSignOut()" data-i18n="auth.signout">تسجيل الخروج</button>
-    <div class="langtog" role="group" aria-label="Language">
-      <button type="button" data-lang-btn="ar" onclick="I18N.set('ar')">ع</button>
-      <button type="button" data-lang-btn="en" onclick="I18N.set('en')">EN</button>
-    </div>
+        <button type="button" data-page="page-cost" onclick="showAppPage('page-cost', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20"/><path d="M17 6.5A3.5 3.5 0 0 0 13.5 4h-3a3.5 3.5 0 0 0 0 7h3a3.5 3.5 0 0 1 0 7h-3A3.5 3.5 0 0 1 7 17.5"/></svg>
+      <span data-i18n="nav.cost">التكلفة لكل طن</span>
+    </button>
+      </div>
+      <span style="flex:1 1 auto"></span>
+      <button type="button" class="signout-btn" onclick="authSignOut()" data-i18n="auth.signout">تسجيل الخروج</button>
+      <div class="langtog" role="group" aria-label="Language">
+        <button type="button" data-lang-btn="ar" onclick="I18N.set('ar')">ع</button>
+        <button type="button" data-lang-btn="en" onclick="I18N.set('en')">EN</button>
+      </div>
   </div>
 </nav>
 <script>
@@ -1419,6 +1477,38 @@ function renderAll() {
   renderCards();
   renderTable();
 }
+
+/* Nav: collapsed on a phone, always open on a wide screen. The toggle shows
+   which page is current so the bar can stay shut without losing your place. */
+function toggleNav() {
+  const nav = document.querySelector('.topnav');
+  if (!nav) return;
+  const open = nav.classList.toggle('open');
+  const btn = document.getElementById('navtoggle');
+  if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function syncNavLabel() {
+  const el = document.getElementById('navtoggle-now');
+  if (!el) return;
+  const cur = document.querySelector('.topnav button[data-page].active span');
+  el.textContent = cur ? cur.textContent : '';
+}
+
+document.addEventListener('click', function (e) {
+  const b = e.target.closest && e.target.closest('.topnav button[data-page]');
+  if (!b) return;
+  syncNavLabel();
+  // choosing a page on a phone should put the list away again
+  if (window.matchMedia('(max-width:720px)').matches) {
+    const nav = document.querySelector('.topnav');
+    if (nav) nav.classList.remove('open');
+    const t = document.getElementById('navtoggle');
+    if (t) t.setAttribute('aria-expanded', 'false');
+  }
+});
+document.addEventListener('DOMContentLoaded', syncNavLabel);
+if (window.I18N) I18N.onChange(syncNavLabel);
 
 // Initial render
 renderAll();
