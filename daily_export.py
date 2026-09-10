@@ -14,6 +14,7 @@ KGC — تصدير يومي لبيانات خط الجلفنة إلى ملف Exc
 """
 
 import datetime
+import io
 import json
 import os
 import re
@@ -408,6 +409,84 @@ def sheet_titration(log):
 # main
 # ----------------------------------------------------------------------------
 
+# ----------------------------------------------------------------------------
+# النسخة الاحتياطية الخام
+# ----------------------------------------------------------------------------
+
+# كل فروع قاعدة البيانات التي تحمل بيانات حقيقية.
+BACKUP_ROOTS = [
+    "tanks_data", "tank_specs", "titration_log", "readings_log",
+    "renewals", "inventory", "zinc_daily", "flux_treatments",
+    "coating_log", "zinc_bath", "calibration", "production",
+]
+
+BACKUP_DIRNAME = "backups"
+KEEP_DAILY = 30          # آخر ٣٠ يوماً تُحفظ كاملة
+
+
+def write_backup(folder, stamp):
+    """ينسخ قاعدة البيانات كما هي إلى ملف JSON واحد.
+
+    الملف Excel للقراءة البشرية؛ هذه النسخة للاستعادة: تحفظ كل فرع بصيغته
+    الأصلية بحيث يمكن رفعها إلى Firebase مرة أخرى كما هي إن ضاع المشروع.
+    """
+    data, missing = {}, []
+    for root in BACKUP_ROOTS:
+        value = fetch(root)
+        if value is None:
+            missing.append(root)
+        else:
+            data[root] = value
+
+    if not data:
+        return None, missing
+
+    payload = {
+        "exportedAt": stamp.isoformat(timespec="seconds"),
+        "database": DB,
+        "roots": sorted(data.keys()),
+        "data": data,
+    }
+
+    bdir = os.path.join(folder, BACKUP_DIRNAME)
+    os.makedirs(bdir, exist_ok=True)
+    path = os.path.join(bdir, "kgc_backup_%s.json" % stamp.strftime("%Y-%m-%d"))
+    with io.open(path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=1, sort_keys=True)
+
+    prune_backups(bdir)
+    return path, missing
+
+
+def prune_backups(bdir):
+    """يبقي آخر KEEP_DAILY نسخة، وأول نسخة من كل شهر قبلها.
+
+    بهذا لا يتضخم المجلد، ويبقى أثر تاريخي شهري يمكن الرجوع إليه.
+    """
+    try:
+        files = sorted(f for f in os.listdir(bdir)
+                       if re.match(r"^kgc_backup_\d{4}-\d{2}-\d{2}\.json$", f))
+    except OSError:
+        return
+    if len(files) <= KEEP_DAILY:
+        return
+
+    keep = set(files[-KEEP_DAILY:])
+    first_of_month = {}
+    for f in files:
+        month = f[12:19]                      # YYYY-MM
+        first_of_month.setdefault(month, f)
+    keep.update(first_of_month.values())
+
+    for f in files:
+        if f in keep:
+            continue
+        try:
+            os.remove(os.path.join(bdir, f))
+        except OSError:
+            pass
+
+
 def main():
     stamp = datetime.datetime.now()
     print("KGC daily export — %s" % stamp.strftime("%Y-%m-%d %H:%M:%S"))
@@ -449,6 +528,20 @@ def main():
 
     print("تم الحفظ: %s" % path)
     print("الدفعات: %d · صفوف المراحل: %d" % (len(batches), len(sheets[1][1]) - 1))
+
+    # النسخة الاحتياطية تُكتب بجوار التقرير، وفشلها لا يُفشل التصدير
+    try:
+        bpath, missing = write_backup(os.path.dirname(path), stamp)
+        if bpath:
+            size = os.path.getsize(bpath)
+            print("نسخة احتياطية: %s (%.1f KB)" % (bpath, size / 1024.0))
+            if missing:
+                print("فروع فارغة أو غير موجودة: %s" % ", ".join(missing))
+        else:
+            print("تعذّر إنشاء النسخة الاحتياطية — لا توجد بيانات.", file=sys.stderr)
+    except Exception as exc:                      # noqa: BLE001 - never break the export
+        print("فشلت النسخة الاحتياطية: %s" % exc, file=sys.stderr)
+
     return 0
 
 
