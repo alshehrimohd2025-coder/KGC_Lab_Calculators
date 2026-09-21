@@ -497,6 +497,9 @@ html[dir="ltr"] .input-label .unit{margin-left:0; margin-right:0}
 .mode-view .status-select-cell{pointer-events:none; cursor:default}
 .mode-view .save-note{display:none}
 .mode-view .secsub-edit{display:none}
+/* Reading-freshness dates are a lab working note, not something the
+   manager view needs to see — hide the "measured N days ago" badge there. */
+.mode-view .tank-age{display:none}
 .viewbadge{
   display:none; align-items:center; gap:8px; width:fit-content;
   padding:7px 15px; border-radius:999px; margin:0 0 20px;

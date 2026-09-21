@@ -231,9 +231,15 @@
     const mount = document.getElementById('attention');
     if (!mount) return;
 
+    // "stale reading" dates are a lab working note (when was this last
+    // measured) — useful to the editor, not something the manager view
+    // needs, so it's left out of that count entirely rather than just
+    // hidden with CSS.
+    const collectors = [outOfSpec, zincBreaches, stuckBatches, lowStock, bathLife, calibration, dueForChange, noInstrument];
+    if (typeof IS_EDITOR !== 'undefined' && IS_EDITOR) collectors.splice(1, 0, staleReadings);
+
     let items = [];
-    [outOfSpec, staleReadings, zincBreaches, stuckBatches, lowStock, bathLife, calibration, dueForChange, noInstrument]
-      .forEach(function (fn) { try { items = items.concat(fn() || []); } catch (e) { console.warn('[attention]', e); } });
+    collectors.forEach(function (fn) { try { items = items.concat(fn() || []); } catch (e) { console.warn('[attention]', e); } });
 
     if (!items.length) {
       mount.innerHTML =
