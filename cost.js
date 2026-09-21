@@ -30,7 +30,8 @@
     { key: 'zinc',    def: 12.0, unit: 'SAR/kg' },
     { key: 'acid',    def: 900,  unit: 'SAR/t'  },
     { key: 'ammonia', def: 4.5,  unit: 'SAR/L'  },
-    { key: 'flux',    def: 9.0,  unit: 'SAR/kg' }
+    { key: 'flux',    def: 9.0,  unit: 'SAR/kg' },
+    { key: 'peroxide', def: 6.0, unit: 'SAR/L'  }
   ];
 
   const ACID_CHARGE_T = 25;      // one full acid replacement, per the schedule
@@ -44,7 +45,7 @@
      number instead of a cost per kilo wearing the wrong label. */
   const PRODUCTION_KG_PER_UNIT = 1000;
 
-  let prices = {}, renewals = {}, treatments = {};
+  let prices = {}, renewals = {}, treatments = {}, peroxTreatments = {};
 
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -88,7 +89,12 @@
     const saltKg = treat.reduce((s, r) => s + num(r.saltKg), 0);
     const saltCost = saltKg * priceOf('flux');
 
-    const total = zincCost + acidCost + ammoniaCost + saltCost;
+    // peroxide treatments in the same window
+    const peroxTreat = Object.values(peroxTreatments || {}).filter(r => r && r.date >= from && r.date <= to);
+    const peroxideL = peroxTreat.reduce((s, r) => s + num(r.liters), 0);
+    const peroxideCost = peroxideL * priceOf('peroxide');
+
+    const total = zincCost + acidCost + ammoniaCost + saltCost + peroxideCost;
 
     return {
       from: from, to: to, days: days.length,
@@ -98,7 +104,8 @@
         { key: 'zinc',    qty: zincKg,     unit: 'kg', cost: zincCost },
         { key: 'acid',    qty: acidTonnes, unit: 't',  cost: acidCost, n: acidEvents.length },
         { key: 'ammonia', qty: ammoniaL,   unit: 'L',  cost: ammoniaCost, n: treat.length },
-        { key: 'flux',    qty: saltKg,     unit: 'kg', cost: saltCost }
+        { key: 'flux',    qty: saltKg,     unit: 'kg', cost: saltCost },
+        { key: 'peroxide', qty: peroxideL, unit: 'L',  cost: peroxideCost, n: peroxTreat.length }
       ],
       total: total,
       perTon: total / tonnage,
@@ -189,6 +196,7 @@
   database.ref('prices').on('value', s => { prices = s.val() || {}; render(); });
   database.ref('renewals').on('value', s => { renewals = s.val() || {}; render(); });
   database.ref('flux_treatments').on('value', s => { treatments = s.val() || {}; render(); });
+  database.ref('peroxide_treatments').on('value', s => { peroxTreatments = s.val() || {}; render(); });
   database.ref('zinc_daily').on('value', render);
   if (window.I18N) I18N.onChange(render);
   document.addEventListener('DOMContentLoaded', render);

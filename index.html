@@ -51,6 +51,7 @@ function refreshAuthUI() {
   if (typeof renderAll === 'function') { try { renderAll(); } catch (e) {} }
   if (window.KGCProduction && typeof window.KGCProduction.render === 'function') { try { window.KGCProduction.render(); } catch (e) {} }
   if (window.KGCFlux && typeof window.KGCFlux.render === 'function') { try { window.KGCFlux.render(); } catch (e) {} }
+  if (window.KGCPeroxide && typeof window.KGCPeroxide.render === 'function') { try { window.KGCPeroxide.render(); } catch (e) {} }
 }
 
 if (IS_EDITOR) {
@@ -1950,6 +1951,9 @@ database.ref('titration_log').limitToLast(50).on('value', function(snapshot) {
   <!-- Empirical ammonia dosing — learned from the plant's own treatments -->
   <section id="flux-dose"></section>
 
+  <!-- Empirical peroxide dosing — learned from the plant's own treatments -->
+  <section id="perox-dose"></section>
+
   <!-- CALC 1 -->
   <section>
     <div class="sechead"><span class="secnum">١</span><h2 class="sectitle">جرعات تنقية حوض الفلكس FL-01</h2></div>
@@ -2224,6 +2228,7 @@ html:not(.authed) .spec-view-note{display:block}
 <script src="kettle.js"></script>
 <script src="cost.js"></script>
 <script src="flux.js"></script>
+<script src="peroxide.js"></script>
 
 </body>
 </html>

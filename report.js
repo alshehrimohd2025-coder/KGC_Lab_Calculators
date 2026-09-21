@@ -46,7 +46,7 @@
 
   const EVENT_DAYS = 30;          // how far back the changes section looks
 
-  let renewals = {}, treatments = {};
+  let renewals = {}, treatments = {}, peroxTreatments = {};
 
   /* ---------------- helpers ---------------- */
 
@@ -234,6 +234,21 @@
           type: te('rep.ev.treatment'),
           qty: (Number(r.liters) || 0) ? (Number(r.liters) + ' L') : '',
           note: te('rep.ev.phRaise', { a: r.phBefore, b: r.phAfter }) + (r.note ? ' — ' + r.note : '')
+        });
+      });
+    }
+
+    // peroxide treatments only belong on a sheet that includes the flux tank
+    if (ids.indexOf(10) !== -1) {
+      Object.values(peroxTreatments || {}).forEach(function (r) {
+        if (!r || !r.date || r.date < fromKey) return;
+        const tk = (typeof tanks !== 'undefined' ? tanks : []).find(x => x.id === 10);
+        out.push({
+          date: r.date,
+          tank: tk ? tankNameEn(tk.name) : 'Flux tank',
+          type: te('rep.ev.peroxTreatment'),
+          qty: (Number(r.liters) || 0) ? (Number(r.liters) + ' L') : '',
+          note: te('rep.ev.feDrop', { a: r.feBefore, b: r.feAfter }) + (r.note ? ' — ' + r.note : '')
         });
       });
     }
@@ -499,6 +514,7 @@
 
   database.ref('renewals').on('value', s => { renewals = s.val() || {}; });
   database.ref('flux_treatments').on('value', s => { treatments = s.val() || {}; });
+  database.ref('peroxide_treatments').on('value', s => { peroxTreatments = s.val() || {}; });
 
   function wire() {
     const b = document.getElementById('rep-export');
