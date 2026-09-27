@@ -501,6 +501,9 @@ html[dir="ltr"] .input-label .unit{margin-left:0; margin-right:0}
 /* Reading-freshness dates are a lab working note, not something the
    manager view needs to see — hide the "measured N days ago" badge there. */
 .mode-view .tank-age{display:none}
+/* The attention panel is the lab's own worklist — it stays on the editor's
+   dashboard only, so the view-only link shows readings without it. */
+.mode-view #attention{display:none}
 .viewbadge{
   display:none; align-items:center; gap:8px; width:fit-content;
   padding:7px 15px; border-radius:999px; margin:0 0 20px;
