@@ -110,9 +110,14 @@
       const tracked = SP && SP.hasSpec(tk.id) ? true : (ACID_IDS.indexOf(tk.id) !== -1 || tk.id === 10);
       if (!tracked) return;
 
+      /* Only the fields this tank actually carries. Writing a zero for every
+         other field fills the record with noise, and would blank figures the
+         pickling log keeps against the same day — temperature especially,
+         which acid tanks have no card input for. */
+      const fields = LOGGED_FIELDS.filter(f => (tk.fields || []).indexOf(f) !== -1);
       const row = { tankId: tk.id, date: date, ts: now };
       let hasValue = false;
-      LOGGED_FIELDS.forEach(function (f) {
+      fields.forEach(function (f) {
         const v = Number(tk[f]) || 0;
         row[f] = v;
         if (v) hasValue = true;
@@ -122,9 +127,12 @@
       // unchanged numbers mean this save was a status edit, not a reading
       const prev = latestReadingFor(tk.id);
       if (prev && prev.date !== date &&
-          LOGGED_FIELDS.every(f => (Number(prev[f]) || 0) === row[f])) return;
+          fields.every(f => (Number(prev[f]) || 0) === row[f])) return;
 
-      updates['readings_log/' + tk.id + '_' + date] = row;
+      // field-level paths, so the level, sludge and notes stored against the
+      // same day by the pickling log survive this write
+      const base = 'readings_log/' + tk.id + '_' + date + '/';
+      Object.keys(row).forEach(function (f) { updates[base + f] = row[f]; });
     });
 
     if (!Object.keys(updates).length) return;

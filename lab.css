@@ -376,3 +376,57 @@ html:not(.authed) #sched-upload,
 }
 tr.sp-off { opacity: .6; }
 tr.sp-off .name { font-style: italic; }
+
+/* ---------- pickling tanks ---------- */
+/* The palette has no amber, and grade B needs to sit between the green of A
+   and the orange of C without being mistaken for either. */
+:root { --grade-b: #8A6D1F; --grade-b-soft: #FAF1DB; --grade-b-line: #DFC98A; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --grade-b: #D9B75C; --grade-b-soft: #2B2417; --grade-b-line: #6B5A2D; }
+}
+:root[data-theme="dark"] { --grade-b: #D9B75C; --grade-b-soft: #2B2417; --grade-b-line: #6B5A2D; }
+
+.pk-cards {
+  display: grid; gap: 12px; margin-top: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+.pk-card {
+  border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  background: var(--surface); border-top: 3px solid var(--line-strong);
+}
+.pk-card-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 12px 8px; border-bottom: 1px solid var(--line);
+}
+.pk-card-name { font-size: 13px; font-weight: 700; }
+.pk-card-body { padding: 8px 12px; }
+.pk-row {
+  display: flex; justify-content: space-between; gap: 10px;
+  font-size: 12px; padding: 3px 0; color: var(--ink-2);
+}
+.pk-row b { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+.pk-card-foot {
+  padding: 8px 12px; font-size: 11.5px; color: var(--ink-2);
+  background: var(--recess); border-top: 1px solid var(--line);
+}
+.pk-note {
+  padding: 7px 12px; font-size: 11.5px; color: var(--ink-2);
+  border-top: 1px dashed var(--line); font-style: italic;
+}
+
+.pk-grade {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 24px; height: 22px; padding: 0 7px; border-radius: 999px;
+  font-size: 12px; font-weight: 800; font-family: var(--mono);
+  border: 1px solid transparent;
+}
+.pk-a { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-line); }
+.pk-b { color: var(--grade-b); background: var(--grade-b-soft); border-color: var(--grade-b-line); }
+.pk-c { color: var(--warn); background: var(--warn-soft); border-color: var(--warn-line); }
+.pk-d { color: var(--crit); background: var(--crit-soft); border-color: var(--crit-line); }
+.pk-none { color: var(--ink-3); background: var(--recess); border-color: var(--line); }
+
+.pk-card.pk-b-a { border-top-color: var(--accent); }
+.pk-card.pk-b-b { border-top-color: var(--grade-b); }
+.pk-card.pk-b-c { border-top-color: var(--warn); }
+.pk-card.pk-b-d { border-top-color: var(--crit); }
