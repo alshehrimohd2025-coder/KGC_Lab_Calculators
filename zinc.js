@@ -293,6 +293,14 @@
     return Object.values(days).filter(d => d && d.date).sort((a, b) => a.date < b.date ? -1 : 1);
   }
 
+  /* Weekly off days (and any other day with nothing run) are kept in the log
+     when they carry a drossing/release event — see buildDays — but a zero
+     tonnage point still bends the trend line down to the floor and back up,
+     making every real swing in the % or tonnage series look smaller than it
+     is. Charts only care about days something actually moved through the
+     kettle, so they draw from this instead of the full log. */
+  const productionDays = list => list.filter(d => (d.totalTon || 0) > 0);
+
   /* Charts carry their own labels and hover detail. The hit targets are much
      larger than the visible dots so pointing at a value is easy on a phone. */
 
@@ -468,6 +476,7 @@
     const mount = document.getElementById('zn-body');
     if (!mount) return;
     const list = sorted();
+    const chartDays = productionDays(list);
 
     if (!list.length) {
       mount.innerHTML = '<div class="lab-empty">' + esc(t('zn.empty')) + '</div>';
@@ -548,10 +557,10 @@
           s: dayJigTon >= nightJigTon ? t('zn.shift.day') : t('zn.shift.night')
         })) + '</span>' +
       '</div>' : '') +
-      (list.length >= 2 ? '<div class="lab-chart-card"><div class="lab-chart-head">' +
+      (chartDays.length >= 2 ? '<div class="lab-chart-card"><div class="lab-chart-head">' +
         '<span class="lab-chart-title">' + esc(t('zn.chartTitle')) + '</span>' +
         '<span class="lab-chart-meta">' + PCT_MIN + '% – ' + PCT_MAX + '%</span>' +
-        '</div>' + chart(list) + '</div>' : '') +
+        '</div>' + chart(chartDays) + '</div>' : '') +
       '<div class="tablewrap"><table><thead><tr>' +
         '<th>' + esc(t('zn.col.date')) + '</th>' +
         '<th>' + esc(t('zn.col.dayTon')) + '</th>' +
@@ -694,7 +703,7 @@
       return;
     }
 
-    const recent = list.slice(-14);           // last two weeks keeps it readable
+    const recent = productionDays(list).slice(-14);   // last two working days keeps it readable
     const totTon = list.reduce((s, d) => s + (d.totalTon || 0), 0);
     const withPct = list.filter(d => d.totalPct > 0);
     const mean = withPct.length ? withPct.reduce((s, d) => s + d.totalPct, 0) / withPct.length : 0;
