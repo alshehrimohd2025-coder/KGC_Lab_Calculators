@@ -1410,6 +1410,61 @@ function standardsFlagHTML(tank) {
     `${t('std.short.' + status.tier)}</span></div>`;
 }
 
+const escHtml = s => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+/* A free-text line the editor writes in their own words, shown on the tank
+   card in BOTH the editor's and the manager's view — unlike the reading-age
+   badge and the attention panel, which stay editor-only. The fixed status
+   dropdown still drives the card's colour (other code keys off its 4 known
+   values), so this is an addition next to it, not a replacement: the editor
+   picks the status, then explains it here in plain words instead of the
+   generic "Needs review" label. */
+function tankNoteHTML(tank) {
+  const note = String(tank.note || '').trim();
+  if (!IS_EDITOR || !IS_AUTHED) {
+    return note ? `<div class="tank-note">${escHtml(note)}</div>` : '';
+  }
+  return note
+    ? `<div class="tank-note tank-note-edit" onclick="makeNoteEditable(this, ${tank.id})">${escHtml(note)}</div>`
+    : `<div class="tank-note tank-note-edit tank-note-empty" onclick="makeNoteEditable(this, ${tank.id})">${t('tank.note.add')}</div>`;
+}
+
+function makeNoteEditable(element, tankId) {
+  if (!IS_EDITOR || !IS_AUTHED) return;
+  const tank = tanks.find(t => t.id === tankId);
+  if (!tank) return;
+
+  const oldValue = tank.note || '';
+  const textarea = document.createElement('textarea');
+  textarea.className = 'tank-note-input';
+  textarea.value = oldValue;
+  textarea.maxLength = 200;
+  textarea.placeholder = t('tank.note.placeholder');
+
+  element.classList.remove('tank-note-empty');
+  element.innerHTML = '';
+  element.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  let saved = false;
+  const save = () => {
+    if (saved) return;
+    saved = true;
+    tank.note = textarea.value.trim();
+    saveToStorage();
+    renderAll();
+  };
+
+  textarea.addEventListener('blur', save);
+  textarea.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); textarea.blur(); }
+    if (e.key === 'Escape') { saved = true; renderAll(); }
+  });
+}
+
 function renderCards() {
   const container = document.getElementById('tanks-container');
   container.innerHTML = '';
@@ -1435,6 +1490,7 @@ function renderCards() {
       ${bathAgeHTML(tank)}
       ${readingAgeHTML(tank)}
       ${standardsFlagHTML(tank)}
+      ${tankNoteHTML(tank)}
       <select class="status-select" style="background:${color}1a; border-color:${color}59; color:${color};" onchange="setStatus(${tank.id}, this.value)">
         ${statusOptionsHTML(tank.status)}
       </select>
