@@ -93,6 +93,47 @@
   }
   const areaPerKg = t => 2 / (STEEL_DENSITY * t);   // m2 per kg of steel
 
+  /* The plant runs 1.5, 2 and 3 mm sheet under the same product names, so
+     one gauge per family is not enough. Per batch, in order of trust:
+       1. the gauge the sheet writes ("Cover 400 x1.5", "Channel 41x21x2.5")
+       2. the gauge the weight implies: kg / (pieces x developed width x
+          length x 7.85), with the developed width taken as base + two sides
+          + ~40 mm of folds. Perforated tray reads thin on this, so it only
+          overrides the default when it clearly says thicker (>= 1.8 mm) and
+          is snapped to a stock gauge.
+       3. the family default. */
+  const GAUGES = [1.5, 2.0, 2.5, 3.0];
+  function writtenGauge(desc) {
+    const d = String(desc || '').toLowerCase();
+    let m = d.match(/x\s*(\d(?:\.\d)?)\b(?!\d)/);
+    if (m && +m[1] >= 1 && +m[1] <= 6) return +m[1];
+    m = d.match(/41\s*x\s*[24]1\s*x\s*(\d(?:\.\d)?)/);
+    return m ? +m[1] : null;
+  }
+  function impliedGauge(desc, qty, kg) {
+    if (!(kg > 0)) return null;
+    const d = String(desc || '').toLowerCase().replace(/\s+/g, '').replace(/x1\.5/g, '');
+    const m = d.match(/^(tray|trunking|cover)([\d+]+)x(\d+)?(?:x(\d{3,4}))?/);
+    if (!m || d.slice(m[0].length).indexOf('+') >= 0) return null;
+    const fam = m[1];
+    const ws = m[2].split('+').filter(Boolean).map(Number);
+    const qs = (String(qty || '').match(/\d+/g) || []).map(Number);
+    if (!qs.length || qs.length !== ws.length) return null;
+    let h = m[3] ? +m[3] : 0, L = m[4] ? +m[4] : 0;
+    if (fam === 'cover') { L = L || h; h = 0; }
+    L = L || 3000;
+    const fold = fam === 'cover' ? 30 : 40;
+    const area = ws.reduce((a, w, i) => a + qs[i] * (w + 2 * h + fold) / 1000 * L / 1000, 0);
+    return area > 0 ? kg / (area * STEEL_DENSITY) : null;
+  }
+  function batchGauge(line, kg, fam) {
+    const w = writtenGauge(line.desc);
+    if (w) return { t: w, src: 'written' };
+    const ig = impliedGauge(line.desc, line.qty, kg);
+    if (ig && ig >= 1.8) return { t: GAUGES.reduce((b, g) => Math.abs(g - ig) < Math.abs(b - ig) ? g : b), src: 'weight' };
+    return { t: gaugeOf(fam), src: 'default' };
+  }
+
   /* Rows without a weight are further lines of the jig above them — the
      sheet weighs the whole jig once and lists what hung on it. */
   function jigsOf(rows) {
@@ -119,11 +160,14 @@
     const famMean = {};
     Object.keys(famReads).forEach(f => { famMean[f] = mean(famReads[f]); });
 
-    const out = { kg: 0, area: 0, req: 0, over: 0, react: 0, avoid: 0, measuredKg: 0, items: [] };
+    const out = { kg: 0, area: 0, req: 0, over: 0, react: 0, avoid: 0, measuredKg: 0, items: [],
+                  gaugeKg: { written: 0, weight: 0, default: 0 } };
     jigs.forEach(function (j) {
       const head = j.lines[0];
       const fam = familyOf(head.desc);
-      const t = gaugeOf(fam);
+      const g = batchGauge(head, j.kg, fam);
+      const t = g.t;
+      out.gaugeKg[g.src] += j.kg;
       const rd = [].concat(...j.lines.map(readingsOf));
       const reactive = j.lines.some(l => l.reactive === true || l.reactive === 'true' || l.reactive === 1);
       const mu = rd.length ? mean(rd) : (famMean[fam.key] || 68);
@@ -154,7 +198,8 @@
     if (!dates.length) return null;
 
     const shifts = [];
-    const P = { kg: 0, area: 0, req: 0, over: 0, react: 0, avoid: 0, cons: 0, measuredKg: 0, coat: 0 };
+    const P = { kg: 0, area: 0, req: 0, over: 0, react: 0, avoid: 0, cons: 0, measuredKg: 0, coat: 0,
+                gaugeKg: { written: 0, weight: 0, default: 0 } };
     const unmatched = [];
     dates.forEach(function (date) {
       const b = batches[date];
@@ -172,6 +217,7 @@
         P.kg += s.kg; P.area += s.area; P.req += s.req; P.over += s.over;
         P.react += s.react; P.avoid += s.avoid; P.cons += cons; P.measuredKg += s.measuredKg;
         P.coat += s.coat;
+        Object.keys(P.gaugeKg).forEach(k => { P.gaugeKg[k] += s.gaugeKg[k]; });
       });
     });
     if (!P.cons) return { shifts: shifts, empty: true, unmatched: unmatched };
@@ -185,7 +231,8 @@
     // by product family and by customer, over matched shifts only
     const fam = {}, reactCust = {};
     shifts.filter(s => s.consumed != null).forEach(s => s.items.forEach(function (i) {
-      const f = fam[i.fam] = fam[i.fam] || { kg: 0, zn: 0, extra: 0, reads: 0, muSum: 0, n: 0, t: i.t };
+      const f = fam[i.fam] = fam[i.fam] || { kg: 0, zn: 0, extra: 0, reads: 0, muSum: 0, n: 0, tKg: 0 };
+      f.tKg += i.t * i.kg;
       f.kg += i.kg; f.zn += i.zn; f.extra += i.extra; f.n++;
       if (i.measured) { f.reads++; f.muSum += i.mu; }
       if (i.reactive) {
@@ -248,6 +295,8 @@
       '<p class="lab-life-sub" style="margin:0 2px 12px">' + esc(t('zb.period', {
         a: c.first, b: c.last, n: c.days, t: fmt(tonnes), jigs: c.shifts.reduce((s, x) => s + x.items.length, 0),
         m: (P.measuredKg / P.kg * 100).toFixed(0) })) + '</p>' +
+      '<p class="lab-life-sub" style="margin:0 2px 12px">' + esc(t('zb.gaugeSrc', {
+        w: fmt(P.gaugeKg.written / 1000), g: fmt(P.gaugeKg.weight / 1000), d: fmt(P.gaugeKg.default / 1000) })) + '</p>' +
       barHTML(P) +
       (P.dross ? '<div class="zn-note" style="color:var(--ink-2);background:var(--recess);border-color:var(--line)">' +
         esc(t('zb.dross', { kg: fmt(P.dross), pt: fmt(P.dross / tonnes, 1) })) + '</div>' : '');
@@ -272,12 +321,12 @@
       .sort((a, b) => b.kg - a.kg).map(function (f) {
         const mu = f.reads ? f.muSum / f.reads : null;
         return '<tr><td class="name">' + esc(t('zb.fam.' + f.key)) + '</td>' +
-          '<td class="num">' + f.t + '</td>' +
+          '<td class="num">' + fmt(f.tKg / f.kg, 2) + '</td>' +
           '<td class="num">' + fmt(f.kg / 1000, 1) + '</td>' +
           '<td class="num">' + f.n + '</td>' +
           '<td class="num">' + fmt(f.zn / f.kg * 1000, 1) + '</td>' +
           '<td class="num">' + (mu ? fmt(mu, 1) : '—') + '</td>' +
-          '<td class="num">' + isoMin(f.t) + '</td>' +
+          '<td class="num">' + isoMin(f.tKg / f.kg) + '</td>' +
           '<td class="num">' + fmt(f.extra) + '</td></tr>';
       }).join('');
 
@@ -487,5 +536,5 @@
   if (window.I18N && I18N.onChange) I18N.onChange(render);
 
   window.KGCZincBal = { render: render, _compute: compute, _balanceShift: balanceShift,
-                        _familyOf: familyOf, _import: doImport };
+                        _familyOf: familyOf, _import: doImport, _batchGauge: batchGauge };
 })();
