@@ -263,8 +263,9 @@
       f.kg += i.kg; f.zn += i.zn; f.extra += i.extra; f.n++;
       if (i.measured) { f.reads++; f.muSum += i.mu; }
       if (i.reactive) {
-        const c = reactCust[i.cust || '—'] = reactCust[i.cust || '—'] || { kg: 0, extra: 0, n: 0 };
+        const c = reactCust[i.cust || '—'] = reactCust[i.cust || '—'] || { kg: 0, extra: 0, n: 0, muKg: 0, mKg: 0 };
         c.kg += i.kg; c.extra += i.extra; c.n++;
+        if (i.measured) { c.muKg += i.mu * i.kg; c.mKg += i.kg; }
       }
     }));
 
@@ -400,7 +401,6 @@
     }
     const P = c.P;
     const tonnes = P.kg / 1000;
-    const zincPrice = num(prices.zinc) || 12;
 
     const head =
       '<div class="pt-stats">' +
@@ -424,14 +424,13 @@
     const levers =
       '<div class="zb-levers">' +
         '<div class="zb-lever"><span class="zb-lever-k">' + esc(t('zb.l1.k')) + '</span>' +
-          '<b>' + fmt(P.avoid) + ' kg</b><small>' + esc(t('zb.l.value', { v: fmt(P.avoid * zincPrice) })) + '</small>' +
+          '<b>' + fmt(P.avoid) + ' kg</b><small>' + fmt(P.avoid / tonnes, 1) + ' kg/t</small>' +
           '<p>' + esc(t('zb.l1.p', { m: margin() })) + '</p></div>' +
         '<div class="zb-lever"><span class="zb-lever-k">' + esc(t('zb.l2.k')) + '</span>' +
-          '<b>' + fmt(P.react) + ' kg</b><small>' + esc(t('zb.l.value', { v: fmt(P.react * zincPrice) })) + '</small>' +
+          '<b>' + fmt(P.react) + ' kg</b><small>' + fmt(P.react / tonnes, 1) + ' kg/t</small>' +
           '<p>' + esc(t('zb.l2.p', { n: custRows.length })) + '</p></div>' +
         '<div class="zb-lever"><span class="zb-lever-k">' + esc(t('zb.l4.k')) + '</span>' +
-          '<b>' + fmt(P.repassZn) + ' kg</b><small>' + esc(t('zb.l4.small', { t: fmt(P.repassKg / 1000, 1),
-            v: fmt(P.repassZn * zincPrice) })) + '</small>' +
+          '<b>' + fmt(P.repassZn) + ' kg</b><small>' + esc(t('zb.l4.small', { t: fmt(P.repassKg / 1000, 1) })) + '</small>' +
           '<p>' + esc(t(P.repassLogged ? 'zb.l4.pLog' : 'zb.l4.p')) + '</p></div>' +
         '<div class="zb-lever"><span class="zb-lever-k">' + esc(t('zb.l3.k')) + '</span>' +
           '<b>' + fmt(P.residual) + ' kg</b><small>' + (P.residual / P.cons * 100).toFixed(1) + '%</small>' +
