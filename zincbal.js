@@ -66,6 +66,7 @@
   let settings = {};   // {margin, gauge:{family:t}}
   let prices = {};
   let losses = {};     // push-id -> {date, shift, ash, repass, note}
+  let PERT = null;     // set only while the uncertainty runs recompute the balance
 
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -136,7 +137,10 @@
     // figure is a grouping or quantity slip on the sheet, not real sheet
     const ig = single === false ? null : impliedGauge(line.desc, line.qty, kg);
     if (ig && ig >= 1.8 && ig <= 3.3) return { t: GAUGES.reduce((b, g) => Math.abs(g - ig) < Math.abs(b - ig) ? g : b), src: 'weight' };
-    return { t: gaugeOf(fam), src: 'default' };
+    const t0 = gaugeOf(fam);
+    // uncertainty run: part of the unmarked sheet is really 2 mm (area goes as 1/t)
+    if (PERT && PERT.heavy && t0 < 2) return { t: 1 / ((1 - PERT.heavy) / t0 + PERT.heavy / 2), src: 'default' };
+    return { t: t0, src: 'default' };
   }
 
   /* Rows without a weight are further lines of the jig above them — the
@@ -180,12 +184,13 @@
       const t = g.t;
       out.gaugeKg[g.src] += j.kg;
       const rd = [].concat(...j.lines.map(readingsOf));
-      const mu = rd.length ? mean(rd) : (famMean[fam.key] || 68);
+      const mu = (rd.length ? mean(rd) : (famMean[fam.key] || 68) + (PERT ? PERT.unmeasured || 0 : 0)) +
+                 (PERT ? PERT.mu || 0 : 0);
       /* Normal steel at this plant's immersion times comes out at 60-85 um;
          a batch averaging 95 um or more is behaving as reactive steel whether
          or not the operator wrote "Reactive" beside it. */
       const reactive = j.lines.some(l => l.reactive === true || l.reactive === 'true' || l.reactive === 1) ||
-                       (rd.length > 0 && mu >= 95);
+                       (rd.length > 0 && mu >= (PERT && PERT.react ? PERT.react : 95));
       const spec = Math.max(isoMin(t), ...j.lines.map(l => num(l.spec)));
       const A = areaPerKg(t) * j.kg;
       const req = A * Math.min(mu, spec) * ZN_G_PER_M2_UM / 1000;
@@ -279,8 +284,73 @@
 
     const res = { P: P, shifts: shifts, fam: fam, reactCust: reactCust, first: first, last: last,
                   unmatched: unmatched, days: dates.length };
-    res.fc = forecast(res);
+    if (!PERT) { res.fc = forecast(res); res.unc = uncertainty(res); }
     return res;
+  }
+
+  /* ---------------- how sure each figure is ----------------
+     Each figure is recomputed with one source of doubt moved by the amount
+     the data itself supports, and the shifts are combined as independent
+     (root sum of squares):
+       gauge      15% of the sheet with no gauge written is really 2 mm
+                  (the share of batches the weight audit found heavier)
+       readings   +-3 um bias in the written thicknesses (the gap between
+                  day and night shift means for the same products)
+       unmeasured +-5 um on batches with no readings, which take their
+                  product's average
+       reactive   the unmarked-reactive threshold at 90 or 100 instead of 95
+       level      +-0.3% on the 555 kg/cm factor (weighed ingots against the
+                  level drop over 52 days) and +-97 kg a shift of reading
+                  scatter (measured against the calculated openings)
+     Confidence = 100 - the band as a percentage of the figure, capped at
+     99: nothing inferred from paper is certain. */
+  const KEYS = ['req', 'over', 'react', 'coat', 'avoid', 'area', 'residual'];
+  function uncertainty(base) {
+    const runs = {
+      gauge: [{ heavy: 0.15 }],
+      readings: [{ mu: 3 }, { mu: -3 }],
+      unmeasured: [{ unmeasured: 5 }, { unmeasured: -5 }],
+      reactive: [{ react: 90 }, { react: 100 }]
+    };
+    const dev = {};   // key -> source -> max abs change
+    KEYS.forEach(k => { dev[k] = {}; });
+    Object.keys(runs).forEach(function (src) {
+      runs[src].forEach(function (pert) {
+        PERT = pert;
+        let r;
+        try { r = compute(); } finally { PERT = null; }
+        if (!r || !r.P) return;
+        KEYS.forEach(function (k) {
+          const d = Math.abs((r.P[k] || 0) - (base.P[k] || 0));
+          dev[k][src] = Math.max(dev[k][src] || 0, d);
+        });
+      });
+    });
+    const P = base.P;
+    const levelKg = Math.sqrt(0.003 * 0.003 * P.cons * P.cons + P.matchedShifts * 97 * 97);
+    dev.residual.level = levelKg;
+    const out = { sources: dev, levelKg: levelKg };
+    const band = k => Math.sqrt(Object.values(dev[k]).reduce((a, x) => a + x * x, 0));
+    const conf = (v, b) => v ? Math.max(0, Math.min(99, 100 - b / Math.abs(v) * 100)) : 0;
+    KEYS.forEach(k => { out[k] = { band: band(k), conf: conf(P[k], band(k)) }; });
+    out.cons = { band: levelKg, conf: conf(P.cons, levelKg) };
+    out.kg = { band: 0, conf: 99 };
+    // re-pass and ash: complete only on shifts where they were weighed
+    out.repass = { coverage: P.matchedShifts ? P.repassLogged / P.matchedShifts * 100 : 0 };
+    out.ash = { coverage: P.matchedShifts ? P.ashShifts / P.matchedShifts * 100 : 0 };
+    return out;
+  }
+  function confBadge(u, extra) {
+    if (!u) return '';
+    const c = Math.round(u.conf);
+    const cls = c >= 95 ? 'hi' : c >= 80 ? 'mid' : 'lo';
+    return '<span class="zb-conf zb-conf-' + cls + '" title="' + esc(t('zb.conf.tip', { b: fmt(u.band) }) + (extra || '')) + '">' +
+      esc(t('zb.conf', { p: c })) + '</span>';
+  }
+  function coverBadge(pct) {
+    const c = Math.round(pct);
+    return '<span class="zb-conf zb-conf-' + (c >= 95 ? 'hi' : c >= 50 ? 'mid' : 'lo') + '" title="' + esc(t('zb.cover.tip')) + '">' +
+      esc(t('zb.cover', { p: c })) + '</span>';
   }
 
   function lossIndex() {
@@ -372,11 +442,12 @@
 
   /* ---------------- rendering ---------------- */
 
-  const stat = (k, v, unit, hot) =>
+  const stat = (k, v, unit, hot, badge) =>
     '<div class="pt-stat' + (hot ? ' hot' : '') + '"><span class="k">' + esc(k) + '</span>' +
-    '<span class="v">' + v + (unit ? '<small>' + esc(unit) + '</small>' : '') + '</span></div>';
+    '<span class="v">' + v + (unit ? '<small>' + esc(unit) + '</small>' : '') + '</span>' + (badge || '') + '</div>';
 
-  function barHTML(P) {
+  function barHTML(P, U) {
+    const UK = { req: 'req', over: 'over', react: 'react', resid: 'residual' };
     const parts = [
       { k: 'req',   v: P.req,   cls: 'zb-req' },
       { k: 'over',  v: P.over,  cls: 'zb-over' },
@@ -392,7 +463,8 @@
       '<div class="zb-legend">' + parts.map(p =>
         '<div class="zb-leg"><i class="' + p.cls + '"></i><span>' + esc(t('zb.part.' + p.k)) + '</span>' +
         '<b>' + fmt(perT(p.v), 1) + '</b><small>kg/t</small>' +
-        '<em>' + (p.v / P.cons * 100).toFixed(1) + '%</em></div>').join('') + '</div>' +
+        '<em>' + (p.v / P.cons * 100).toFixed(1) + '%</em>' +
+        (p.k === 'ash' ? coverBadge(U.ash.coverage) : confBadge(U[UK[p.k]])) + '</div>').join('') + '</div>' +
       '<p class="lab-life-sub" style="margin:6px 2px 0">' + esc(t('zb.part.hint')) + '</p>';
   }
 
@@ -408,21 +480,23 @@
       return;
     }
     const P = c.P;
+    const U = c.unc;
     const tonnes = P.kg / 1000;
 
     const head =
       '<div class="pt-stats">' +
-        stat(t('zb.k.cons'), fmt(P.cons / tonnes, 1), 'kg/t') +
-        stat(t('zb.k.explained'), (P.coat / P.cons * 100).toFixed(0), '%') +
-        stat(t('zb.k.avoid'), fmt(P.avoid), 'kg', true) +
-        stat(t('zb.k.area'), fmt(P.area / tonnes), 'm²/t') +
+        stat(t('zb.k.cons'), fmt(P.cons / tonnes, 1), 'kg/t', false, confBadge(U.cons)) +
+        stat(t('zb.k.explained'), (P.coat / P.cons * 100).toFixed(0), '%', false, confBadge(U.coat)) +
+        stat(t('zb.k.avoid'), fmt(P.avoid), 'kg', true, confBadge(U.avoid)) +
+        stat(t('zb.k.area'), fmt(P.area / tonnes), 'm²/t', false, confBadge(U.area)) +
       '</div>' +
       '<p class="lab-life-sub" style="margin:0 2px 12px">' + esc(t('zb.period', {
         a: c.first, b: c.last, n: c.days, t: fmt(tonnes), jigs: c.shifts.reduce((s, x) => s + x.items.length, 0),
         m: (P.measuredKg / P.kg * 100).toFixed(0) })) + '</p>' +
       '<p class="lab-life-sub" style="margin:0 2px 12px">' + esc(t('zb.gaugeSrc', {
         w: fmt(P.gaugeKg.written / 1000), g: fmt(P.gaugeKg.weight / 1000), d: fmt(P.gaugeKg.default / 1000) })) + '</p>' +
-      barHTML(P) +
+      barHTML(P, U) +
+      uncTableHTML(P, U) +
       (P.dross ? '<div class="zn-note" style="color:var(--ink-2);background:var(--recess);border-color:var(--line)">' +
         esc(t('zb.dross', { kg: fmt(P.dross), pt: fmt(P.dross / tonnes, 1) })) + '</div>' : '');
 
@@ -433,15 +507,16 @@
       '<div class="zb-levers">' +
         '<div class="zb-lever"><span class="zb-lever-k">' + esc(t('zb.l1.k')) + '</span>' +
           '<b>' + fmt(P.avoid) + ' kg</b><small>' + fmt(P.avoid / tonnes, 1) + ' kg/t</small>' +
-          '<p>' + esc(t('zb.l1.p', { m: margin() })) + '</p></div>' +
+          confBadge(U.avoid) + '<p>' + esc(t('zb.l1.p', { m: margin() })) + '</p></div>' +
         '<div class="zb-lever"><span class="zb-lever-k">' + esc(t('zb.l2.k')) + '</span>' +
           '<b>' + fmt(P.react) + ' kg</b><small>' + fmt(P.react / tonnes, 1) + ' kg/t</small>' +
-          '<p>' + esc(t('zb.l2.p', { n: custRows.length })) + '</p></div>' +
+          confBadge(U.react) + '<p>' + esc(t('zb.l2.p', { n: custRows.length })) + '</p></div>' +
         '<div class="zb-lever"><span class="zb-lever-k">' + esc(t('zb.l4.k')) + '</span>' +
           '<b>' + fmt(P.repassZn) + ' kg</b><small>' + esc(t('zb.l4.small', { t: fmt(P.repassKg / 1000, 1) })) + '</small>' +
-          '<p>' + esc(t(P.repassLogged ? 'zb.l4.pLog' : 'zb.l4.p')) + '</p></div>' +
+          coverBadge(U.repass.coverage) + '<p>' + esc(t(P.repassLogged ? 'zb.l4.pLog' : 'zb.l4.p')) + '</p></div>' +
         '<div class="zb-lever"><span class="zb-lever-k">' + esc(t('zb.l3.k')) + '</span>' +
           '<b>' + fmt(P.residual) + ' kg</b><small>' + (P.residual / P.cons * 100).toFixed(1) + '%</small>' +
+          confBadge(U.residual) +
           '<p>' + esc(t('zb.l3.p')) + '</p></div>' +
       '</div>';
 
@@ -501,6 +576,24 @@
       forecastHTML(c) + lossHTML(c) + planHTML(c.fc) +
       tools;
     wire(mount);
+  }
+
+  function uncTableHTML(P, U) {
+    const srcs = ['gauge', 'readings', 'unmeasured', 'reactive', 'level'];
+    const rows = [['avoid', 'zb.k.avoid'], ['over', 'zb.part.over'], ['react', 'zb.part.react'],
+                  ['residual', 'zb.part.resid'], ['req', 'zb.part.req']];
+    return '<details class="zb-unc"><summary>' + esc(t('zb.unc.title')) + '</summary>' +
+      '<p class="lab-life-sub" style="margin:8px 2px">' + esc(t('zb.unc.sub')) + '</p>' +
+      '<div class="tablewrap"><table><thead><tr><th>' + esc(t('zb.unc.fig')) + '</th>' +
+        srcs.map(s => '<th>' + esc(t('zb.unc.s.' + s)) + '</th>').join('') +
+        '<th>' + esc(t('zb.unc.band')) + '</th><th>' + esc(t('zb.unc.conf')) + '</th></tr></thead><tbody>' +
+      rows.map(function (r) {
+        const d = U.sources[r[0]] || {};
+        return '<tr><td class="name">' + esc(t(r[1])) + '</td>' +
+          srcs.map(s => '<td class="num">' + (d[s] ? '±' + fmt(d[s]) : '—') + '</td>').join('') +
+          '<td class="num">±' + fmt(U[r[0]].band) + '</td><td>' + confBadge(U[r[0]]) + '</td></tr>';
+      }).join('') + '</tbody></table></div>' +
+      '<p class="lab-life-sub" style="margin:8px 2px 0">' + esc(t('zb.unc.foot')) + '</p></details>';
   }
 
   function forecastHTML(c) {
