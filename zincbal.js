@@ -113,7 +113,9 @@
   }
   function impliedGauge(desc, qty, kg) {
     if (!(kg > 0)) return null;
-    const d = String(desc || '').toLowerCase().replace(/\s+/g, '').replace(/x1\.5/g, '');
+    // a space before the length means the same as an x ("Trunking 100x100 3000")
+    const d = String(desc || '').toLowerCase().replace(/x\s*1\.5/g, '')
+      .replace(/(\d)\s+(\d{3,4})\b/g, '$1x$2').replace(/\s+/g, '');
     const m = d.match(/^(tray|trunking|cover)([\d+]+)x(\d+)?(?:x(\d{3,4}))?/);
     if (!m || d.slice(m[0].length).indexOf('+') >= 0) return null;
     const fam = m[1];
@@ -127,11 +129,13 @@
     const area = ws.reduce((a, w, i) => a + qs[i] * (w + 2 * h + fold) / 1000 * L / 1000, 0);
     return area > 0 ? kg / (area * STEEL_DENSITY) : null;
   }
-  function batchGauge(line, kg, fam) {
+  function batchGauge(line, kg, fam, single) {
     const w = writtenGauge(line.desc);
     if (w) return { t: w, src: 'written' };
-    const ig = impliedGauge(line.desc, line.qty, kg);
-    if (ig && ig >= 1.8) return { t: GAUGES.reduce((b, g) => Math.abs(g - ig) < Math.abs(b - ig) ? g : b), src: 'weight' };
+    // only when the jig weight belongs to this line alone; above 3.3 mm the
+    // figure is a grouping or quantity slip on the sheet, not real sheet
+    const ig = single === false ? null : impliedGauge(line.desc, line.qty, kg);
+    if (ig && ig >= 1.8 && ig <= 3.3) return { t: GAUGES.reduce((b, g) => Math.abs(g - ig) < Math.abs(b - ig) ? g : b), src: 'weight' };
     return { t: gaugeOf(fam), src: 'default' };
   }
 
@@ -172,12 +176,16 @@
     jigs.forEach(function (j) {
       const head = j.lines[0];
       const fam = familyOf(head.desc);
-      const g = batchGauge(head, j.kg, fam);
+      const g = batchGauge(head, j.kg, fam, j.lines.length === 1);
       const t = g.t;
       out.gaugeKg[g.src] += j.kg;
       const rd = [].concat(...j.lines.map(readingsOf));
-      const reactive = j.lines.some(l => l.reactive === true || l.reactive === 'true' || l.reactive === 1);
       const mu = rd.length ? mean(rd) : (famMean[fam.key] || 68);
+      /* Normal steel at this plant's immersion times comes out at 60-85 um;
+         a batch averaging 95 um or more is behaving as reactive steel whether
+         or not the operator wrote "Reactive" beside it. */
+      const reactive = j.lines.some(l => l.reactive === true || l.reactive === 'true' || l.reactive === 1) ||
+                       (rd.length > 0 && mu >= 95);
       const spec = Math.max(isoMin(t), ...j.lines.map(l => num(l.spec)));
       const A = areaPerKg(t) * j.kg;
       const req = A * Math.min(mu, spec) * ZN_G_PER_M2_UM / 1000;
