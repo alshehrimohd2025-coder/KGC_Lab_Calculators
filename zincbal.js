@@ -65,6 +65,7 @@
   let batches = {};    // date -> {date, day:{rows:[]}, night:{rows:[]}}
   let settings = {};   // {margin, gauge:{family:t}}
   let prices = {};
+  let losses = {};     // push-id -> {date, shift, ash, repass, note}
 
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -223,6 +224,20 @@
     if (!P.cons) return { shifts: shifts, empty: true, unmatched: unmatched };
     P.residual = P.cons - P.coat;
 
+    /* Weighed ash and re-pass, per shift. Ash only splits the residual on
+       the shifts where it was actually weighed, so an unlogged shift is not
+       counted as zero ash. */
+    const L = lossIndex();
+    P.ash = 0; P.ashShifts = 0; P.ashResid = 0; P.repass = 0; P.matchedShifts = 0;
+    shifts.forEach(function (s) {
+      const l = L[s.date + '_' + s.shift];
+      s.ash = l ? l.ash : null; s.repass = l ? l.repass : null;
+      if (s.consumed == null) return;
+      P.matchedShifts++;
+      if (l && l.repass) P.repass += l.repass;
+      if (l && l.ash != null) { P.ash += l.ash; P.ashShifts++; P.ashResid += s.residual; }
+    });
+
     // dross is removed on stop days, so it is taken over the same calendar window
     const first = dates[0], last = dates[dates.length - 1];
     P.dross = Object.values(report).filter(d => d && d.date >= first && d.date <= last)
@@ -241,8 +256,97 @@
       }
     }));
 
-    return { P: P, shifts: shifts, fam: fam, reactCust: reactCust, first: first, last: last,
-             unmatched: unmatched, days: dates.length };
+    const res = { P: P, shifts: shifts, fam: fam, reactCust: reactCust, first: first, last: last,
+                  unmatched: unmatched, days: dates.length };
+    res.fc = forecast(res);
+    return res;
+  }
+
+  function lossIndex() {
+    const out = {};
+    Object.values(losses || {}).forEach(function (l) {
+      if (!l || !l.date || !l.shift) return;
+      const k = l.date + '_' + l.shift;
+      const o = out[k] = out[k] || { ash: null, repass: null };
+      if (l.ash != null && l.ash !== '') o.ash = (o.ash || 0) + num(l.ash);
+      if (l.repass != null && l.repass !== '') o.repass = (o.repass || 0) + num(l.repass);
+    });
+    return out;
+  }
+
+  /* ---------------- expected consumption from the jig mix ----------------
+     What a day "should" have used given what went through the kettle, not
+     just how heavy it was: each batch at its own gauge (so its own m2/t),
+     at the thickness its product usually comes out at, reactive batches at
+     the reactive average, plus the zinc that ends up outside the coating at
+     the rate seen on the other days. Judged per day, because the split
+     between day and night shift depends on when the level is read.
+
+     The band is the forecast's own track record: leave each day out, predict
+     it from the rest, and take the spread of the misses. The page shows the
+     same figure for a weight-only forecast beside it, so it is plain how much
+     the product mix adds; logged ash and re-pass are what should shrink it. */
+  function typicalMicrons(shifts) {
+    const fam = {}; const re = [];
+    shifts.forEach(s => s.items.forEach(function (i) {
+      if (!i.measured) return;
+      if (i.reactive) re.push(i.mu); else (fam[i.fam] = fam[i.fam] || []).push(i.mu);
+    }));
+    const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+    const out = {}; Object.keys(fam).forEach(k => { out[k] = mean(fam[k]); });
+    return { fam: out, reactive: re.length ? mean(re) : 130, all: mean([].concat(...Object.values(fam))) || 68 };
+  }
+  function typicalCoat(items, mu) {
+    return items.reduce((a, i) => a + areaPerKg(i.t) * i.kg *
+      (i.reactive ? mu.reactive : (mu.fam[i.fam] || mu.all)) * ZN_G_PER_M2_UM / 1000, 0);
+  }
+  function forecast(c) {
+    const mu = typicalMicrons(c.shifts);
+    const byDay = {};
+    c.shifts.forEach(function (s) {
+      const d = byDay[s.date] = byDay[s.date] || { date: s.date, kg: 0, area: 0, items: [], cons: 0, full: true,
+                                                   ash: null, repass: null };
+      d.kg += s.kg; d.area += s.area; d.items = d.items.concat(s.items);
+      if (s.consumed == null) d.full = false; else d.cons += s.consumed;
+      if (s.ash != null) d.ash = (d.ash || 0) + s.ash;
+      if (s.repass != null) d.repass = (d.repass || 0) + s.repass;
+    });
+    const days = Object.values(byDay).sort((a, b) => a.date < b.date ? -1 : 1);
+    days.forEach(d => { d.coatT = typicalCoat(d.items, mu); });
+    const known = days.filter(d => d.full && d.cons > 0);
+    const sum = (a, f) => a.reduce((x, y) => x + f(y), 0);
+    // one rate for everything outside the coating, from the days that have both sides
+    const rateAll = known.length ? sum(known, d => d.cons - d.coatT) / sum(known, d => d.kg) : 0;
+    const avgAll = known.length ? sum(known, d => d.cons) / sum(known, d => d.kg) : 0;
+    const errMix = [], errW = [];
+    days.forEach(function (d) {
+      const others = known.filter(o => o !== d);
+      const rate = others.length ? sum(others, o => o.cons - o.coatT) / sum(others, o => o.kg) : rateAll;
+      const avg = others.length ? sum(others, o => o.cons) / sum(others, o => o.kg) : avgAll;
+      d.exp = (d.coatT + rate * d.kg) / d.kg * 1000;          // kg zinc per tonne
+      d.act = d.full && d.cons > 0 ? d.cons / d.kg * 1000 : null;
+      if (d.act != null && others.length) { errMix.push(d.act - d.exp); errW.push(d.act - avg * 1000); }
+    });
+    const rms = a => a.length ? Math.sqrt(a.reduce((x, y) => x + y * y, 0) / a.length) : null;
+    const band = rms(errMix);
+    days.forEach(function (d) {
+      if (d.act == null || band == null) { d.verdict = null; return; }
+      const z = d.act - d.exp;
+      d.verdict = z > band ? 'high' : z < -band ? 'low' : 'normal';
+    });
+    return { days: days, mu: mu, band: band, bandW: rms(errW), rate: rateAll, n: errMix.length };
+  }
+  function plan(tonnesByFam, reactiveT, fc) {
+    let kg = 0, zn = 0;
+    FAMILIES.forEach(function (f) {
+      const tt = num(tonnesByFam[f.key]); if (!(tt > 0)) return;
+      const g = gaugeOf(f);
+      kg += tt * 1000;
+      zn += areaPerKg(g) * tt * 1000 * (fc.mu.fam[f.key] || fc.mu.all) * ZN_G_PER_M2_UM / 1000;
+    });
+    if (reactiveT > 0) { kg += reactiveT * 1000; zn += areaPerKg(1.5) * reactiveT * 1000 * fc.mu.reactive * ZN_G_PER_M2_UM / 1000; }
+    zn += fc.rate * kg;
+    return kg ? { kg: kg, zn: zn, perT: zn / kg * 1000, pct: zn / kg * 100 } : null;
   }
 
   /* ---------------- rendering ---------------- */
@@ -256,8 +360,9 @@
       { k: 'req',   v: P.req,   cls: 'zb-req' },
       { k: 'over',  v: P.over,  cls: 'zb-over' },
       { k: 'react', v: P.react, cls: 'zb-react' },
-      { k: 'resid', v: Math.max(P.residual, 0), cls: 'zb-resid' }
+      { k: 'resid', v: Math.max(P.residual - P.ash, 0), cls: 'zb-resid' }
     ];
+    if (P.ash > 0) parts.splice(3, 0, { k: 'ash', v: P.ash, cls: 'zb-ash' });
     const tot = parts.reduce((s, p) => s + p.v, 0) || 1;
     const perT = v => v / (P.kg / 1000);
     return '<div class="zb-bar" role="img" aria-label="' + esc(t('zb.barAria')) + '">' +
@@ -370,8 +475,77 @@
       '</tr></thead><tbody>' + shiftRows + '</tbody></table></div>' +
       (c.unmatched.length ? '<p class="lab-life-sub" style="margin:8px 2px 0">' +
         esc(t('zb.unmatched', { list: c.unmatched.join('، ') })) + '</p>' : '') +
+      forecastHTML(c) + lossHTML(c) + planHTML(c.fc) +
       tools;
     wire(mount);
+  }
+
+  function forecastHTML(c) {
+    const fc = c.fc;
+    if (!fc || !fc.days.length) return '';
+    const pill = v => v ? '<span class="zb-v zb-v-' + v + '">' + esc(t('zb.v.' + v)) + '</span>' : '—';
+    const rows = fc.days.slice().reverse().map(d =>
+      '<tr><td>' + esc(d.date) + '</td>' +
+      '<td class="num">' + fmt(d.kg / 1000, 1) + '</td>' +
+      '<td class="num">' + fmt(d.area / d.kg * 1000) + '</td>' +
+      '<td class="num">' + fmt(d.exp, 1) + '</td>' +
+      '<td class="num">' + (d.act != null ? fmt(d.act, 1) : '—') + '</td>' +
+      '<td class="num">' + (d.act != null ? (d.act - d.exp >= 0 ? '+' : '') + fmt(d.act - d.exp, 1) : '—') + '</td>' +
+      '<td>' + pill(d.verdict) + '</td>' +
+      '<td class="num">' + (d.ash != null ? fmt(d.ash) : '—') + '</td>' +
+      '<td class="num">' + (d.repass != null ? fmt(d.repass) : '—') + '</td></tr>').join('');
+    return '<h3 class="zb-h">' + esc(t('zb.h.fc')) + '</h3>' +
+      '<p class="lab-life-sub" style="margin:0 2px 8px">' + esc(t('zb.fc.sub')) + '</p>' +
+      (fc.band != null ? '<div class="zn-note" style="color:var(--ink-2);background:var(--recess);border-color:var(--line)">' +
+        esc(t('zb.fc.track', { m: fmt(fc.band, 1), w: fmt(fc.bandW, 1), n: fc.n })) + '</div>' : '') +
+      '<div class="tablewrap"><table><thead><tr>' +
+        ['zb.c.date', 'zb.c.t', 'zb.c.area', 'zb.c.exp', 'zb.c.act', 'zb.c.diff', 'zb.c.verdict', 'zb.c.ash', 'zb.c.repass']
+          .map(k => '<th>' + esc(t(k)) + '</th>').join('') +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
+
+  function lossHTML(c) {
+    const today = new Date().toISOString().slice(0, 10);
+    const list = Object.keys(losses || {}).map(k => Object.assign({ key: k }, losses[k]))
+      .filter(l => l && l.date).sort((a, b) => (b.date + b.shift) < (a.date + a.shift) ? -1 : 1).slice(0, 20);
+    const P = c.P;
+    const cover = P.matchedShifts ? t('zb.log.cover', { a: P.ashShifts, n: P.matchedShifts,
+      p: P.ashShifts && P.ashResid > 0 ? (P.ash / P.ashResid * 100).toFixed(0) : '—' }) : '';
+    return '<h3 class="zb-h">' + esc(t('zb.h.log')) + '</h3>' +
+      '<p class="lab-life-sub" style="margin:0 2px 8px">' + esc(t('zb.log.sub')) + '</p>' +
+      (cover ? '<p class="lab-life-sub" style="margin:0 2px 10px">' + esc(cover) + '</p>' : '') +
+      '<div class="lab-form" id="zb-log-form">' +
+        '<div><label>' + esc(t('zb.c.date')) + '</label><input type="date" id="zbl-date" value="' + today + '"></div>' +
+        '<div><label>' + esc(t('zb.c.shift')) + '</label><select id="zbl-shift">' +
+          '<option value="day">' + esc(t('zb.shift.day')) + '</option><option value="night">' + esc(t('zb.shift.night')) + '</option></select></div>' +
+        '<div><label>' + esc(t('zb.log.ash')) + ' <span class="unit">kg</span></label><input type="number" step="any" min="0" id="zbl-ash"></div>' +
+        '<div><label>' + esc(t('zb.log.repass')) + ' <span class="unit">kg</span></label><input type="number" step="any" min="0" id="zbl-repass"></div>' +
+        '<div style="grid-column:span 2"><label>' + esc(t('zb.log.note')) + '</label><input type="text" id="zbl-note" maxlength="120"></div>' +
+        '<div><button class="btn" id="zbl-save" style="width:100%;justify-content:center">' + esc(t('zb.log.save')) + '</button></div>' +
+        '<div style="grid-column:1/-1"><span id="zbl-msg"></span></div>' +
+      '</div>' +
+      (list.length ? '<div class="tablewrap" style="margin-top:10px"><table><thead><tr>' +
+        ['zb.c.date', 'zb.c.shift', 'zb.c.ash', 'zb.c.repass', 'zb.log.note', ''].map(k => '<th>' + (k ? esc(t(k)) : '') + '</th>').join('') +
+        '</tr></thead><tbody>' + list.map(l =>
+          '<tr><td>' + esc(l.date) + '</td><td>' + esc(t('zb.shift.' + l.shift)) + '</td>' +
+          '<td class="num">' + (l.ash != null && l.ash !== '' ? fmt(l.ash) : '—') + '</td>' +
+          '<td class="num">' + (l.repass != null && l.repass !== '' ? fmt(l.repass) : '—') + '</td>' +
+          '<td>' + esc(l.note || '') + '</td>' +
+          '<td><button class="btn mini danger" data-zbl-del="' + esc(l.key) + '">' + esc(t('zb.log.del')) + '</button></td></tr>').join('') +
+        '</tbody></table></div>' : '');
+  }
+
+  function planHTML(fc) {
+    if (!fc) return '';
+    const fams = FAMILIES.filter(f => f.key !== 'other');
+    return '<h3 class="zb-h">' + esc(t('zb.h.plan')) + '</h3>' +
+      '<p class="lab-life-sub" style="margin:0 2px 8px">' + esc(t('zb.plan.sub')) + '</p>' +
+      '<div class="lab-form" id="zb-plan">' +
+        fams.map(f => '<div><label>' + esc(t('zb.fam.' + f.key)) + ' <span class="unit">t</span></label>' +
+          '<input type="number" step="any" min="0" data-plan="' + f.key + '"></div>').join('') +
+        '<div><label>' + esc(t('zb.plan.react')) + ' <span class="unit">t</span></label><input type="number" step="any" min="0" id="zbp-react"></div>' +
+      '</div>' +
+      '<div class="pt-stats" id="zb-plan-out" style="margin-top:12px"></div>';
   }
 
   /* ---------------- settings, import, export ---------------- */
@@ -525,6 +699,48 @@
     }
     const exp = mount.querySelector('#zb-export');
     if (exp) exp.addEventListener('click', doExport);
+
+    const lsave = mount.querySelector('#zbl-save');
+    if (lsave) lsave.addEventListener('click', function () {
+      const m = mount.querySelector('#zbl-msg');
+      const sayL = (x, bad) => { if (m) { m.textContent = x; m.style.color = bad ? 'var(--crit)' : 'var(--accent)'; } };
+      if (!IS_EDITOR || !IS_AUTHED) { sayL(t('coat.needAuth'), true); return; }
+      const v = id => (mount.querySelector(id) || {}).value || '';
+      const date = v('#zbl-date'), shift = v('#zbl-shift');
+      const ash = v('#zbl-ash'), repass = v('#zbl-repass');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { sayL(t('zb.log.errDate'), true); return; }
+      if (ash === '' && repass === '') { sayL(t('zb.log.errEmpty'), true); return; }
+      const rec = { date: date, shift: shift, ts: Date.now() };
+      if (ash !== '') rec.ash = Number(ash);
+      if (repass !== '') rec.repass = Number(repass);
+      if (v('#zbl-note').trim()) rec.note = v('#zbl-note').trim().slice(0, 120);
+      if ((rec.ash != null && !(rec.ash >= 0)) || (rec.repass != null && !(rec.repass >= 0))) { sayL(t('zb.log.errEmpty'), true); return; }
+      database.ref('zinc_losses').push(rec)
+        .then(() => sayL(t('zb.saved')))
+        .catch(e => sayL(t('coat.failed') + ' ' + e.message, true));
+    });
+    mount.querySelectorAll('[data-zbl-del]').forEach(b => b.addEventListener('click', function () {
+      if (!IS_EDITOR || !IS_AUTHED) return;
+      if (!confirm(t('zb.log.confirmDel'))) return;
+      database.ref('zinc_losses/' + b.getAttribute('data-zbl-del')).remove();
+    }));
+
+    const planBox = mount.querySelector('#zb-plan');
+    if (planBox) {
+      const upd = function () {
+        const c = compute(); const out = mount.querySelector('#zb-plan-out');
+        if (!c || !c.fc || !out) return;
+        const tons = {};
+        planBox.querySelectorAll('[data-plan]').forEach(el => { tons[el.getAttribute('data-plan')] = Number(el.value) || 0; });
+        const r = plan(tons, Number((mount.querySelector('#zbp-react') || {}).value) || 0, c.fc);
+        out.innerHTML = r
+          ? stat(t('zb.plan.perT'), fmt(r.perT, 1), 'kg/t') + stat(t('zb.plan.pct'), r.pct.toFixed(2), '%') +
+            stat(t('zb.plan.zn'), fmt(r.zn), 'kg') + stat(t('zb.plan.band'), '± ' + fmt(c.fc.band || 0, 1), 'kg/t')
+          : '<p class="lab-life-sub" style="margin:0 2px">' + esc(t('zb.plan.empty')) + '</p>';
+      };
+      planBox.addEventListener('input', upd);
+      upd();
+    }
   }
 
   /* ---------------- wiring ---------------- */
@@ -532,9 +748,10 @@
   database.ref('jig_batches').on('value', s => { batches = s.val() || {}; render(); });
   database.ref('zincbal_settings').on('value', s => { settings = s.val() || {}; render(); });
   database.ref('prices').on('value', s => { prices = s.val() || {}; render(); });
+  database.ref('zinc_losses').on('value', s => { losses = s.val() || {}; render(); });
   database.ref('zinc_daily').on('value', render);
   if (window.I18N && I18N.onChange) I18N.onChange(render);
 
   window.KGCZincBal = { render: render, _compute: compute, _balanceShift: balanceShift,
-                        _familyOf: familyOf, _import: doImport, _batchGauge: batchGauge };
+                        _familyOf: familyOf, _import: doImport, _batchGauge: batchGauge, _plan: plan };
 })();
