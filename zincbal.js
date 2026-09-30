@@ -1,0 +1,491 @@
+/* ============================================================
+   Zinc mass balance — where each kilogram of zinc went
+   ------------------------------------------------------------
+   The production report says how much zinc left the kettle per shift
+   (bath-level drop). The jig sheets say what went through it, batch by
+   batch: product, weight, and five thickness readings. Between them the
+   zinc can be split into the part the specification demands and the part
+   that did not have to go.
+
+   Coating zinc on a batch = specific area x mean thickness x 7.14 g/m2/um.
+   For sheet products (tray, cover, trunking, ladder, channel) the specific
+   area depends only on the gauge: 2 / (7.85 x t) m2/kg, both faces, and
+   folding a sheet into a tray does not change it. That is why ISO 1461
+   bands its minimums by thickness, and why no drawing is needed here.
+
+     required   = area x the thickness the spec asks for
+                  (ISO 1461 minimum mean for the gauge, or the customer's
+                  figure where the sheet writes one, e.g. "65 microns")
+     excess     = area x whatever was put on above that, normal steel
+     reactive   = the same, on batches the operators marked reactive
+                  (silicon/phosphorus steel growing an uncontrolled layer)
+     residual   = zinc that left the bath minus all coating: ash and skim,
+                  drag-out that drips off, splash. Dross is weighed apart.
+
+   Shift-level residuals scatter because five readings sample a whole
+   batch and the bath level is read by hand; the period total is the
+   figure to act on. The page says so rather than letting one shift be
+   read as a verdict.
+
+   Depends on globals from index.html: database, IS_EDITOR, IS_AUTHED, t()
+   and on window.KGCZinc (zinc.js) for the per-shift consumption.
+   ============================================================ */
+(function () {
+  'use strict';
+
+  if (typeof database === 'undefined') {
+    console.error('[zincbal] Firebase database is not available.');
+    return;
+  }
+
+  const ZN_G_PER_M2_UM = 7.14;
+  const STEEL_DENSITY = 7.85;
+
+  /* Product families, matched on the sheet's own wording. Sheet gauges were
+     confirmed by the plant (1.5 mm sheet products, 2 mm channel); the
+     structural ones are working assumptions and can be changed on the page.
+     Order matters: the first pattern that matches wins. */
+  const FAMILIES = [
+    { key: 'channel',  re: /channel|btb/i,                                    t: 2.0 },
+    { key: 'pfo',      re: /^\s*pfo?\b/i,                                      t: 1.5 },
+    { key: 'tray',     re: /tray|basket/i,                                    t: 1.5 },
+    { key: 'cover',    re: /cover|plain sheet|plane sheet|barrier|fish ?plate/i, t: 1.5 },
+    { key: 'trunking', re: /trunking/i,                                       t: 1.5 },
+    { key: 'ladder',   re: /ladder/i,                                         t: 1.5 },
+    { key: 'fitting',  re: /fitting|connector|cantilever|cable stand|caplar|coupler|stand/i, t: 2.0 },
+    { key: 'tube',     re: /tube|pipe/i,                                      t: 3.0 },
+    { key: 'upin',     re: /u-?\s?pin|clamp/i,                                t: 6.0 },
+    { key: 'angle',    re: /angle|frame/i,                                    t: 5.0 },
+    { key: 'plate',    re: /plate|bracket|beam|chakar|push|upsh/i,            t: 6.0 },
+    { key: 'other',    re: /.*/,                                              t: 5.0 }
+  ];
+
+  const DEFAULT_MARGIN = 5;   // um above spec treated as a sensible target, not waste
+
+  let batches = {};    // date -> {date, day:{rows:[]}, night:{rows:[]}}
+  let settings = {};   // {margin, gauge:{family:t}}
+  let prices = {};
+
+  const esc = s => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  const num = v => { const n = Number(v); return isFinite(n) ? n : 0; };
+  const fmt = (v, d) => Number(v).toLocaleString(undefined, { maximumFractionDigits: d || 0, minimumFractionDigits: d || 0 });
+
+  function familyOf(desc) {
+    const d = String(desc || '');
+    return FAMILIES.find(f => f.re.test(d)) || FAMILIES[FAMILIES.length - 1];
+  }
+  function gaugeOf(fam) {
+    const g = settings.gauge && num(settings.gauge[fam.key]);
+    return g > 0 ? g : fam.t;
+  }
+  function margin() {
+    const m = num(settings.margin);
+    return settings.margin == null ? DEFAULT_MARGIN : m;
+  }
+  /* ISO 1461 Table 3, minimum mean coating thickness by steel thickness */
+  function isoMin(t) {
+    if (t >= 6) return 85;
+    if (t >= 3) return 70;
+    if (t >= 1.5) return 55;
+    return 45;
+  }
+  const areaPerKg = t => 2 / (STEEL_DENSITY * t);   // m2 per kg of steel
+
+  /* Rows without a weight are further lines of the jig above them — the
+     sheet weighs the whole jig once and lists what hung on it. */
+  function jigsOf(rows) {
+    const jigs = [];
+    (rows || []).forEach(function (r) {
+      if (!r) return;
+      if (num(r.kg) > 0) jigs.push({ kg: num(r.kg), lines: [r] });
+      else if (jigs.length) jigs[jigs.length - 1].lines.push(r);
+    });
+    return jigs;
+  }
+  const readingsOf = r => (Array.isArray(r.r) ? r.r : []).map(num).filter(x => x > 20 && x < 400);
+
+  function balanceShift(rows, consumedKg) {
+    const jigs = jigsOf(rows);
+    // family means stand in for batches the operators did not measure
+    const famReads = {};
+    jigs.forEach(j => j.lines.forEach(function (l) {
+      const f = familyOf(l.desc).key;
+      const rd = readingsOf(l);
+      if (rd.length) (famReads[f] = famReads[f] || []).push(...rd);
+    }));
+    const mean = a => a.reduce((s, x) => s + x, 0) / a.length;
+    const famMean = {};
+    Object.keys(famReads).forEach(f => { famMean[f] = mean(famReads[f]); });
+
+    const out = { kg: 0, area: 0, req: 0, over: 0, react: 0, avoid: 0, measuredKg: 0, items: [] };
+    jigs.forEach(function (j) {
+      const head = j.lines[0];
+      const fam = familyOf(head.desc);
+      const t = gaugeOf(fam);
+      const rd = [].concat(...j.lines.map(readingsOf));
+      const reactive = j.lines.some(l => l.reactive === true || l.reactive === 'true' || l.reactive === 1);
+      const mu = rd.length ? mean(rd) : (famMean[fam.key] || 68);
+      const spec = Math.max(isoMin(t), ...j.lines.map(l => num(l.spec)));
+      const A = areaPerKg(t) * j.kg;
+      const req = A * Math.min(mu, spec) * ZN_G_PER_M2_UM / 1000;
+      const extra = A * Math.max(mu - spec, 0) * ZN_G_PER_M2_UM / 1000;
+      const avoid = reactive ? 0 : A * Math.max(mu - spec - margin(), 0) * ZN_G_PER_M2_UM / 1000;
+      out.kg += j.kg; out.area += A; out.req += req; out.avoid += avoid;
+      if (rd.length) out.measuredKg += j.kg;
+      if (reactive) out.react += extra; else out.over += extra;
+      out.items.push({ desc: head.desc, cust: head.cust, kg: j.kg, fam: fam.key, t: t,
+                       mu: mu, spec: spec, reactive: reactive, measured: !!rd.length,
+                       zn: req + extra, extra: extra });
+    });
+    out.coat = out.req + out.over + out.react;
+    out.consumed = consumedKg;
+    out.residual = consumedKg != null ? consumedKg - out.coat : null;
+    return out;
+  }
+
+  /* ---------------- the period ---------------- */
+
+  function compute() {
+    const Z = window.KGCZinc;
+    const report = (Z && Z._days && Z._days()) || {};
+    const dates = Object.keys(batches).filter(d => batches[d]).sort();
+    if (!dates.length) return null;
+
+    const shifts = [];
+    const P = { kg: 0, area: 0, req: 0, over: 0, react: 0, avoid: 0, cons: 0, measuredKg: 0, coat: 0 };
+    const unmatched = [];
+    dates.forEach(function (date) {
+      const b = batches[date];
+      const rep = report[date];
+      [['day', 'dayTon', 'dayPct'], ['night', 'nightTon', 'nightPct']].forEach(function (k) {
+        const sh = b[k[0]];
+        if (!sh || !sh.rows) return;
+        const cons = rep && num(rep[k[2]]) > 0 && num(rep[k[1]]) > 0
+          ? num(rep[k[2]]) / 100 * num(rep[k[1]]) : null;
+        const s = balanceShift(sh.rows, cons);
+        s.date = date; s.shift = k[0];
+        s.reportKg = rep ? num(rep[k[1]]) : null;
+        shifts.push(s);
+        if (cons == null) { unmatched.push(date + ' ' + k[0]); return; }
+        P.kg += s.kg; P.area += s.area; P.req += s.req; P.over += s.over;
+        P.react += s.react; P.avoid += s.avoid; P.cons += cons; P.measuredKg += s.measuredKg;
+        P.coat += s.coat;
+      });
+    });
+    if (!P.cons) return { shifts: shifts, empty: true, unmatched: unmatched };
+    P.residual = P.cons - P.coat;
+
+    // dross is removed on stop days, so it is taken over the same calendar window
+    const first = dates[0], last = dates[dates.length - 1];
+    P.dross = Object.values(report).filter(d => d && d.date >= first && d.date <= last)
+      .reduce((s, d) => s + num(d.dross), 0);
+
+    // by product family and by customer, over matched shifts only
+    const fam = {}, reactCust = {};
+    shifts.filter(s => s.consumed != null).forEach(s => s.items.forEach(function (i) {
+      const f = fam[i.fam] = fam[i.fam] || { kg: 0, zn: 0, extra: 0, reads: 0, muSum: 0, n: 0, t: i.t };
+      f.kg += i.kg; f.zn += i.zn; f.extra += i.extra; f.n++;
+      if (i.measured) { f.reads++; f.muSum += i.mu; }
+      if (i.reactive) {
+        const c = reactCust[i.cust || '—'] = reactCust[i.cust || '—'] || { kg: 0, extra: 0, n: 0 };
+        c.kg += i.kg; c.extra += i.extra; c.n++;
+      }
+    }));
+
+    return { P: P, shifts: shifts, fam: fam, reactCust: reactCust, first: first, last: last,
+             unmatched: unmatched, days: dates.length };
+  }
+
+  /* ---------------- rendering ---------------- */
+
+  const stat = (k, v, unit, hot) =>
+    '<div class="pt-stat' + (hot ? ' hot' : '') + '"><span class="k">' + esc(k) + '</span>' +
+    '<span class="v">' + v + (unit ? '<small>' + esc(unit) + '</small>' : '') + '</span></div>';
+
+  function barHTML(P) {
+    const parts = [
+      { k: 'req',   v: P.req,   cls: 'zb-req' },
+      { k: 'over',  v: P.over,  cls: 'zb-over' },
+      { k: 'react', v: P.react, cls: 'zb-react' },
+      { k: 'resid', v: Math.max(P.residual, 0), cls: 'zb-resid' }
+    ];
+    const tot = parts.reduce((s, p) => s + p.v, 0) || 1;
+    const perT = v => v / (P.kg / 1000);
+    return '<div class="zb-bar" role="img" aria-label="' + esc(t('zb.barAria')) + '">' +
+      parts.map(p => '<span class="' + p.cls + '" style="flex:' + p.v.toFixed(1) + '" title="' +
+        esc(t('zb.part.' + p.k)) + ': ' + fmt(p.v) + ' kg"></span>').join('') + '</div>' +
+      '<div class="zb-legend">' + parts.map(p =>
+        '<div class="zb-leg"><i class="' + p.cls + '"></i><span>' + esc(t('zb.part.' + p.k)) + '</span>' +
+        '<b>' + fmt(perT(p.v), 1) + '</b><small>kg/t</small>' +
+        '<em>' + (p.v / P.cons * 100).toFixed(1) + '%</em></div>').join('') + '</div>' +
+      '<p class="lab-life-sub" style="margin:6px 2px 0">' + esc(t('zb.part.hint')) + '</p>';
+  }
+
+  function render() {
+    const mount = document.getElementById('zb-body');
+    if (!mount) return;
+    const c = compute();
+    const tools = toolsHTML();
+
+    if (!c || c.empty) {
+      mount.innerHTML = '<div class="lab-empty">' + esc(t(c ? 'zb.noReport' : 'zb.empty')) + '</div>' + tools;
+      wire(mount);
+      return;
+    }
+    const P = c.P;
+    const tonnes = P.kg / 1000;
+    const zincPrice = num(prices.zinc) || 12;
+
+    const head =
+      '<div class="pt-stats">' +
+        stat(t('zb.k.cons'), fmt(P.cons / tonnes, 1), 'kg/t') +
+        stat(t('zb.k.explained'), (P.coat / P.cons * 100).toFixed(0), '%') +
+        stat(t('zb.k.avoid'), fmt(P.avoid), 'kg', true) +
+        stat(t('zb.k.area'), fmt(P.area / tonnes), 'm²/t') +
+      '</div>' +
+      '<p class="lab-life-sub" style="margin:0 2px 12px">' + esc(t('zb.period', {
+        a: c.first, b: c.last, n: c.days, t: fmt(tonnes), jigs: c.shifts.reduce((s, x) => s + x.items.length, 0),
+        m: (P.measuredKg / P.kg * 100).toFixed(0) })) + '</p>' +
+      barHTML(P) +
+      (P.dross ? '<div class="zn-note" style="color:var(--ink-2);background:var(--recess);border-color:var(--line)">' +
+        esc(t('zb.dross', { kg: fmt(P.dross), pt: fmt(P.dross / tonnes, 1) })) + '</div>' : '');
+
+    /* the three levers, each with its own size */
+    const custRows = Object.keys(c.reactCust).map(k => Object.assign({ cust: k }, c.reactCust[k]))
+      .sort((a, b) => b.extra - a.extra);
+    const levers =
+      '<div class="zb-levers">' +
+        '<div class="zb-lever"><span class="zb-lever-k">' + esc(t('zb.l1.k')) + '</span>' +
+          '<b>' + fmt(P.avoid) + ' kg</b><small>' + esc(t('zb.l.value', { v: fmt(P.avoid * zincPrice) })) + '</small>' +
+          '<p>' + esc(t('zb.l1.p', { m: margin() })) + '</p></div>' +
+        '<div class="zb-lever"><span class="zb-lever-k">' + esc(t('zb.l2.k')) + '</span>' +
+          '<b>' + fmt(P.react) + ' kg</b><small>' + esc(t('zb.l.value', { v: fmt(P.react * zincPrice) })) + '</small>' +
+          '<p>' + esc(t('zb.l2.p', { n: custRows.length })) + '</p></div>' +
+        '<div class="zb-lever"><span class="zb-lever-k">' + esc(t('zb.l3.k')) + '</span>' +
+          '<b>' + fmt(P.residual) + ' kg</b><small>' + (P.residual / P.cons * 100).toFixed(1) + '%</small>' +
+          '<p>' + esc(t('zb.l3.p')) + '</p></div>' +
+      '</div>';
+
+    const famRows = Object.keys(c.fam).map(k => Object.assign({ key: k }, c.fam[k]))
+      .sort((a, b) => b.kg - a.kg).map(function (f) {
+        const mu = f.reads ? f.muSum / f.reads : null;
+        return '<tr><td class="name">' + esc(t('zb.fam.' + f.key)) + '</td>' +
+          '<td class="num">' + f.t + '</td>' +
+          '<td class="num">' + fmt(f.kg / 1000, 1) + '</td>' +
+          '<td class="num">' + f.n + '</td>' +
+          '<td class="num">' + fmt(f.zn / f.kg * 1000, 1) + '</td>' +
+          '<td class="num">' + (mu ? fmt(mu, 1) : '—') + '</td>' +
+          '<td class="num">' + isoMin(f.t) + '</td>' +
+          '<td class="num">' + fmt(f.extra) + '</td></tr>';
+      }).join('');
+
+    const custTable = custRows.length ?
+      '<div class="tablewrap"><table><thead><tr><th>' + esc(t('zb.c.cust')) + '</th><th>' + esc(t('zb.c.jigs')) +
+      '</th><th>' + esc(t('zb.c.t')) + '</th><th>' + esc(t('zb.c.extra')) + '</th><th>' + esc(t('zb.c.perT')) +
+      '</th></tr></thead><tbody>' + custRows.map(r =>
+        '<tr><td class="name">' + esc(r.cust) + '</td><td class="num">' + r.n + '</td><td class="num">' +
+        fmt(r.kg / 1000, 1) + '</td><td class="num">' + fmt(r.extra) + '</td><td class="num">' +
+        fmt(r.extra / (r.kg / 1000), 1) + '</td></tr>').join('') + '</tbody></table></div>' : '';
+
+    const shiftRows = c.shifts.map(function (s) {
+      const r = s.residual;
+      const pct = r != null && s.consumed ? r / s.consumed * 100 : null;
+      const cls = pct == null ? '' : (pct < -5 || pct > 18) ? ' style="color:var(--warn)"' : '';
+      const off = s.reportKg && Math.abs(s.reportKg - s.kg) > 250;
+      return '<tr><td>' + esc(s.date) + '</td><td>' + esc(t('zb.shift.' + s.shift)) + '</td>' +
+        '<td class="num"' + (off ? ' style="color:var(--warn)" title="' + esc(t('zb.kgOff', { r: fmt(s.reportKg) })) + '"' : '') + '>' +
+          fmt(s.kg / 1000, 1) + '</td>' +
+        '<td class="num">' + fmt(s.area / s.kg * 1000) + '</td>' +
+        '<td class="num">' + fmt(s.coat) + '</td>' +
+        '<td class="num">' + (s.consumed != null ? fmt(s.consumed) : '—') + '</td>' +
+        '<td class="num"' + cls + '>' + (pct != null ? pct.toFixed(1) + '%' : '—') + '</td></tr>';
+    }).join('');
+
+    mount.innerHTML = head +
+      '<h3 class="zb-h">' + esc(t('zb.h.levers')) + '</h3>' + levers +
+      '<h3 class="zb-h">' + esc(t('zb.h.fam')) + '</h3>' +
+      '<p class="lab-life-sub" style="margin:0 2px 8px">' + esc(t('zb.fam.sub')) + '</p>' +
+      '<div class="tablewrap"><table><thead><tr>' +
+        ['zb.c.fam', 'zb.c.gauge', 'zb.c.t', 'zb.c.jigs', 'zb.c.znT', 'zb.c.mu', 'zb.c.iso', 'zb.c.extra']
+          .map(k => '<th>' + esc(t(k)) + '</th>').join('') +
+      '</tr></thead><tbody>' + famRows + '</tbody></table></div>' +
+      (custTable ? '<h3 class="zb-h">' + esc(t('zb.h.react')) + '</h3>' +
+        '<p class="lab-life-sub" style="margin:0 2px 8px">' + esc(t('zb.react.sub')) + '</p>' + custTable : '') +
+      '<h3 class="zb-h">' + esc(t('zb.h.shifts')) + '</h3>' +
+      '<p class="lab-life-sub" style="margin:0 2px 8px">' + esc(t('zb.shifts.sub')) + '</p>' +
+      '<div class="tablewrap"><table><thead><tr>' +
+        ['zb.c.date', 'zb.c.shift', 'zb.c.t', 'zb.c.area', 'zb.c.coat', 'zb.c.cons', 'zb.c.resid']
+          .map(k => '<th>' + esc(t(k)) + '</th>').join('') +
+      '</tr></thead><tbody>' + shiftRows + '</tbody></table></div>' +
+      (c.unmatched.length ? '<p class="lab-life-sub" style="margin:8px 2px 0">' +
+        esc(t('zb.unmatched', { list: c.unmatched.join('، ') })) + '</p>' : '') +
+      tools;
+    wire(mount);
+  }
+
+  /* ---------------- settings, import, export ---------------- */
+
+  function toolsHTML() {
+    const gauges = FAMILIES.filter(f => f.key !== 'other').map(f =>
+      '<div><label>' + esc(t('zb.fam.' + f.key)) + ' <span class="unit">mm</span></label>' +
+      '<input type="number" step="0.1" min="0.5" data-gauge="' + f.key + '" value="' + gaugeOf(f) + '"></div>').join('');
+    return '<details class="zb-tools"' + (Object.keys(batches).length ? '' : ' open') + '>' +
+      '<summary>' + esc(t('zb.tools')) + '</summary>' +
+      '<p class="lab-life-sub" style="margin:10px 2px">' + esc(t('zb.tools.sub')) + '</p>' +
+      '<div class="lab-form">' +
+        '<div><label>' + esc(t('zb.margin')) + ' <span class="unit">µm</span></label>' +
+        '<input type="number" step="1" min="0" id="zb-margin" value="' + margin() + '"></div>' +
+        gauges +
+        '<div><button class="btn" id="zb-save" style="width:100%;justify-content:center">' + esc(t('zb.save')) + '</button></div>' +
+      '</div>' +
+      '<div class="zb-io">' +
+        '<button class="btn" id="zb-import">' + esc(t('zb.import')) + '</button>' +
+        '<button class="btn" id="zb-export">' + esc(t('zb.export')) + '</button>' +
+        '<input type="file" id="zb-file" accept=".csv,text/csv" hidden>' +
+        '<span id="zb-msg"></span>' +
+      '</div>' +
+      '<p class="lab-life-sub" style="margin:8px 2px 0">' + esc(t('zb.csvFormat')) + '</p>' +
+    '</details>';
+  }
+
+  const CSV_HEAD = ['date', 'shift', 'row', 'description', 'customer', 'qty', 'kg',
+                    'r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7', 'reactive', 'spec'];
+
+  function csvCell(v) {
+    const s = String(v == null ? '' : v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function parseCSV(text) {
+    const rows = []; let row = [], cell = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (q) {
+        if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+        else if (ch === '"') q = false;
+        else cell += ch;
+      } else if (ch === '"') q = true;
+      else if (ch === ',') { row.push(cell); cell = ''; }
+      else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && text[i + 1] === '\n') i++;
+        row.push(cell); cell = '';
+        if (row.some(c => c.trim() !== '')) rows.push(row);
+        row = [];
+      } else cell += ch;
+    }
+    row.push(cell);
+    if (row.some(c => c.trim() !== '')) rows.push(row);
+    return rows;
+  }
+  function isoDate(s) {
+    s = String(s || '').trim();
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (m) return m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0');
+    m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/);
+    if (m) return (m[3].length === 2 ? '20' + m[3] : m[3]) + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
+    return null;
+  }
+
+  function doExport() {
+    const lines = [CSV_HEAD.join(',')];
+    Object.keys(batches).sort().forEach(function (date) {
+      ['day', 'night'].forEach(function (s) {
+        const sh = batches[date][s];
+        (sh && sh.rows || []).forEach(function (r) {
+          const rd = Array.isArray(r.r) ? r.r : [];
+          lines.push([date, s, r.n, r.desc, r.cust, r.qty, r.kg || '']
+            .concat([0, 1, 2, 3, 4, 5, 6].map(i => rd[i] != null ? rd[i] : ''))
+            .concat([r.reactive ? 1 : '', r.spec || '']).map(csvCell).join(','));
+        });
+      });
+    });
+    const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'jig_batches.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  function doImport(text, say) {
+    const rows = parseCSV(text.replace(/^﻿/, ''));
+    if (!rows.length) { say(t('zb.csvEmpty'), true); return; }
+    const head = rows[0].map(h => h.trim().toLowerCase());
+    const col = k => head.indexOf(k);
+    if (col('date') < 0 || col('shift') < 0 || col('description') < 0) { say(t('zb.csvBad'), true); return; }
+    const out = {}; let n = 0, skipped = 0;
+    rows.slice(1).forEach(function (r) {
+      const date = isoDate(r[col('date')]);
+      const shift = /n/i.test(r[col('shift')] || '') ? 'night' : (/d/i.test(r[col('shift')] || '') ? 'day' : null);
+      const desc = (r[col('description')] || '').trim();
+      if (!date || !shift || !desc) { skipped++; return; }
+      const rd = ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7'].map(k => num(r[col(k)])).filter(x => x > 0);
+      const kg = num(r[col('kg')]);
+      const rec = { n: String(r[col('row')] || ''), desc: desc, cust: (r[col('customer')] || '').trim(),
+                    qty: String(r[col('qty')] || ''), kg: kg > 0 ? kg : null, r: rd };
+      if (/^(1|true|yes|y|نعم)$/i.test(String(r[col('reactive')] || '').trim())) rec.reactive = true;
+      if (num(r[col('spec')]) > 0) rec.spec = num(r[col('spec')]);
+      out[date] = out[date] || { date: date };
+      (out[date][shift] = out[date][shift] || { rows: [] }).rows.push(rec);
+      n++;
+    });
+    if (!n) { say(t('zb.csvEmpty'), true); return; }
+    // a shift in the file replaces that shift in the store; others are left alone
+    const updates = {};
+    Object.keys(out).forEach(function (d) {
+      updates['jig_batches/' + d + '/date'] = d;
+      ['day', 'night'].forEach(s => { if (out[d][s]) updates['jig_batches/' + d + '/' + s] = out[d][s]; });
+    });
+    database.ref().update(updates)
+      .then(() => say(t('zb.csvOk', { n: n, d: Object.keys(out).length, s: skipped })))
+      .catch(e => say(t('coat.failed') + ' ' + e.message, true));
+  }
+
+  function wire(mount) {
+    const msg = mount.querySelector('#zb-msg');
+    const say = (m, bad) => { if (msg) { msg.textContent = m; msg.style.color = bad ? 'var(--crit)' : 'var(--accent)'; } };
+    const save = mount.querySelector('#zb-save');
+    if (save) save.addEventListener('click', function () {
+      if (!IS_EDITOR || !IS_AUTHED) { say(t('coat.needAuth'), true); return; }
+      const gauge = {};
+      mount.querySelectorAll('[data-gauge]').forEach(function (el) {
+        const v = Number(el.value);
+        if (v > 0) gauge[el.getAttribute('data-gauge')] = v;
+      });
+      const m = Number((mount.querySelector('#zb-margin') || {}).value);
+      database.ref('zincbal_settings').set({ margin: isFinite(m) && m >= 0 ? m : DEFAULT_MARGIN, gauge: gauge })
+        .then(() => say(t('zb.saved')))
+        .catch(e => say(t('coat.failed') + ' ' + e.message, true));
+    });
+    const imp = mount.querySelector('#zb-import'), file = mount.querySelector('#zb-file');
+    if (imp && file) {
+      imp.addEventListener('click', function () {
+        if (!IS_EDITOR || !IS_AUTHED) { say(t('coat.needAuth'), true); return; }
+        file.click();
+      });
+      file.addEventListener('change', function () {
+        const f = file.files && file.files[0];
+        if (!f) return;
+        const rd = new FileReader();
+        rd.onload = () => doImport(String(rd.result || ''), say);
+        rd.onerror = () => say(t('zb.csvBad'), true);
+        rd.readAsText(f, 'utf-8');
+        file.value = '';
+      });
+    }
+    const exp = mount.querySelector('#zb-export');
+    if (exp) exp.addEventListener('click', doExport);
+  }
+
+  /* ---------------- wiring ---------------- */
+
+  database.ref('jig_batches').on('value', s => { batches = s.val() || {}; render(); });
+  database.ref('zincbal_settings').on('value', s => { settings = s.val() || {}; render(); });
+  database.ref('prices').on('value', s => { prices = s.val() || {}; render(); });
+  database.ref('zinc_daily').on('value', render);
+  if (window.I18N && I18N.onChange) I18N.onChange(render);
+
+  window.KGCZincBal = { render: render, _compute: compute, _balanceShift: balanceShift,
+                        _familyOf: familyOf, _import: doImport };
+})();
