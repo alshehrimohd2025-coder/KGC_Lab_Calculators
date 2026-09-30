@@ -146,6 +146,11 @@
     });
     return jigs;
   }
+  /* Re-pass: galvanized once, rejected, stripped in acid and dipped again.
+     Its first coat already left the kettle on an earlier day and dissolved in
+     the stripping bath; the second coat is zinc spent on steel that is not new
+     product. The sheets sometimes say so in the description. */
+  const REPASS_RE = /re-?\s?pass|repair|re-?\s?dip|re-?\s?galv|re-?\s?jite|re-?\s?process/i;
   const readingsOf = r => (Array.isArray(r.r) ? r.r : []).map(num).filter(x => x > 20 && x < 400);
 
   function balanceShift(rows, consumedKg) {
@@ -162,6 +167,7 @@
     Object.keys(famReads).forEach(f => { famMean[f] = mean(famReads[f]); });
 
     const out = { kg: 0, area: 0, req: 0, over: 0, react: 0, avoid: 0, measuredKg: 0, items: [],
+                  repassKg: 0, repassZn: 0,
                   gaugeKg: { written: 0, weight: 0, default: 0 } };
     jigs.forEach(function (j) {
       const head = j.lines[0];
@@ -180,6 +186,7 @@
       out.kg += j.kg; out.area += A; out.req += req; out.avoid += avoid;
       if (rd.length) out.measuredKg += j.kg;
       if (reactive) out.react += extra; else out.over += extra;
+      if (j.lines.some(l => REPASS_RE.test(l.desc || ''))) { out.repassKg += j.kg; out.repassZn += req + extra; }
       out.items.push({ desc: head.desc, cust: head.cust, kg: j.kg, fam: fam.key, t: t,
                        mu: mu, spec: spec, reactive: reactive, measured: !!rd.length,
                        zn: req + extra, extra: extra });
@@ -229,12 +236,17 @@
        counted as zero ash. */
     const L = lossIndex();
     P.ash = 0; P.ashShifts = 0; P.ashResid = 0; P.repass = 0; P.matchedShifts = 0;
+    P.repassKg = 0; P.repassZn = 0; P.repassLogged = 0;
     shifts.forEach(function (s) {
       const l = L[s.date + '_' + s.shift];
       s.ash = l ? l.ash : null; s.repass = l ? l.repass : null;
       if (s.consumed == null) return;
       P.matchedShifts++;
       if (l && l.repass) P.repass += l.repass;
+      // the log wins over the sheet's own marks for the same shift, never both
+      if (l && l.repass != null) {
+        P.repassKg += l.repass; P.repassZn += l.repass * (s.kg ? s.coat / s.kg : 0); P.repassLogged++;
+      } else { P.repassKg += s.repassKg; P.repassZn += s.repassZn; }
       if (l && l.ash != null) { P.ash += l.ash; P.ashShifts++; P.ashResid += s.residual; }
     });
 
@@ -417,6 +429,10 @@
         '<div class="zb-lever"><span class="zb-lever-k">' + esc(t('zb.l2.k')) + '</span>' +
           '<b>' + fmt(P.react) + ' kg</b><small>' + esc(t('zb.l.value', { v: fmt(P.react * zincPrice) })) + '</small>' +
           '<p>' + esc(t('zb.l2.p', { n: custRows.length })) + '</p></div>' +
+        '<div class="zb-lever"><span class="zb-lever-k">' + esc(t('zb.l4.k')) + '</span>' +
+          '<b>' + fmt(P.repassZn) + ' kg</b><small>' + esc(t('zb.l4.small', { t: fmt(P.repassKg / 1000, 1),
+            v: fmt(P.repassZn * zincPrice) })) + '</small>' +
+          '<p>' + esc(t(P.repassLogged ? 'zb.l4.pLog' : 'zb.l4.p')) + '</p></div>' +
         '<div class="zb-lever"><span class="zb-lever-k">' + esc(t('zb.l3.k')) + '</span>' +
           '<b>' + fmt(P.residual) + ' kg</b><small>' + (P.residual / P.cons * 100).toFixed(1) + '%</small>' +
           '<p>' + esc(t('zb.l3.p')) + '</p></div>' +
