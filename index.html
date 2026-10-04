@@ -2026,6 +2026,9 @@ database.ref('titration_log').limitToLast(50).on('value', function(snapshot) {
   <!-- Empirical peroxide dosing — learned from the plant's own treatments -->
   <section id="perox-dose"></section>
 
+  <!-- Flux salt: Baumé lift per kg, learned from logged additions (fluxsalt.js) -->
+  <section id="flux-salt"></section>
+
   <!-- CALC 1 -->
   <section>
     <div class="sechead"><span class="secnum">١</span><h2 class="sectitle">جرعات تنقية حوض الفلكس FL-01</h2></div>
@@ -2313,6 +2316,7 @@ html:not(.authed) .spec-view-note{display:block}
 <script src="cost.js"></script>
 <script src="flux.js"></script>
 <script src="peroxide.js"></script>
+<script src="fluxsalt.js"></script>
 <script src="pickling.js"></script>
 <script src="zincbal.js"></script>
 <script src="mgrdash.js"></script>
