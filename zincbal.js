@@ -64,7 +64,6 @@
 
   let batches = {};    // date -> {date, day:{rows:[]}, night:{rows:[]}}
   let settings = {};   // {margin, gauge:{family:t}}
-  let prices = {};
   let losses = {};     // push-id -> {date, shift, ash, repass, note}
   let PERT = null;     // set only while the uncertainty runs recompute the balance
 
@@ -863,7 +862,6 @@
 
   database.ref('jig_batches').on('value', s => { batches = s.val() || {}; render(); });
   database.ref('zincbal_settings').on('value', s => { settings = s.val() || {}; render(); });
-  database.ref('prices').on('value', s => { prices = s.val() || {}; render(); });
   database.ref('zinc_losses').on('value', s => { losses = s.val() || {}; render(); });
   database.ref('zinc_daily').on('value', render);
   if (window.I18N && I18N.onChange) I18N.onChange(render);

@@ -15,9 +15,12 @@
       Ranges are the ones commonly held in general galvanizing; they
       are editable because every kettle is run to its own recipe.
 
-   2. Dross generation, as a share of the zinc consumed. Around 1.5-2.5%
-      is normal; above that the iron is coming in faster than it should,
-      which points upstream at pickling or flux rather than at the kettle.
+   2. Dross generation, as a share of the zinc consumed. Batch galvanizing
+      of thin sheet and fittings commonly runs 5-10%. The earlier 1.5-2.5%
+      band is a continuous-line figure and flagged this plant red every month.
+      Up to 8% reads as normal, 8-10% as worth watching, and above 10% the
+      iron is coming in faster than it should, which points upstream at
+      pickling or flux rather than at the kettle.
 
    3. Calibration. Every instrument whose reading this site trusts — pH
       meter, hydrometer, thermometer, thickness gauge — needs a due date
@@ -44,8 +47,8 @@
     { key: 'temp', min: 445, max: 460,   crit: 470,   unit: '°C', dp: 0 }
   ];
 
-  const DROSS_OK = 2.5;          // % of zinc consumed
-  const DROSS_HIGH = 4.0;
+  const DROSS_OK = 8.0;          // % of zinc consumed
+  const DROSS_HIGH = 10.0;
 
   /* The instruments whose readings this site records. */
   const INSTRUMENTS = ['ph', 'hydrometer', 'thermometer', 'gauge', 'balance', 'burette'];

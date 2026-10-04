@@ -1,0 +1,6 @@
+{
+  "rules": {
+    ".read": "auth != null",
+    ".write": "auth != null && auth.token.email === 'alshehri.mohd.2025@gmail.com'"
+  }
+}

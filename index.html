@@ -56,8 +56,49 @@ function refreshAuthUI() {
 
 if (IS_EDITOR) {
   firebase.auth().onAuthStateChanged(function (user) {
-    IS_AUTHED = !!user;
+    // only the editor account unlocks editing; a manager's view-only login on
+    // the same device must not show write controls the rules would refuse
+    IS_AUTHED = !!user && (user.email || '').toLowerCase() === EDITOR_EMAIL.toLowerCase();
     refreshAuthUI();
+  });
+}
+
+/* ---------- view-only sign-in ----------
+   Once the database rules require a login to read (see database.rules.json),
+   the manager's link would show empty cards. Instead it asks once for the
+   view-only account, and the browser keeps that session. Until the rules are
+   changed, reads succeed and this never appears. */
+if (!IS_EDITOR) {
+  let probed = false;
+  firebase.auth().onAuthStateChanged(function (user) {
+    if (probed) return;
+    probed = true;
+    database.ref('tanks_data').once('value').catch(function (e) {
+      if (String(e && e.code || e).toUpperCase().indexOf('PERMISSION') !== -1) showViewerGate();
+    });
+  });
+}
+function showViewerGate() {
+  if (document.getElementById('viewgate')) return;
+  const tt = (k, f) => (typeof t === 'function' ? t(k) : f);
+  const box = document.createElement('div');
+  box.id = 'viewgate';
+  box.innerHTML =
+    '<form class="viewgate-card" autocomplete="on">' +
+      '<h2>' + tt('vg.title', 'KGC') + '</h2><p>' + tt('vg.sub', '') + '</p>' +
+      '<input type="email" id="vg-email" autocomplete="username" required placeholder="' + tt('vg.email', 'Email') + '">' +
+      '<input type="password" id="vg-pass" autocomplete="current-password" required placeholder="' + tt('vg.pass', 'Password') + '">' +
+      '<button class="btn" type="submit">' + tt('vg.go', 'Sign in') + '</button>' +
+      '<p id="vg-err" class="viewgate-err"></p>' +
+    '</form>';
+  document.body.appendChild(box);
+  box.querySelector('form').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    const err = document.getElementById('vg-err');
+    firebase.auth().signInWithEmailAndPassword(document.getElementById('vg-email').value.trim(),
+                                               document.getElementById('vg-pass').value)
+      .then(function () { location.reload(); })
+      .catch(function () { if (err) err.textContent = tt('vg.bad', 'Wrong email or password'); });
   });
 }
 
@@ -486,7 +527,6 @@ html[dir="ltr"] .input-label .unit{margin-left:0; margin-right:0}
 .mode-view #page-flux,
 .mode-view #page-timing,
 .mode-view #page-standards,
-.mode-view #page-cost,
 .mode-view #page-kettle,
 .mode-view #page-coating,
 .mode-view #page-lab,
@@ -626,10 +666,6 @@ html[dir="ltr"] .input-label .unit{margin-left:0; margin-right:0}
         <button type="button" data-page="page-zincbal" onclick="showAppPage('page-zincbal', this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-8"/><path d="M22 20H2"/></svg>
       <span data-i18n="nav.zincbal">موازنة الزنك</span>
-    </button>
-        <button type="button" data-page="page-cost" onclick="showAppPage('page-cost', this)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20"/><path d="M17 6.5A3.5 3.5 0 0 0 13.5 4h-3a3.5 3.5 0 0 0 0 7h3a3.5 3.5 0 0 1 0 7h-3A3.5 3.5 0 0 1 7 17.5"/></svg>
-      <span data-i18n="nav.cost">التكلفة لكل طن</span>
     </button>
       </div>
       <span style="flex:1 1 auto"></span>
@@ -1231,7 +1267,15 @@ function migrateTanks(list) {
   return tankSpecs.map(function(spec) {
     const existing = byId[spec.id];
     if (!existing) return JSON.parse(JSON.stringify(spec));
-    return Object.assign({}, spec, existing, { name: spec.name, type: spec.type, fields: spec.fields });
+    const merged = Object.assign({}, spec, existing, { name: spec.name, type: spec.type, fields: spec.fields });
+    /* A reading cleared as "not measured" is stored as nothing (Firebase drops
+       nulls), and filling it from the spec's placeholder would turn it back
+       into a 0.00 the card presents as a measurement. Dip time is a setting,
+       not a reading, so it keeps its default. */
+    (spec.fields || []).forEach(function (f) {
+      if (f !== 'time' && !(f in existing)) merged[f] = null;
+    });
+    return merged;
   });
 }
 
@@ -1308,7 +1352,7 @@ function makeEditable(element, tankId, field) {
   const oldValue = tank[field];
   const input = document.createElement('input');
   input.type = 'number';
-  input.value = oldValue;
+  input.value = oldValue == null ? '' : oldValue;
   input.step = '0.1';
   input.className = 'data-input';
   input.setAttribute('data-tank-id', tankId);
@@ -1319,9 +1363,25 @@ function makeEditable(element, tankId, field) {
   input.focus();
   input.select();
 
+  let done = false;
   const save = () => {
-    const newValue = parseFloat(input.value) || oldValue;
-    tank[field] = newValue;
+    if (done) return;
+    done = true;
+    const raw = String(input.value).trim();
+    // blank means "not measured": the card shows a dash instead of a stale or
+    // made-up number. 0 is a real reading and is kept (the old code threw it away).
+    if (raw === '') {
+      tank[field] = null;
+    } else {
+      const v = parseFloat(raw);
+      if (!isFinite(v)) { renderAll(); return; }
+      // "1" was being typed into acid-tank iron to mean "no reading", which made
+      // a 140 g/L bath grade as fresh acid on the pickling page
+      if (field === 'fe' && v <= 1 && [3, 4, 5, 6, 7, 8].indexOf(tankId) !== -1 &&
+          !confirm(t('tank.feConfirm', { v: v }))) { renderAll(); return; }
+      tank[field] = v;
+      markMeasured(tank, field);
+    }
     saveToStorage();
     renderAll();
   };
@@ -1330,6 +1390,19 @@ function makeEditable(element, tankId, field) {
   input.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') save();
   });
+}
+
+/* The day each figure was actually measured. The daily reading log keys off
+   this instead of guessing from whether a number changed, so a value nobody
+   re-measured is not copied forward as if it were a fresh reading. */
+function measuredKey() {
+  const d = new Date(), p = n => (n < 10 ? '0' : '') + n;
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+function markMeasured(tank, field) {
+  if (!tank) return;
+  tank.measured = Object.assign({}, tank.measured || {});
+  tank.measured[field] = measuredKey();
 }
 
 function setStatus(tankId, newStatus) {
@@ -1350,7 +1423,8 @@ function tankDataRowsHTML(tank) {
   return fields.map(function(key) {
     const def = TANK_FIELD_DEFS[key] || {};
     const value = tank[key];
-    const display = def.raw ? (value || 0) : Number(value || 0).toFixed(2);
+    const missing = value == null || value === '';
+    const display = missing ? '—' : def.raw ? value : Number(value).toFixed(2);
     // colour the reading by how it sits against its own limits
     const p = specs.find(x => x.key === key);
     let colour = '', title = '';
@@ -1949,6 +2023,7 @@ function saveAcidToTank() {
   if (!tank) return;
 
   tank.acidPercent = lastWtPercent;
+  markMeasured(tank, 'acidPercent');
   saveToStorage();
   renderAll();
 
@@ -2213,13 +2288,6 @@ html:not(.authed) .spec-view-note{display:block}
   </section>
 </div>
 
-<div id="page-cost" class="app-page wrap">
-  <section class="lab-section">
-    <div class="sechead"><span class="secnum">١</span><h2 class="sectitle" data-i18n="cost.title">التكلفة المباشرة لكل طن</h2></div>
-    <p class="secsub" data-i18n="cost.sub">تُحسب من بياناتك الموجودة: الزنك المضاف من تقارير الإنتاج، والحمض من جدول التغيير، والأمونيا من سجل معالجات الفلكس. أدخل الأسعار مرة واحدة ويتحدّث الرقم تلقائياً.</p>
-    <div id="cost-body"></div>
-  </section>
-</div>
 
 <div id="page-kettle" class="app-page wrap">
   <section class="lab-section">
@@ -2313,7 +2381,6 @@ html:not(.authed) .spec-view-note{display:block}
 <script src="coating.js"></script>
 <script src="forecast.js"></script>
 <script src="kettle.js"></script>
-<script src="cost.js"></script>
 <script src="flux.js"></script>
 <script src="peroxide.js"></script>
 <script src="fluxsalt.js"></script>

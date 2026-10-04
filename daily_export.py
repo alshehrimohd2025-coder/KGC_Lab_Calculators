@@ -179,15 +179,83 @@ def write_xlsx(path, sheets):
 # جلب البيانات
 # ----------------------------------------------------------------------------
 
-def fetch(path):
-    url = "%s/%s.json" % (DB, path)
+# ----------------------------------------------------------------------------
+# الدخول (حين تصبح القراءة تتطلب تسجيلاً)
+# ----------------------------------------------------------------------------
+# كلمة المرور لا تُكتب في هذا الملف أبداً: تُقرأ من سلسلة مفاتيح macOS.
+# أضِفها مرة واحدة بالأمر (يطلب كلمة المرور منك بنفسه):
+#   security add-generic-password -s kgc-backup -a <بريد حساب المشاهدة> -w
+# بدونها يقرأ السكربت كما كان (يعمل ما دامت القراءة مفتوحة).
+API_KEY = "AIzaSyCCqt5vp8BPvKto38CUrS5cos-8Dpvgu40"   # مفتاح ويب عام، ليس سراً
+_TOKEN = {"v": None}
+
+
+def _keychain():
+    import subprocess
+    try:
+        acct = subprocess.run(["security", "find-generic-password", "-s", "kgc-backup"],
+                              capture_output=True, text=True, timeout=10).stdout
+        m = re.search(r'"acct"<blob>="([^"]+)"', acct)
+        pw = subprocess.run(["security", "find-generic-password", "-s", "kgc-backup", "-w"],
+                            capture_output=True, text=True, timeout=10).stdout.strip()
+        return (m.group(1), pw) if m and pw else None
+    except Exception:                              # noqa: BLE001
+        return None
+
+
+def _token():
+    if _TOKEN["v"] is not None:
+        return _TOKEN["v"] or None
+    cred = _keychain()
+    if not cred:
+        _TOKEN["v"] = ""
+        return None
+    body = json.dumps({"email": cred[0], "password": cred[1], "returnSecureToken": True}).encode()
+    req = urllib.request.Request(
+        "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=" + API_KEY,
+        data=body, headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT, context=ssl.create_default_context()) as r:
+            _TOKEN["v"] = json.loads(r.read().decode("utf-8")).get("idToken") or ""
+    except Exception as exc:                       # noqa: BLE001
+        print("تعذّر تسجيل الدخول للنسخ الاحتياطي: %s" % exc, file=sys.stderr)
+        _TOKEN["v"] = ""
+    return _TOKEN["v"] or None
+
+
+def fetch(path, shallow=False):
+    q = []
+    tok = _token()
+    if tok:
+        q.append("auth=" + tok)
+    if shallow:
+        q.append("shallow=true")
+    url = "%s/%s.json%s" % (DB, path, ("?" + "&".join(q)) if q else "")
     ctx = ssl.create_default_context()
     try:
         with urllib.request.urlopen(url, timeout=TIMEOUT, context=ctx) as r:
             return json.loads(r.read().decode("utf-8"))
     except Exception as exc:                      # noqa: BLE001 - report and continue
-        print("تعذّر جلب %s: %s" % (path, exc), file=sys.stderr)
+        print("تعذّر جلب %s: %s" % (path or "/", exc), file=sys.stderr)
         return None
+
+
+def wait_for_network(tries=12, gap=300):
+    """الساعة ٤:٣٠ قد يكون الجهاز صحا للتو بلا اتصال (هذا ما أفشل ١–٣ أكتوبر).
+    ننتظر حتى ساعة، ونجرّب كل ٥ دقائق، قبل أن نعتبر اليوم فاشلاً."""
+    import time
+    import socket
+    host = DB.split("//", 1)[1]
+    for i in range(tries):
+        try:
+            socket.getaddrinfo(host, 443)
+            return True
+        except OSError:
+            if i == tries - 1:
+                return False
+            print("لا يوجد اتصال — إعادة المحاولة بعد %d دقيقة" % (gap // 60), file=sys.stderr)
+            time.sleep(gap)
+    return False
 
 
 # ----------------------------------------------------------------------------
@@ -413,12 +481,12 @@ def sheet_titration(log):
 # النسخة الاحتياطية الخام
 # ----------------------------------------------------------------------------
 
-# كل فروع قاعدة البيانات التي تحمل بيانات حقيقية.
-BACKUP_ROOTS = [
-    "tanks_data", "tank_specs", "titration_log", "readings_log",
-    "renewals", "inventory", "zinc_daily", "flux_treatments",
-    "coating_log", "zinc_bath", "calibration", "production",
-]
+# كل الفروع الموجودة فعلاً تُقرأ من قاعدة البيانات نفسها، فأي قسم جديد
+# في الموقع (شيتات الشدّات، الرماد، إضافات الملح...) يدخل النسخة تلقائياً
+# بدل أن تفوته قائمة مكتوبة يدوياً كما حدث سابقاً.
+def backup_roots():
+    top = fetch("", shallow=True)
+    return sorted(top.keys()) if isinstance(top, dict) else []
 
 BACKUP_DIRNAME = "backups"
 KEEP_DAILY = 30          # آخر ٣٠ يوماً تُحفظ كاملة
@@ -431,7 +499,7 @@ def write_backup(folder, stamp):
     الأصلية بحيث يمكن رفعها إلى Firebase مرة أخرى كما هي إن ضاع المشروع.
     """
     data, missing = {}, []
-    for root in BACKUP_ROOTS:
+    for root in backup_roots():
         value = fetch(root)
         if value is None:
             missing.append(root)
@@ -490,6 +558,9 @@ def prune_backups(bdir):
 def main():
     stamp = datetime.datetime.now()
     print("KGC daily export — %s" % stamp.strftime("%Y-%m-%d %H:%M:%S"))
+    if not wait_for_network():
+        print("لا يوجد اتصال بعد ساعة من المحاولة — لم يُنشأ ملف.", file=sys.stderr)
+        return 1
 
     production = fetch("production") or {}
     tanks = fetch("tanks_data")

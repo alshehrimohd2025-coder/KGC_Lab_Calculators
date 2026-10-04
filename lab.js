@@ -114,20 +114,16 @@
          other field fills the record with noise, and would blank figures the
          pickling log keeps against the same day — temperature especially,
          which acid tanks have no card input for. */
-      const fields = LOGGED_FIELDS.filter(f => (tk.fields || []).indexOf(f) !== -1);
+      /* ...and of those, only the ones measured today. Deciding by "did the
+         number change" copied a value forward every day nobody re-measured
+         it -- acid tank 2 showed the same 3.78% / 140 g/L for 22 days as if
+         titrated daily, which skews the trends, the bath-life estimate and
+         the reading age. Each card input now stamps the day it was measured. */
+      const fields = LOGGED_FIELDS.filter(f => (tk.fields || []).indexOf(f) !== -1)
+        .filter(f => tk.measured && tk.measured[f] === date && tk[f] != null && tk[f] !== '');
+      if (!fields.length) return;
       const row = { tankId: tk.id, date: date, ts: now };
-      let hasValue = false;
-      fields.forEach(function (f) {
-        const v = Number(tk[f]) || 0;
-        row[f] = v;
-        if (v) hasValue = true;
-      });
-      if (!hasValue) return;                       // nothing measured yet
-
-      // unchanged numbers mean this save was a status edit, not a reading
-      const prev = latestReadingFor(tk.id);
-      if (prev && prev.date !== date &&
-          fields.every(f => (Number(prev[f]) || 0) === row[f])) return;
+      fields.forEach(function (f) { row[f] = Number(tk[f]); });
 
       // field-level paths, so the level, sludge and notes stored against the
       // same day by the pickling log survive this write

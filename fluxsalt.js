@@ -28,11 +28,12 @@
 
   if (typeof database === 'undefined') return;
 
-  const S_THEORY = 0.0005;          // SG per g/L, zinc ammonium chloride flux
+  const S_LITERATURE = 0.0005;      // SG per g/L, zinc ammonium chloride flux (published)
   const DEFAULT_V = 27720;          // litres, the flux bath (as in the dosing calculator)
   const FLUX_TANK = 10;
 
-  let adds = {}, readings = {}, settings = {};
+  let adds = {}, readings = {}, settings = {}, inv = null;
+  const stock = () => inv && num(inv.qty) >= 0 ? { qty: num(inv.qty), min: num(inv.min) || 0 } : null;
 
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -58,9 +59,25 @@
       return { r: r, s: s, kgPerBe: kg / (b1 - b0), V: V };
     }).filter(Boolean);
   }
+  /* The plant's own flux spec pairs a salt range with an SG range (400-550
+     with 1.12-1.18), which implies its own SG-per-g/L. That is a better
+     starting point than a textbook figure, and here it differs by ~40%
+     (about 0.0003 against 0.0005), so it is used whenever the spec has both. */
+  function theoryS() {
+    try {
+      const ps = window.KGCSpecs && window.KGCSpecs.paramsFor(FLUX_TANK);
+      const salt = ps && ps.find(p => p.key === 'salt'), g = ps && ps.find(p => p.key === 'sg');
+      if (salt && g && salt.min > 0 && salt.max > 0 && g.min > 1 && g.max > 1) {
+        const s = ((g.min - 1) / salt.min + (g.max - 1) / salt.max) / 2;
+        if (s > 0.0001 && s < 0.001) return { s: s, src: 'spec' };
+      }
+    } catch (e) {}
+    return { s: S_LITERATURE, src: 'lit' };
+  }
+
   function model() {
     const fs = factors();
-    if (!fs.length) return { s: S_THEORY, n: 0, conf: null, basis: 'theory' };
+    if (!fs.length) { const th = theoryS(); return { s: th.s, n: 0, conf: null, basis: 'theory', src: th.src }; }
     const ss = fs.map(f => f.s).sort((a, b) => a - b);
     const med = ss.length % 2 ? ss[(ss.length - 1) / 2] : (ss[ss.length / 2 - 1] + ss[ss.length / 2]) / 2;
     if (fs.length < 3) return { s: med, n: fs.length, conf: null, basis: 'few', fs: fs };
@@ -120,7 +137,9 @@
         field('fs-vol', t('fs.vol'), t('fs.volHint'), '100', vol()) +
       '</div>' +
       '<div id="fs-out" class="fx-predict"></div>' +
-      '<p class="fx-basis">' + basis + ' ' + esc(t('fs.basisNote.' + M.basis, { s: (M.s * 1000).toFixed(2) })) + '</p>' +
+      '<p class="fx-basis">' + basis + ' ' + esc(t('fs.basisNote.' + (M.basis === 'theory' ? 'theory.' + M.src : M.basis),
+        { s: (M.s * 1000).toFixed(2) })) + '</p>' +
+      (stock() ? '<p class="fx-basis">' + esc(t('fs.stock', { q: fmt(stock().qty), m: fmt(stock().min) })) + '</p>' : '') +
 
       '<p class="panel-label" style="margin-top:22px">' + esc(t('fs.log')) + '</p>' +
       '<p class="fx-basis">' + esc(t('fs.logHint')) + '</p>' +
@@ -203,6 +222,9 @@
         volumeL: V > 0 ? V : null, excludeFromModel: !!(mount.querySelector('#fs-excl') || {}).checked,
         note: (v('#fs-note') || '').trim().slice(0, 120) || null };
       database.ref('flux_salt_additions').push(rec)
+        // salt in the bath has left the store: keep the stock figure (and its
+        // low-stock alert) true without anyone remembering to update it
+        .then(() => database.ref('inventory/flux_salt/qty').transaction(q => Math.max(0, (Number(q) || 0) - kg)))
         .then(() => say(isFinite(b1) ? t('fs.saved') : t('fs.savedNoAfter')))
         .catch(e => say(t('coat.failed') + ' ' + e.message, true));
     });
@@ -215,6 +237,7 @@
   database.ref('flux_salt_additions').on('value', s => { adds = s.val() || {}; render(); });
   database.ref('readings_log').on('value', s => { readings = s.val() || {}; render(); });
   database.ref('fluxsalt_settings').on('value', s => { settings = s.val() || {}; render(); });
+  database.ref('inventory/flux_salt').on('value', s => { inv = s.val() || null; render(); });
   if (window.I18N && I18N.onChange) I18N.onChange(render);
   window.KGCFluxSalt = { render: render, _model: model, _sg: sg, _be: be };
 })();

@@ -114,10 +114,22 @@
   }
 
   /** {grade, reason, reading} for a tank, or grade null when nothing is logged. */
+  /* The latest record that actually carries this figure: a day where only
+     the acid was titrated must not wipe out the iron measured two days before. */
+  function latestValue(tankId, f) {
+    let best = null;
+    Object.keys(readings).forEach(function (k) {
+      const r = readings[k];
+      if (!r || Number(r.tankId) !== tankId || r[f] == null || r[f] === '') return;
+      if (!best || (r.date || '') > (best.date || '')) best = r;
+    });
+    return best ? num(best[f]) : NaN;
+  }
+
   function gradeOf(tankId) {
     const r = latest(tankId);
     if (!r) return { grade: null, reading: null };
-    const hcl = num(r.acidPercent), fe = num(r.fe), zn = num(r.zn);
+    const hcl = latestValue(tankId, 'acidPercent'), fe = latestValue(tankId, 'fe'), zn = latestValue(tankId, 'zn');
 
     let g = hclGrade(hcl), why = 'hcl';
     const other = tankId === STRIP_ID
@@ -768,7 +780,11 @@
           typeof tanks !== 'undefined' && typeof saveToStorage === 'function') {
         const tk = tanks.find(x => x.id === id);
         if (tk) {
-          chem.forEach(function (k) { if ((tk.fields || []).indexOf(k) !== -1) tk[k] = nums[k]; });
+          chem.forEach(function (k) {
+            if ((tk.fields || []).indexOf(k) === -1) return;
+            tk[k] = nums[k];
+            if (typeof markMeasured === 'function') markMeasured(tk, k);
+          });
           try { saveToStorage(); if (typeof renderAll === 'function') renderAll(); } catch (e) {}
         }
       }
