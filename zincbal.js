@@ -65,7 +65,8 @@
   let batches = {};    // date -> {date, day:{rows:[]}, night:{rows:[]}}
   let settings = {};   // {margin, gauge:{family:t}}
   let losses = {};     // push-id -> {date, shift, ash, repass, note}
-  let PERT = null;     // set only while the uncertainty runs recompute the balance
+  let PERT = null;
+  let month = null;    // 'YYYY-MM' shown, or 'all'; null = latest month with batches     // set only while the uncertainty runs recompute the balance
 
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -214,8 +215,11 @@
   function compute() {
     const Z = window.KGCZinc;
     const report = (Z && Z._days && Z._days()) || {};
-    const dates = Object.keys(batches).filter(d => batches[d]).sort();
-    if (!dates.length) return null;
+    const allDates = Object.keys(batches).filter(d => batches[d]).sort();
+    if (!allDates.length) return null;
+    const months = Array.from(new Set(allDates.map(d => d.slice(0, 7))));
+    const sel = month && (month === 'all' || months.indexOf(month) !== -1) ? month : months[months.length - 1];
+    const dates = sel === 'all' ? allDates : allDates.filter(d => d.slice(0, 7) === sel);
 
     const shifts = [];
     const P = { kg: 0, area: 0, req: 0, over: 0, react: 0, avoid: 0, cons: 0, measuredKg: 0, coat: 0,
@@ -240,7 +244,7 @@
         Object.keys(P.gaugeKg).forEach(k => { P.gaugeKg[k] += s.gaugeKg[k]; });
       });
     });
-    if (!P.cons) return { shifts: shifts, empty: true, unmatched: unmatched };
+    if (!P.cons) return { shifts: shifts, empty: true, unmatched: unmatched, months: months, month: sel };
     P.residual = P.cons - P.coat;
 
     /* Weighed ash and re-pass, per shift. Ash only splits the residual on
@@ -282,7 +286,7 @@
     }));
 
     const res = { P: P, shifts: shifts, fam: fam, reactCust: reactCust, first: first, last: last,
-                  unmatched: unmatched, days: dates.length };
+                  unmatched: unmatched, days: dates.length, months: months, month: sel };
     if (!PERT) { res.fc = forecast(res); res.unc = uncertainty(res); }
     return res;
   }
@@ -482,7 +486,10 @@
     const U = c.unc;
     const tonnes = P.kg / 1000;
 
-    const head =
+    const picker = c.months.length > 1 ? '<div class="zb-months">' +
+      c.months.concat(['all']).map(m => '<button type="button" class="zb-mbtn' + (m === c.month ? ' on' : '') +
+        '" data-zb-month="' + m + '">' + esc(m === 'all' ? t('zb.allMonths') : m) + '</button>').join('') + '</div>' : '';
+    const head = picker +
       '<div class="pt-stats">' +
         stat(t('zb.k.cons'), fmt(P.cons / tonnes, 1), 'kg/t', false, confBadge(U.cons)) +
         stat(t('zb.k.explained'), (P.coat / P.cons * 100).toFixed(0), '%', false, confBadge(U.coat)) +
@@ -781,6 +788,9 @@
   }
 
   function wire(mount) {
+    mount.querySelectorAll('[data-zb-month]').forEach(b => b.addEventListener('click', function () {
+      month = b.getAttribute('data-zb-month'); render();
+    }));
     const msg = mount.querySelector('#zb-msg');
     const say = (m, bad) => { if (msg) { msg.textContent = m; msg.style.color = bad ? 'var(--crit)' : 'var(--accent)'; } };
     const save = mount.querySelector('#zb-save');
