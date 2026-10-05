@@ -548,3 +548,8 @@ tr.sp-off .name { font-style: italic; }
 .zb-months { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
 .zb-mbtn { font: inherit; font-size: 12.5px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink-2); cursor: pointer; }
 .zb-mbtn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.mg-rows { display: grid; gap: 4px; margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.mg-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: baseline; font-size: 12.5px; color: var(--ink-2); }
+.mg-row small { color: var(--ink-3); font-size: 10.5px; }
+.mg-row b { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+.mg-row .mg-trend { font-size: 11px; min-width: 44px; text-align: end; }
