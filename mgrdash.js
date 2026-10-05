@@ -42,11 +42,13 @@
     const c30 = new Date(last + 'T00:00:00'); c30.setDate(c30.getDate() - 29);
     const from30 = c30.toISOString().slice(0, 10);
     const agg = pick => {
-      const r = { kg: 0, zn: 0, rel: 0, dross: 0, days: 0, first: '', last: '', daily: [] };
+      const r = { kg: 0, zn: 0, rel: 0, dross: 0, days: 0, first: '', last: '', daily: [], drossDays: [], stopDays: [] };
       days.filter(pick).forEach(function (d) {
         const kg = num(d.dayTon) + num(d.nightTon);
         const zn = num(d.dayPct) / 100 * num(d.dayTon) + num(d.nightPct) / 100 * num(d.nightTon);
         r.rel += num(d.release); r.dross += num(d.dross);
+        if (num(d.dross) > 0) r.drossDays.push({ date: d.date, kg: num(d.dross), rel: num(d.release) });
+        if (!(num(d.dayTon) + num(d.nightTon) > 0) && num(d.release) > 0) r.stopDays.push({ date: d.date, rel: num(d.release) });
         if (kg > 0 && zn > 0) {
           r.kg += kg; r.zn += zn; r.days++;
           if (!r.first) r.first = d.date; r.last = d.date;
@@ -79,7 +81,7 @@
   const MIN_DAYS = 7;
 
   /* last month | this month, side by side, one line of difference beneath */
-  function card(title, unit, digits, W, key, lowerIsBetter) {
+  function card(title, unit, digits, W, key, lowerIsBetter, why) {
     const v = r => r && r.kg && r[key] != null ? r[key] : null;
     const cv = v(W.C), pv = v(W.P);
     const col = (lbl, val, days, now) => '<div class="mg-col' + (now ? ' now' : '') + '"><span class="mg-col-k">' + esc(lbl) + '</span>' +
@@ -98,7 +100,25 @@
     }
     return '<div class="mg-card"><span class="mg-k">' + esc(title) + '</span>' +
       '<div class="mg-pair">' + col(monthName(W.prev), pv, W.P.days, false) + col(monthName(W.cur), cv, W.C.days, true) + '</div>' +
-      verdict + '</div>';
+      verdict + (why && W.C.days < MIN_DAYS ? '<p class="mg-why">' + esc(why) + '</p>' : '') + '</div>';
+  }
+
+  /* Why an early-month figure looks high, from the month's own records:
+     a drossing or a refill on a stop day lands in full on the few tonnes
+     produced so far. */
+  function reasons(W) {
+    const C = W.C, tns = fmt(C.kg / 1000);
+    const day = ds => ds.map(x => Number(x.date.slice(8))).join(t('mg.and'));
+    const out = {};
+    if (C.drossDays.length) {
+      out.dross = t('mg.why.dross', { kg: fmt(C.drossDays.reduce((a, x) => a + x.kg, 0)), d: day(C.drossDays), t: tns, n: C.days });
+    }
+    if (C.stopDays.length) {
+      out.added = t('mg.why.added', { kg: fmt(C.stopDays.reduce((a, x) => a + x.rel, 0)), d: day(C.stopDays), t: tns });
+    }
+    out.cons = t('mg.why.early', { n: C.days });
+    out.prod = C.stopDays.length ? t('mg.why.prod', { d: day(C.stopDays) }) : t('mg.why.early', { n: C.days });
+    return out;
   }
 
   function render() {
@@ -106,11 +126,12 @@
     if (!mount) return;
     const W = windows();
     if (!W) { mount.innerHTML = ''; return; }
+    const why = reasons(W);
     mount.innerHTML = '<div class="mg-grid">' +
-      card(t('mg.cons'), 'kg/t', 1, W, 'cons', true) +
-      card(t('mg.prod'), 't', 1, W, 'perDay', false) +
-      card(t('mg.added'), 'kg/t', 1, W, 'relT', true) +
-      card(t('mg.dross'), 'kg/t', 1, W, 'drossT', true) +
+      card(t('mg.cons'), 'kg/t', 1, W, 'cons', true, why.cons) +
+      card(t('mg.prod'), 't', 1, W, 'perDay', false, why.prod) +
+      card(t('mg.added'), 'kg/t', 1, W, 'relT', true, why.added || why.cons) +
+      card(t('mg.dross'), 'kg/t', 1, W, 'drossT', true, why.dross || why.cons) +
       '</div><p class="mg-foot">' + esc(t('mg.foot')) + '</p>';
   }
 
