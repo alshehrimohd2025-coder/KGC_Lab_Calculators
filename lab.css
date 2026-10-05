@@ -553,3 +553,11 @@ tr.sp-off .name { font-style: italic; }
 .mg-row small { color: var(--ink-3); font-size: 10.5px; }
 .mg-row b { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
 .mg-row .mg-trend { font-size: 11px; min-width: 44px; text-align: end; }
+.mg-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0 8px; }
+.mg-col { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 10px; background: var(--recess); }
+.mg-col.now { background: var(--accent-soft); border: 1px solid var(--accent-line); }
+.mg-col-k { font-size: 12px; font-weight: 700; color: var(--ink-2); }
+.mg-col-v { font-family: var(--mono); font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mg-col-v small { font-size: 11px; color: var(--ink-3); margin-inline-start: 3px; font-weight: 500; }
+.mg-col-d { font-size: 11px; color: var(--ink-3); }
+.mg-verdict { font-size: 12.5px; font-weight: 600; }

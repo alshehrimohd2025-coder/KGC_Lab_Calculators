@@ -65,58 +65,40 @@
              R: agg(d => d.date >= from30 && d.date <= last) };
   }
 
-  /* daily kg/t over the last 30 days, last month's average as a dashed line */
-  function spark(daily, ref) {
-    if (daily.length < 2) return '';
-    const W = 220, H = 44, pad = 3;
-    const vals = daily.map(d => d.v).concat(ref != null ? [ref] : []);
-    const lo = Math.min(...vals) - 2, hi = Math.max(...vals) + 2;
-    const x = i => pad + i * (W - 2 * pad) / (daily.length - 1);
-    const y = v => H - pad - (v - lo) / (hi - lo) * (H - 2 * pad);
-    return '<svg class="mg-spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="' +
-      esc(t('mg.sparkAria')) + '">' +
-      (ref != null ? '<line x1="0" x2="' + W + '" y1="' + y(ref).toFixed(1) + '" y2="' + y(ref).toFixed(1) + '" class="mg-spark-ref"/>' : '') +
-      '<polyline points="' + daily.map((d, i) => x(i).toFixed(1) + ',' + y(d.v).toFixed(1)).join(' ') + '" class="mg-spark-line"/>' +
-      daily.map((d, i) => '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(d.v).toFixed(1) + '" r="1.6" class="mg-spark-dot"><title>' +
-        esc(d.date + ': ' + fmt(d.v, 1) + ' kg/t') + '</title></circle>').join('') + '</svg>';
-  }
-
-  /* one card: the current month big, then last month and the last 30 days
-     beneath it, each with its difference from the current month */
-  /* lumpy = removed or topped up in batches (dross every ~2 weeks, ingots in
-     bursts after a stop): a few days of a new month can hold a whole cycle,
-     so the headline is the last 30 days and the months sit underneath. */
   const monthName = ym => {
     try {
-      const lang = document.documentElement.classList.contains('lang-en') ? 'en' : 'ar';
-      return new Date(ym + '-01T00:00:00').toLocaleDateString(lang === 'ar' ? 'ar-SA-u-ca-gregory-nu-latn' : 'en-GB', { month: 'long' });
+      const en = document.documentElement.classList.contains('lang-en');
+      return new Date(ym + '-01T00:00:00').toLocaleDateString(en ? 'en-GB' : 'ar-SA-u-ca-gregory-nu-latn', { month: 'long' });
     } catch (e) { return ym; }
   };
 
-  function card(title, unit, digits, W, key, lowerIsBetter, extra, lumpy) {
-    const v = r => r && r[key] != null && (key !== 'cons' || r.kg) ? r[key] : null;
-    const main = lumpy ? W.R : W.C;
-    const cv = v(main);
-    const diff = function (other) {
-      if (lumpy || cv == null || other == null) return '';
-      const d = cv - other, pct = other ? d / other * 100 : 0;
-      if (Math.abs(pct) < 1.5) return '<span class="mg-trend mg-flat">=</span>';
-      const bad = lowerIsBetter == null ? null : (lowerIsBetter ? d > 0 : d < 0);
-      const cls = bad == null ? 'flat' : bad ? 'up' : 'down';
-      return '<span class="mg-trend mg-' + cls + '">' + (d > 0 ? '▲ ' : '▼ ') + fmt(Math.abs(d), digits) + '</span>';
-    };
-    const row = (lbl, r, note) => '<div class="mg-row"><span>' + esc(lbl) +
-      (note ? ' <small>' + esc(note) + '</small>' : '') + '</span><b>' +
-      (v(r) != null ? fmt(v(r), digits) : '—') + '</b>' + diff(v(r)) + '</div>';
+  /* A verdict on a month that has barely started is unfair to it -- two
+     days against a full month, or a single drossing day. The arrow appears
+     once the month has this many production days; before that the card
+     says it is too early. */
+  const MIN_DAYS = 7;
+
+  /* last month | this month, side by side, one line of difference beneath */
+  function card(title, unit, digits, W, key, lowerIsBetter) {
+    const v = r => r && r.kg && r[key] != null ? r[key] : null;
+    const cv = v(W.C), pv = v(W.P);
+    const col = (lbl, val, days, now) => '<div class="mg-col' + (now ? ' now' : '') + '"><span class="mg-col-k">' + esc(lbl) + '</span>' +
+      '<span class="mg-col-v">' + (val != null ? fmt(val, digits) : '—') + '<small>' + esc(unit) + '</small></span>' +
+      '<span class="mg-col-d">' + esc(t('mg.days', { n: days })) + '</span></div>';
+    let verdict;
+    if (cv == null || pv == null) verdict = '';
+    else if (W.C.days < MIN_DAYS) verdict = '<span class="mg-verdict mg-flat">' + esc(t('mg.early', { n: W.C.days, m: MIN_DAYS })) + '</span>';
+    else {
+      const d = cv - pv, pct = pv ? d / pv * 100 : 0;
+      const bad = lowerIsBetter ? d > 0 : d < 0;
+      verdict = Math.abs(pct) < 1.5
+        ? '<span class="mg-verdict mg-flat">' + esc(t('mg.same')) + '</span>'
+        : '<span class="mg-verdict mg-' + (bad ? 'up' : 'down') + '">' + (d > 0 ? '▲ ' : '▼ ') + fmt(Math.abs(d), digits) + ' ' +
+          esc(unit) + ' (' + (d > 0 ? '+' : '−') + Math.abs(pct).toFixed(0) + '%)</span>';
+    }
     return '<div class="mg-card"><span class="mg-k">' + esc(title) + '</span>' +
-      '<span class="mg-v">' + (cv != null ? fmt(cv, digits) : '—') + '<small>' + esc(unit) + '</small></span>' +
-      '<span class="mg-sub">' + esc(lumpy ? t('mg.last30Sub', { n: W.R.days }) : t('mg.curSub', { m: monthName(W.cur), n: W.C.days })) + '</span>' +
-      (extra || '') +
-      '<div class="mg-rows">' +
-        (lumpy ? row(t('mg.thisMonth', { m: monthName(W.cur) }), W.C, t('mg.days', { n: W.C.days })) : '') +
-        row(t('mg.prevMonth', { m: monthName(W.prev) }), W.P, W.P.days ? t('mg.days', { n: W.P.days }) : '') +
-        (lumpy ? '' : row(t('mg.last30'), W.R, t('mg.days', { n: W.R.days }))) +
-      '</div>' + (lumpy ? '<span class="mg-sub">' + esc(t('mg.lumpyNote')) + '</span>' : '') + '</div>';
+      '<div class="mg-pair">' + col(monthName(W.prev), pv, W.P.days, false) + col(monthName(W.cur), cv, W.C.days, true) + '</div>' +
+      verdict + '</div>';
   }
 
   function render() {
@@ -124,13 +106,12 @@
     if (!mount) return;
     const W = windows();
     if (!W) { mount.innerHTML = ''; return; }
-    const prevCons = W.P.kg ? W.P.cons : null;
     mount.innerHTML = '<div class="mg-grid">' +
-      card(t('mg.cons'), 'kg/t', 1, W, 'cons', true, spark(W.R.daily, prevCons)) +
-      card(t('mg.prod'), 't/' + t('mg.dayShort'), 1, W, 'perDay', false) +
-      card(t('mg.added'), 'kg/t', 1, W, 'relT', true, '', true) +
-      card(t('mg.dross'), 'kg/t', 1, W, 'drossT', true, '', true) +
-      '</div><p class="mg-foot">' + esc(t('mg.foot')) + ' ' + esc(t('mg.diffNote')) + '</p>';
+      card(t('mg.cons'), 'kg/t', 1, W, 'cons', true) +
+      card(t('mg.prod'), 't', 1, W, 'perDay', false) +
+      card(t('mg.added'), 'kg/t', 1, W, 'relT', true) +
+      card(t('mg.dross'), 'kg/t', 1, W, 'drossT', true) +
+      '</div><p class="mg-foot">' + esc(t('mg.foot')) + '</p>';
   }
 
   database.ref('zinc_daily').on('value', () => setTimeout(render, 0));
