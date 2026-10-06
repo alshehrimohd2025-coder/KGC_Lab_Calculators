@@ -22,7 +22,7 @@
     const list = F && F.all ? F.all() : [];
     if (!list.length) { mount.innerHTML = ''; return; }
     mount.innerHTML =
-      '<p class="panel-label" style="margin:24px 0 4px">' + esc(t('bs.title')) + '</p>' +
+      '<h3 class="zb-h" style="margin:28px 2px 4px">' + esc(t('bs.title')) + '</h3>' +
       '<p class="lab-life-sub" style="margin:0 2px 10px">' + esc(t('bs.sub')) + '</p>' +
       '<div class="bs-list">' + list.map(function (x) {
         const f = x.f, c = COLOR[f.tier] || COLOR.good;

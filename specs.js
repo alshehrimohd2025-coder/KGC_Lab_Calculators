@@ -169,10 +169,12 @@
     const bandL = p.min != null ? pos(p.min) : 0, bandR = p.max != null ? pos(p.max) : 100;
     const r = evaluate(value, p);
     const dot = has ? '<i class="rg-dot" style="left:' + pos(v).toFixed(1) + '%;background:' + tierColor(r.tier) + '"></i>' : '';
-    const tick = x => '<i class="rg-crit" style="left:' + pos(x).toFixed(1) + '%"></i>';
-    return '<span class="rg" dir="ltr" aria-hidden="true"><i class="rg-band" style="left:' + bandL.toFixed(1) +
-      '%;width:' + Math.max(bandR - bandL, 2).toFixed(1) + '%"></i>' +
-      (p.critMin != null ? tick(p.critMin) : '') + (p.critMax != null ? tick(p.critMax) : '') + dot + '</span>';
+    // three plain zones: green = in range, amber = out of range, red = past the critical limit
+    const zone = (a, b, cls) => b - a > 0 ? '<i class="' + cls + '" style="left:' + a.toFixed(1) + '%;width:' + (b - a).toFixed(1) + '%"></i>' : '';
+    return '<span class="rg" dir="ltr" aria-hidden="true">' +
+      zone(bandL, Math.max(bandR, bandL + 2), 'rg-band') +
+      (p.critMin != null ? zone(0, pos(p.critMin), 'rg-crit') : '') +
+      (p.critMax != null ? zone(pos(p.critMax), 100, 'rg-crit') : '') + dot + '</span>';
   }
 
   function badge(tier) {

@@ -1165,6 +1165,12 @@ document.addEventListener('DOMContentLoaded', function () {
   <section id="mgr-kpis"></section>
 
   <!-- Tanks Cards View -->
+  <div class="rg-key">
+    <span><i class="k-good"></i><b data-i18n="rg.good">ضمن المعيار</b></span>
+    <span><i class="k-warn"></i><b data-i18n="rg.warn">خارج المعيار</b></span>
+    <span><i class="k-crit"></i><b data-i18n="rg.crit">حد حرج</b></span>
+    <span><i class="k-dot"></i><b data-i18n="rg.dot">القراءة الحالية</b></span>
+  </div>
   <div class="tanks-grid" id="tanks-container"></div>
 
   <!-- one-click report in the lab's own template, filled with today's readings -->
@@ -1402,9 +1408,10 @@ function tankDataRowsHTML(tank) {
     const display = missing ? '—' : def.raw ? value : Number(value).toFixed(2);
     // colour the reading by how it sits against its own limits
     const p = specs.find(x => x.key === key);
-    let colour = '', title = '', rng = '', gauge = '';
+    let colour = '', title = '', rng = '', gauge = '', tierCls = '';
     if (p && SP) {
       const r = SP.evaluate(value, p);
+      if (r.tier === 'good' || r.tier === 'warn' || r.tier === 'crit') tierCls = ' row-' + r.tier;
       if (r.tier !== 'none') colour = ' style="color:' + SP.tierColor(r.tier) + '"';
       title = ' title="' + fieldLabel(key) + ': ' + SP.rangeText(p).replace(/"/g, '') + '"';
       if (!p.unavailable && (p.min != null || p.max != null)) {
@@ -1414,7 +1421,7 @@ function tankDataRowsHTML(tank) {
       }
     }
     return `
-        <div class="data-row"${title}>
+        <div class="data-row${tierCls}"${title}>
           <span class="data-label">${fieldLabel(key)}${rng}</span>
           <span class="data-value"${colour} onclick="makeEditable(this, ${tank.id}, '${key}')">${display}</span>
           ${gauge}
