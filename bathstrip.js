@@ -13,7 +13,7 @@
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  const COLOR = { good: 'var(--accent)', warn: 'var(--warn)', crit: 'var(--crit)' };
+  const COLOR = { good: 'var(--ink-3)', warn: 'var(--warn)', crit: 'var(--crit)' };
 
   function render() {
     const mount = document.getElementById('bath-strip');

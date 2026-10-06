@@ -168,7 +168,8 @@
     const pos = x => Math.max(0, Math.min(100, (x - lo) / (hi - lo) * 100));
     const bandL = p.min != null ? pos(p.min) : 0, bandR = p.max != null ? pos(p.max) : 100;
     const r = evaluate(value, p);
-    const dot = has ? '<i class="rg-dot" style="left:' + pos(v).toFixed(1) + '%;background:' + tierColor(r.tier) + '"></i>' : '';
+    const needle = r.tier === 'good' ? 'var(--ink)' : tierColor(r.tier);
+    const dot = has ? '<i class="rg-dot" style="left:' + pos(v).toFixed(1) + '%;background:' + needle + '"></i>' : '';
     // three plain zones: green = in range, amber = out of range, red = past the critical limit
     const zone = (a, b, cls) => b - a > 0 ? '<i class="' + cls + '" style="left:' + a.toFixed(1) + '%;width:' + (b - a).toFixed(1) + '%"></i>' : '';
     return '<span class="rg" dir="ltr" aria-hidden="true">' +
