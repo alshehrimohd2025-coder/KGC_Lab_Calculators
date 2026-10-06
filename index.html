@@ -992,6 +992,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 .data-row {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   font-size: 12.5px;
@@ -1133,22 +1134,7 @@ document.addEventListener('DOMContentLoaded', function () {
   background: var(--surface);
 }
 
-/* concise operating-standards reference (replaces the old readings table) */
-.std-table td.std-cell { text-align: right; padding: 9px 14px; }
-.std-chip {
-  display: inline-flex; align-items: baseline; gap: 5px;
-  margin: 3px 0 3px 8px; padding: 3px 9px;
-  background: var(--recess); border: 1px solid var(--line);
-  border-radius: 999px; white-space: nowrap;
-  font-family: var(--mono); font-size: 11.5px;
-  font-variant-numeric: tabular-nums; direction: ltr;
-}
-.std-chip-k { color: var(--ink-3); font-size: 10.5px; font-weight: 600; }
-.std-chip-v { color: var(--ink); }
-.std-crit { color: var(--crit); font-weight: 700; margin-inline-start: 3px; }
-.std-none { color: var(--ink-3); }
-html[dir="rtl"] .std-table td.std-cell { text-align: right; }
-
+.rng-t { display: block; white-space: nowrap; color: var(--ink-3); font-family: var(--mono); font-size: 10px; font-weight: 500; line-height: 1.2; margin-top: 1px; }
 .save-note {
   display: flex;
   align-items: center;
@@ -1188,19 +1174,8 @@ html[dir="rtl"] .std-table td.std-cell { text-align: right; }
     <span id="rep-msg"></span>
   </div>
 
-  <!-- Operating standards — a concise reference of each tank's target ranges -->
-  <p class="panel-label" data-i18n="tanks.stdTitle" style="margin:24px 0 10px">معايير التشغيل — النطاق المرجعي</p>
-  <div class="tanks-table-container">
-    <table class="tanks-table std-table" id="tanks-table-body">
-      <thead>
-        <tr>
-          <th data-i18n="tanks.col.tank">الحوض</th>
-          <th data-i18n="tanks.col.standards">النطاق التشغيلي</th>
-        </tr>
-      </thead>
-      <tbody id="tanks-list"></tbody>
-    </table>
-  </div>
+  <!-- Bath life: how far each bath is through its usual cycle (bathstrip.js) -->
+  <section id="bath-strip"></section>
 
   <div class="save-note">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
@@ -1427,16 +1402,22 @@ function tankDataRowsHTML(tank) {
     const display = missing ? '—' : def.raw ? value : Number(value).toFixed(2);
     // colour the reading by how it sits against its own limits
     const p = specs.find(x => x.key === key);
-    let colour = '', title = '';
+    let colour = '', title = '', rng = '', gauge = '';
     if (p && SP) {
       const r = SP.evaluate(value, p);
       if (r.tier !== 'none') colour = ' style="color:' + SP.tierColor(r.tier) + '"';
       title = ' title="' + fieldLabel(key) + ': ' + SP.rangeText(p).replace(/"/g, '') + '"';
+      if (!p.unavailable && (p.min != null || p.max != null)) {
+        rng = ' <small class="rng-t" dir="ltr">' + (p.min != null && p.max != null ? p.min + '–' + p.max
+          : p.max != null ? '≤ ' + p.max : '≥ ' + p.min) + '</small>';
+        gauge = SP.gauge(value, p);
+      }
     }
     return `
         <div class="data-row"${title}>
-          <span class="data-label">${fieldLabel(key)}</span>
+          <span class="data-label">${fieldLabel(key)}${rng}</span>
           <span class="data-value"${colour} onclick="makeEditable(this, ${tank.id}, '${key}')">${display}</span>
+          ${gauge}
         </div>`;
   }).join('');
 }
@@ -1585,47 +1566,8 @@ function renderCards() {
   });
 }
 
-/* One compact "label range" chip per specified parameter — the target
-   ranges only, drawn from the same spec engine that colours the cards. */
-function tankStandardChipsHTML(tank) {
-  const SP = window.KGCSpecs;
-  if (!SP || !SP.hasSpec(tank.id)) return '<span class="std-none">—</span>';
-  return SP.paramsFor(tank.id).map(function (p) {
-    let r;
-    if (p.min != null && p.max != null) r = p.min + '–' + p.max;
-    else if (p.max != null) r = '≤ ' + p.max;
-    else if (p.min != null) r = '≥ ' + p.min;
-    else r = '—';
-    const unit = p.unit ? ' ' + p.unit : '';
-    const critVal = (p.critMax != null) ? p.critMax : (p.critMin != null ? p.critMin : null);
-    const crit = critVal != null
-      ? ' <b class="std-crit" title="' + t('spec.critical') + '">⚠ ' + critVal + '</b>' : '';
-    return '<span class="std-chip"><span class="std-chip-k">' + fieldLabel(p.key) + '</span>' +
-      '<span class="std-chip-v">' + r + unit + crit + '</span></span>';
-  }).join('');
-}
-
-function renderTable() {
-  const tbody = document.getElementById('tanks-list');
-  tbody.innerHTML = '';
-
-  const SP = window.KGCSpecs;
-  tanks.slice()
-    .filter(tk => SP && SP.hasSpec(tk.id))
-    .sort((a, b) => a.id - b.id)
-    .forEach(tank => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td class="tank-name-col">${tankLabel(tank.name)}</td>
-        <td class="std-cell">${tankStandardChipsHTML(tank)}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-}
-
 function renderAll() {
   renderCards();
-  renderTable();
 }
 
 /* Nav: collapsed on a phone, always open on a wide screen. The toggle shows
@@ -2380,6 +2322,7 @@ html:not(.authed) .spec-view-note{display:block}
 <script src="schedule.js"></script>
 <script src="coating.js"></script>
 <script src="forecast.js"></script>
+<script src="bathstrip.js"></script>
 <script src="kettle.js"></script>
 <script src="flux.js"></script>
 <script src="peroxide.js"></script>

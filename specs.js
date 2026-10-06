@@ -152,6 +152,29 @@
   const TIER_VAR = { good: '--accent', warn: '--warn', crit: '--crit', na: '--ink-3' };
   const tierColor = tier => TIER_VAR[tier] ? 'var(' + TIER_VAR[tier] + ')' : 'var(--ink-3)';
 
+  /* A thin range bar for one reading: the green band is the operating range,
+     red ticks are the critical limits, the dot is where the reading sits.
+     Drawn left-to-right (low to high) whatever the page direction, so it reads
+     like the numbers beside it. Empty when the parameter has no range. */
+  function gauge(value, p) {
+    if (!p || p.unavailable || (p.min == null && p.max == null)) return '';
+    const v = Number(value), has = isFinite(v) && value !== null && value !== '' && v !== 0;
+    const pts = [p.min, p.max, p.critMin, p.critMax].filter(x => x != null);
+    if (has) pts.push(v);
+    let lo = Math.min.apply(null, pts), hi = Math.max.apply(null, pts);
+    const core = (p.min != null && p.max != null) ? (p.max - p.min) : Math.max(Math.abs(p.max != null ? p.max : p.min), 1);
+    lo -= core * 0.35; hi += core * 0.35;
+    if (lo < 0) lo = 0;
+    const pos = x => Math.max(0, Math.min(100, (x - lo) / (hi - lo) * 100));
+    const bandL = p.min != null ? pos(p.min) : 0, bandR = p.max != null ? pos(p.max) : 100;
+    const r = evaluate(value, p);
+    const dot = has ? '<i class="rg-dot" style="left:' + pos(v).toFixed(1) + '%;background:' + tierColor(r.tier) + '"></i>' : '';
+    const tick = x => '<i class="rg-crit" style="left:' + pos(x).toFixed(1) + '%"></i>';
+    return '<span class="rg" dir="ltr" aria-hidden="true"><i class="rg-band" style="left:' + bandL.toFixed(1) +
+      '%;width:' + Math.max(bandR - bandL, 2).toFixed(1) + '%"></i>' +
+      (p.critMin != null ? tick(p.critMin) : '') + (p.critMax != null ? tick(p.critMax) : '') + dot + '</span>';
+  }
+
   function badge(tier) {
     if (tier === 'na') {
       return '<span class="sp-badge sp-na">' + esc(t('spec.noInstrument')) + '</span>';
@@ -320,6 +343,7 @@
     evaluate: evaluate,
     tankStatus: tankStatus,
     rangeText: rangeText,
+    gauge: gauge,
     tierColor: tierColor,
     badge: badge,
     render: renderAll,

@@ -562,3 +562,20 @@ tr.sp-off .name { font-style: italic; }
 .mg-col-d { font-size: 11px; color: var(--ink-3); }
 .mg-verdict { font-size: 12.5px; font-weight: 600; }
 .mg-why { font-size: 11.5px; line-height: 1.6; color: var(--ink-2); background: var(--recess); border-radius: 8px; padding: 7px 9px; margin: 8px 0 0; }
+
+/* ---------- range gauge inside the tank cards ---------- */
+.rg { position: relative; flex: 0 0 100%; height: 5px; margin-top: 5px; border-radius: 3px; background: var(--line); }
+.rg-band { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: var(--accent-line); opacity: .8; }
+.rg-crit { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--crit); border-radius: 1px; }
+.rg-dot { position: absolute; top: 50%; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; border: 1.5px solid var(--surface); box-shadow: 0 0 0 1px var(--line-strong); }
+
+/* ---------- bath ages strip ---------- */
+.bs-list { display: grid; gap: 8px; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--surface); }
+.bs-row { display: grid; grid-template-columns: minmax(110px, 170px) 1fr minmax(96px, auto); gap: 12px; align-items: center; font-size: 12.5px; }
+.bs-name { font-weight: 600; }
+.bs-bar { position: relative; height: 8px; border-radius: 4px; background: var(--recess); border: 1px solid var(--line); overflow: hidden; }
+.bs-bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+.bs-bar em { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed var(--ink-3); }
+.bs-when { font-weight: 700; text-align: end; line-height: 1.3; }
+.bs-when small { display: block; font-weight: 500; color: var(--ink-3); font-size: 10.5px; font-family: var(--mono); }
+@media (max-width: 560px) { .bs-row { grid-template-columns: 1fr; gap: 4px; } .bs-when { text-align: start; } }
