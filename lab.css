@@ -596,3 +596,31 @@ html[dir="rtl"] .data-row.row-crit { box-shadow: inset -2px 0 0 var(--crit); }
 .rg-key i.k-warn { background: var(--line); }
 .rg-key i.k-crit { background: var(--crit); opacity: .35; }
 .rg-key i.k-dot { width: 2px; height: 12px; border-radius: 1px; background: var(--ink); }
+
+/* ---------- hover card for a tank reading ---------- */
+.data-row[data-key] { cursor: help; }
+#rh-tip { position: fixed; z-index: 9000; width: min(320px, calc(100vw - 16px)); padding: 12px 14px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 10px;
+  box-shadow: var(--e3); font-size: 12.5px; line-height: 1.55; pointer-events: none;
+  opacity: 0; transform: translateY(4px); transition: opacity .12s, transform .12s; }
+#rh-tip.on { opacity: 1; transform: none; }
+.rh-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.rh-head span { font-weight: 700; font-size: 13.5px; }
+.rh-head small { color: var(--ink-3); font-size: 11px; }
+.rh-why { margin: 0 0 8px; color: var(--ink-2); font-size: 12px; }
+.rh-grid { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0 0 8px; padding: 8px 0;
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.rh-grid dt { color: var(--ink-3); font-size: 11.5px; }
+.rh-grid dd { margin: 0; display: flex; gap: 8px; align-items: baseline; }
+.rh-grid dd[dir="ltr"], .rh-grid dd b { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+html[dir="rtl"] .rh-grid dd[dir="ltr"] { justify-content: flex-end; }
+.rh-critv { color: var(--crit); }
+.rh-st { font-size: 10.5px; font-weight: 600; padding: 0 6px; border-radius: 4px; border: 1px solid; }
+.rh-st.rh-good { color: var(--accent); border-color: var(--accent-line); }
+.rh-st.rh-warn { color: var(--warn); border-color: var(--warn-line); }
+.rh-st.rh-crit { color: var(--crit); border-color: var(--crit-line); }
+.rh-st.rh-none { color: var(--ink-3); border-color: var(--line); }
+.rh-eff, .rh-side { font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+.rh-eff b, .rh-side b { display: block; font-size: 11px; color: var(--ink-3); font-weight: 600; margin-bottom: 1px; }
+.rh-eff.rh-warn { border-inline-start: 2px solid var(--warn); padding-inline-start: 8px; color: var(--ink); }
+.rh-eff.rh-crit { border-inline-start: 2px solid var(--crit); padding-inline-start: 8px; color: var(--ink); }

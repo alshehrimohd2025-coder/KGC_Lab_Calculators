@@ -1413,7 +1413,8 @@ function tankDataRowsHTML(tank) {
       const r = SP.evaluate(value, p);
       if (r.tier === 'good' || r.tier === 'warn' || r.tier === 'crit') tierCls = ' row-' + r.tier;
       if (r.tier !== 'none') colour = ' style="color:' + SP.tierColor(r.tier) + '"';
-      title = ' title="' + fieldLabel(key) + ': ' + SP.rangeText(p).replace(/"/g, '') + '"';
+      // the hover card (readinghint.js) replaces the plain browser tooltip
+      title = ' data-tank="' + tank.id + '" data-key="' + key + '"';
       if (!p.unavailable && (p.min != null || p.max != null)) {
         rng = ' <small class="rng-t" dir="ltr">' + (p.min != null && p.max != null ? p.min + '–' + p.max
           : p.max != null ? '≤ ' + p.max : '≥ ' + p.min) + '</small>';
@@ -2330,6 +2331,7 @@ html:not(.authed) .spec-view-note{display:block}
 <script src="coating.js"></script>
 <script src="forecast.js"></script>
 <script src="bathstrip.js"></script>
+<script src="readinghint.js"></script>
 <script src="kettle.js"></script>
 <script src="flux.js"></script>
 <script src="peroxide.js"></script>
