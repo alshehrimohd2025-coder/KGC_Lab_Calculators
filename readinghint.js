@@ -133,6 +133,96 @@
     lowest: ['أقل ما يمكن', 'As low as possible']
   };
 
+  /* ---------------- the card's own diagnosis ----------------
+     One short line per reading out of range, worst first, written from the
+     same limits that colour the card -- so the message under each tank is
+     never older than its readings and never written by hand. */
+  const SHORT = {
+    degrease: {
+      conc: { low: ['الشحوم لا تُزال ← بقع غير مجلفنة وزيت يُحمل للحمض', 'oil not removed → bare spots, oil carried into the acid'],
+              high: ['هدر كيميائي وحمل زائد للرينس', 'chemical wasted, extra carry-over'] },
+      sg: { low: ['الحوض مخفّف أو مستنفد', 'bath diluted or exhausted'], high: ['تراكم زيوت وأملاح — الحوض يقترب من التجديد', 'oil and salts building up — due for renewal'] },
+      temp: { low: ['إزالة شحوم بطيئة وغير كاملة', 'slow, incomplete degreasing'], high: ['تبخر وتحلل للمادة', 'evaporation and breakdown'] } },
+    rinsePre: {
+      ph: { low: ['الماء مشبع بحمل حوض الشحوم — غيّره', 'water saturated with degreaser carry-over — change it'],
+            high: ['تلوث قلوي يعادل الحمض', 'alkaline carry-over neutralising the acid'] },
+      ec: { high: ['أملاح ومواد تُحمل إلى الحمض وتقصّر عمره', 'salts carried into the acid, shortening its life'] } },
+    acid: {
+      acidPercent: { low: ['تخليل بطيء وقد تبقى قشور ← بقع غير مجلفنة', 'slow pickling, scale may remain → bare spots'],
+                     high: ['أبخرة وتخليل زائد ← طلاء أسمك وزنك أكثر', 'fumes and over-pickling → thicker coat, more zinc'] },
+      fe: { high: ['الحوض قرب التشبع: تخليل بطيء وحديد يصل للحمام ← خبث', 'near saturation: slow pickling, iron to the kettle → dross'] },
+      baume: { low: ['حوض مخفّف — راجع نسبة الحمض', 'bath diluted — check the acid'], high: ['حمولة حديد عالية — الحوض مستهلك', 'heavy iron load — bath spent'] },
+      sg: { low: ['حوض مخفّف', 'bath diluted'], high: ['حمولة حديد عالية — الحوض مستهلك', 'heavy iron load — bath spent'] } },
+    strip: {
+      acidPercent: { low: ['تعرية بطيئة تؤخر الريباس', 'slow stripping delays rework'], high: ['أبخرة وهجوم على حديد القطع', 'fumes, attack on the steel'] },
+      zn: { high: ['مشبع بالزنك — التعرية تتباطأ', 'saturated with zinc — stripping slows'] },
+      fe: { high: ['تعرية زائدة أو اختلاط بحمض التخليل', 'over-stripping or mixed with pickling acid'] } },
+    rinse2: {
+      ph: { low: ['حمض محمول للفلكس ← حديد وخبث أكثر', 'acid carried into the flux → more iron and dross'], high: ['قراءة غير معتادة — تحقق من الماء', 'unusual — check the water'] },
+      fe: { high: ['حديد يُحمل للفلكس ← خبث وزنك أكثر — غيّر الماء', 'iron carried into the flux → dross — change the water'] },
+      ec: { high: ['أملاح وحمض تُحمل للفلكس', 'salts and acid carried into the flux'] } },
+    flux: {
+      salt: { low: ['طبقة فلكس رقيقة ← بقع سوداء وغير مجلفنة', 'thin flux film → black and bare spots'],
+              high: ['طبقة سميكة ← رذاذ ورماد وزنك أكثر', 'thick film → spatter, ash, more zinc'] },
+      ph: { low: ['حمض حر يذيب حديداً ← خبث — عالج بالأمونيا', 'free acid dissolves iron → dross — add ammonia'],
+            high: ['ترسّب هيدروكسيدات ← طين وفاعلية أقل', 'hydroxides precipitate → sludge, weaker flux'] },
+      baume: { low: ['أملاح قليلة ← ترطيب ضعيف — أضف ملحاً', 'low salt → poor wetting — add salt'], high: ['أملاح زائدة ← رماد وزنك أكثر', 'excess salt → ash, more zinc'] },
+      sg: { low: ['أملاح قليلة ← ترطيب ضعيف', 'low salt → poor wetting'], high: ['أملاح زائدة ← رماد وزنك أكثر', 'excess salt → ash, more zinc'] },
+      fe: { high: ['حديد يدخل الحمام (~25 كجم خبث لكل كجم حديد) — عالج بالبيروكسيد', 'iron into the kettle (~25 kg dross per kg) — treat with peroxide'] } }
+  };
+  const RANKT = { crit: 2, warn: 1 };
+
+  function diagnose(tank) {
+    const SP = window.KGCSpecs;
+    if (!tank || !SP || !SP.hasSpec(tank.id)) return null;
+    const lines = [];
+    let measured = 0, total = 0;
+    SP.paramsFor(tank.id).forEach(function (p) {
+      if (p.unavailable) return;
+      total++;
+      const raw = tank[p.key];
+      if (raw == null || raw === '' || !isFinite(Number(raw))) return;
+      measured++;
+      const v = Number(raw);
+      let dir = null, tier = 'warn', lim = null;
+      if (p.critMax != null && v >= p.critMax) { dir = 'high'; tier = 'crit'; lim = '≥ ' + n(p.critMax); }
+      else if (p.critMin != null && v <= p.critMin) { dir = 'low'; tier = 'crit'; lim = '≤ ' + n(p.critMin); }
+      else if (p.max != null && v > p.max) { dir = 'high'; lim = '> ' + n(p.max); }
+      else if (p.min != null && v < p.min) { dir = 'low'; lim = '< ' + n(p.min); }
+      if (!dir) return;
+      const sh = ((SHORT[GROUP[tank.id]] || {})[p.key] || {})[dir];
+      const msg = sh ? tx(sh) : tx(dir === 'high' ? STATUS.high : STATUS.low);
+      // the number and unit kept as one left-to-right run inside Arabic text
+      const fig = esc(fieldLabel(p.key)) + ' <bdi dir="ltr">' + esc(n(v) + (p.unit ? ' ' + p.unit : '')) + '</bdi>';
+      // Baumé and SG often say the same thing: one line naming both readings
+      const same = lines.find(l => l.msg === msg);
+      if (same) { same.figs.push(fig); if (RANKT[tier] > RANKT[same.tier]) same.tier = tier; }
+      else lines.push({ tier: tier, key: p.key, msg: msg, figs: [fig] });
+    });
+    lines.forEach(l => { l.html = '<b>' + l.figs.join('، ') + '</b> — ' + esc(l.msg); });
+    lines.sort((a, b) => RANKT[b.tier] - RANKT[a.tier]);
+    // a bath past its usual life is a problem the readings alone may not show
+    const F = window.KGCForecast && window.KGCForecast.forecast(tank.id);
+    if (F && F.state === 'ok' && F.tier === 'crit') {
+      lines.push({ tier: 'warn', html: esc(tx(['تجاوز عمره المعتاد بـ ', 'Past its usual life by ']) + Math.abs(F.remaining) +
+        tx([' يوم — جدول الاستبدال', ' days — schedule a change'])) });
+    }
+    const tier = lines.some(l => l.tier === 'crit') ? 'crit' : lines.length ? 'warn' : measured ? 'good' : 'none';
+    return { tier: tier, lines: lines, measured: measured, total: total };
+  }
+
+  function diagnosisHTML(tank) {
+    const d = diagnose(tank);
+    if (!d) return '';
+    if (d.tier === 'none') return '<div class="tank-diag d-none">' + esc(tx(['لا توجد قراءات للحكم', 'No readings to judge'])) + '</div>';
+    if (d.tier === 'good') return '<div class="tank-diag d-good">' + esc(tx(['كل القراءات ضمن النطاق', 'All readings in range'])) +
+      (d.measured < d.total ? ' <small>' + esc(tx(['(' + d.measured + ' من ' + d.total + ' مقيسة)', '(' + d.measured + ' of ' + d.total + ' measured)'])) + '</small>' : '') + '</div>';
+    return '<div class="tank-diag d-' + d.tier + '"><ul>' +
+      d.lines.map(l => '<li class="dl-' + l.tier + '">' + l.html + '</li>').join('') + '</ul></div>';
+  }
+
+  window.KGCHints = { diagnose: diagnose, diagnosisHTML: diagnosisHTML };
+
   let box = null;
   function ensureBox() {
     if (box) return box;
@@ -219,4 +309,6 @@
     if (row && !e.target.closest('.data-input')) show(row); else hide();
   });
   window.addEventListener('scroll', hide, { passive: true });
+  // the cards may have drawn before this file loaded
+  if (typeof renderAll === 'function') { try { renderAll(); } catch (e) {} }
 })();

@@ -624,3 +624,21 @@ html[dir="rtl"] .rh-grid dd[dir="ltr"] { justify-content: flex-end; }
 .rh-eff b, .rh-side b { display: block; font-size: 11px; color: var(--ink-3); font-weight: 600; margin-bottom: 1px; }
 .rh-eff.rh-warn { border-inline-start: 2px solid var(--warn); padding-inline-start: 8px; color: var(--ink); }
 .rh-eff.rh-crit { border-inline-start: 2px solid var(--crit); padding-inline-start: 8px; color: var(--ink); }
+
+/* ---------- automatic diagnosis under each tank card ---------- */
+.tank-diag { margin: 0 10px 8px; padding: 7px 9px; border-radius: 8px; font-size: 11.5px; line-height: 1.5;
+  background: var(--recess); border: 1px solid var(--line); color: var(--ink-2); }
+.tank-diag ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.tank-diag li { padding-inline-start: 9px; position: relative; }
+.tank-diag li::before { content: ''; position: absolute; inset-inline-start: 0; top: .55em; width: 4px; height: 4px; border-radius: 50%; background: var(--warn); }
+.tank-diag li.dl-crit::before { background: var(--crit); }
+.tank-diag li.dl-crit { color: var(--ink); font-weight: 600; }
+.tank-diag.d-crit { border-color: var(--crit-line); }
+.tank-diag.d-warn { border-color: var(--warn-line); }
+.tank-diag.d-good { color: var(--accent); text-align: center; }
+.tank-diag.d-none { color: var(--ink-3); text-align: center; }
+.tank-diag small { color: var(--ink-3); }
+.tank-diag ul { text-align: start; }
+.tank-diag li b { font-weight: 600; color: var(--ink); }
+.tank-diag li bdi { font-family: var(--mono); font-size: 11px; }
+.tank-card .tank-diag ul, .tank-card .tank-diag li { text-align: start; }

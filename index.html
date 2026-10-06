@@ -1560,7 +1560,7 @@ function renderCards() {
       <div class="tank-data">${tankDataRowsHTML(tank)}</div>
       ${bathAgeHTML(tank)}
       ${readingAgeHTML(tank)}
-      ${standardsFlagHTML(tank)}
+      ${window.KGCHints ? window.KGCHints.diagnosisHTML(tank) : standardsFlagHTML(tank)}
       ${tankNoteHTML(tank)}
       <select class="status-select" style="background:${color}1a; border-color:${color}59; color:${color};" onchange="setStatus(${tank.id}, this.value)">
         ${statusOptionsHTML(tank.status)}
