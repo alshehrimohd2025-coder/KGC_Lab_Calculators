@@ -81,11 +81,13 @@
   const MIN_DAYS = 7;
 
   /* last month | this month, side by side, one line of difference beneath */
-  function card(title, unit, digits, W, key, lowerIsBetter, why) {
+  function card(title, unit, digits, W, key, lowerIsBetter, why, total) {
     const v = r => r && r.kg && r[key] != null ? r[key] : null;
     const cv = v(W.C), pv = v(W.P);
-    const col = (lbl, val, days, now) => '<div class="mg-col' + (now ? ' now' : '') + '"><span class="mg-col-k">' + esc(lbl) + '</span>' +
+    // total: optional (period) => text with the period's absolute quantity
+    const col = (lbl, val, days, now, r) => '<div class="mg-col' + (now ? ' now' : '') + '"><span class="mg-col-k">' + esc(lbl) + '</span>' +
       '<span class="mg-col-v">' + (val != null ? fmt(val, digits) : '—') + '<small>' + esc(unit) + '</small></span>' +
+      (total ? '<span class="mg-col-tot">' + total(r) + '</span>' : '') +
       '<span class="mg-col-d">' + esc(t('mg.days', { n: days })) + '</span></div>';
     let verdict;
     if (cv == null || pv == null) verdict = '';
@@ -99,7 +101,7 @@
           esc(unit) + ' (' + (d > 0 ? '+' : '−') + Math.abs(pct).toFixed(0) + '%)</span>';
     }
     return '<div class="mg-card"><span class="mg-k">' + esc(title) + '</span>' +
-      '<div class="mg-pair">' + col(monthName(W.prev), pv, W.P.days, false) + col(monthName(W.cur), cv, W.C.days, true) + '</div>' +
+      '<div class="mg-pair">' + col(monthName(W.prev), pv, W.P.days, false, W.P) + col(monthName(W.cur), cv, W.C.days, true, W.C) + '</div>' +
       verdict + (why && W.C.days < MIN_DAYS ? '<p class="mg-why">' + esc(why) + '</p>' : '') + '</div>';
   }
 
@@ -131,7 +133,11 @@
       card(t('mg.cons'), 'kg/t', 1, W, 'cons', true, why.cons) +
       card(t('mg.prod'), 't', 1, W, 'perDay', false, why.prod) +
       card(t('mg.added'), 'kg/t', 1, W, 'relT', true, why.added || why.cons) +
-      card(t('mg.dross'), 'kg/t', 1, W, 'drossT', true, why.dross || why.cons) +
+      card(t('mg.dross'), 'kg/t', 1, W, 'drossT', true, why.dross || why.cons, function (r) {
+        // the weighed total behind the rate, and how many times it was taken out
+        return '<b>' + fmt(r.dross) + '</b> ' + esc(t('mg.kgTotal')) +
+          (r.drossDays.length ? '<small>' + esc(t('mg.drossTimes', { n: r.drossDays.length, d: r.drossDays.map(x => Number(x.date.slice(8))).join('، ') })) + '</small>' : '');
+      }) +
       '</div><p class="mg-foot">' + esc(t('mg.foot')) + '</p>';
   }
 
