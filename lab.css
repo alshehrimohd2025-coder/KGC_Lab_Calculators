@@ -675,3 +675,4 @@ html[dir="rtl"] .rh-grid dd[dir="ltr"] { justify-content: flex-end; }
 .vs-strip { display: inline-flex; gap: 3px; }
 .vs-c { width: 10px; height: 10px; border-radius: 2px; background: var(--line); }
 .vs-c.on { background: var(--accent); }
+.diag-off { margin: 12px 0 0; }

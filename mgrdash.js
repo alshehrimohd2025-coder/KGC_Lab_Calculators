@@ -128,9 +128,15 @@
      stored at mgr_settings/show and applies on the manager's screen at once.
      The engineer still sees hidden blocks, dimmed and labelled, so the page
      can be checked without switching views. */
-  const BLOCKS = ['status', 'fresh', 'cons', 'prod', 'added', 'dross'];
+  const BLOCKS = ['status', 'fresh', 'cons', 'prod', 'added', 'dross', 'diagAcid'];
+  /* the acid tanks' automatic messages start hidden from the manager and
+     appear only once switched on; every other block starts visible */
+  const OFF_BY_DEFAULT = { diagAcid: true };
+  const ACID_TANKS = [3, 4, 5, 6, 7, 8];
   let show = {}, readings = {};
-  const isOn = k => show[k] !== false;
+  const isOn = k => OFF_BY_DEFAULT[k] ? show[k] === true : show[k] !== false;
+  /** Is this tank's automatic message shown to the manager? */
+  const diagShown = tankId => ACID_TANKS.indexOf(Number(tankId)) === -1 || isOn('diagAcid');
   const editor = () => typeof IS_EDITOR !== 'undefined' && IS_EDITOR;
   const canSave = () => editor() && typeof IS_AUTHED !== 'undefined' && IS_AUTHED;
   // hidden from the manager: not drawn at all; for the engineer: drawn, dimmed
@@ -143,6 +149,7 @@
     const parts = [];
     if (H && typeof tanks !== 'undefined') {
       const bad = tanks.slice().sort((a, b) => a.id - b.id)
+        .filter(tk => editor() || diagShown(tk.id))
         .map(tk => ({ tk: tk, d: H.diagnose(tk) })).filter(x => x.d && (x.d.tier === 'warn' || x.d.tier === 'crit'));
       const crit = bad.some(x => x.d.tier === 'crit');
       parts.push(bad.length
@@ -225,10 +232,13 @@
   }
 
   database.ref('zinc_daily').on('value', () => setTimeout(render, 0));
-  database.ref('mgr_settings/show').on('value', s => { show = s.val() || {}; render(); });
+  database.ref('mgr_settings/show').on('value', s => {
+    show = s.val() || {}; render();
+    if (typeof renderAll === 'function') { try { renderAll(); } catch (e) {} }   // the tank cards read diagShown
+  });
   database.ref('readings_log').on('value', s => { readings = s.val() || {}; render(); });
   database.ref('tanks_data').on('value', () => setTimeout(render, 0));
   database.ref('renewals').on('value', () => setTimeout(render, 0));
   if (window.I18N && I18N.onChange) I18N.onChange(render);
-  window.KGCMgr = { render: render };
+  window.KGCMgr = { render: render, diagShown: diagShown };
 })();
