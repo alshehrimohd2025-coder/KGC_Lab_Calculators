@@ -689,3 +689,86 @@ html[dir="rtl"] .rh-grid dd[dir="ltr"] { justify-content: flex-end; }
 .vs-card .vs-c { width: 14px; height: 14px; border-radius: 3px; }
 .vs-card .vs-none { margin: 0; font-size: 12.5px; color: var(--ink-2); }
 .vs-stat:first-child .vs-v { font-family: inherit; font-size: 18px; }
+
+/* ============================================================
+   Side menu (editor only) — replaces the bar across the top
+   ------------------------------------------------------------
+   A fixed column on the page's start side (right in Arabic) with the pages
+   grouped under section headers that fold away. Below 900px it becomes a
+   drawer behind the menu button. Every rule is prefixed with html.mode-edit
+   so it out-ranks the older top-bar rules without touching them.
+   ============================================================ */
+html.mode-edit .nav-brand { display: none; }
+@media (min-width: 900px) {
+  html.mode-edit body { padding-inline-start: 248px; }
+  html.mode-edit .topnav {
+    position: fixed; top: 0; bottom: 0; inset-inline-start: 0; width: 248px; z-index: 60;
+    border-bottom: none; border-inline-end: 1px solid var(--line);
+    background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+  html.mode-edit .topnav .navtoggle { display: none; }
+  html.mode-edit .topnav .wrap {
+    display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch;
+    height: 100%; max-width: none; margin: 0; padding: 16px 12px 14px; gap: 2px; overflow-y: auto;
+  }
+}
+html.mode-edit .nav-brand { align-items: center; gap: 10px; padding: 4px 10px 14px; margin-bottom: 6px; border-bottom: 1px solid var(--line); }
+html.mode-edit .nav-brand img { width: 28px; height: 28px; object-fit: contain; }
+html.mode-edit .nav-brand span { font-weight: 700; font-size: 14.5px; color: var(--ink); }
+@media (min-width: 900px) { html.mode-edit .nav-brand { display: flex; } }
+
+html.mode-edit .topnav .navgroup {
+  display: flex; flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 1px;
+  padding: 0 !important; margin: 0 0 8px; border: none !important; width: auto;
+}
+html.mode-edit .topnav .navgroup-label {
+  display: flex !important; align-items: center; justify-content: space-between; width: auto;
+  font-family: var(--sans); font-size: 11.5px; font-weight: 700; letter-spacing: 0; text-transform: none;
+  color: var(--ink-3); padding: 8px 10px 4px; cursor: pointer; border-radius: 6px;
+}
+html.mode-edit .topnav .navgroup-label::after {
+  content: ''; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg); transition: transform .15s; margin: 0 4px 2px;
+}
+html.mode-edit .topnav .navgroup.folded .navgroup-label::after { transform: rotate(-45deg); }
+html[dir="rtl"].mode-edit .topnav .navgroup.folded .navgroup-label::after { transform: rotate(135deg); }
+html.mode-edit .topnav .navgroup-label:hover { color: var(--ink); }
+html.mode-edit .topnav .navgroup.folded button[data-page] { display: none; }
+html.mode-edit .topnav button[data-page] {
+  display: flex; width: 100%; flex: none; justify-content: flex-start; gap: 10px;
+  padding: 8px 10px; border-radius: 8px; font-size: 13.5px; font-weight: 500; color: var(--ink-2);
+  box-shadow: none; position: relative;
+}
+html.mode-edit .topnav button[data-page] svg { width: 16px; height: 16px; opacity: .75; }
+html.mode-edit .topnav button[data-page]:hover { background: var(--recess); color: var(--ink); }
+html.mode-edit .topnav button[data-page].active { background: var(--accent-soft); color: var(--accent); font-weight: 700; box-shadow: none; }
+html.mode-edit .topnav button[data-page].active::before {
+  content: ''; position: absolute; inset-inline-start: -12px; top: 6px; bottom: 6px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent);
+}
+html[dir="rtl"].mode-edit .topnav button[data-page].active::before { border-radius: 3px 0 0 3px; }
+html.mode-edit .topnav button[data-page].active svg { opacity: 1; }
+html.mode-edit .topnav .wrap > span[style*="flex"] { flex: 1 1 auto !important; min-height: 12px; }
+html.mode-edit .topnav .signout-btn { width: 100%; justify-content: center; margin-top: 8px; border: 1px solid var(--line) !important; border-radius: 8px; }
+html.mode-edit .topnav .langtog { align-self: center; margin-top: 8px; }
+
+/* phone and narrow screens: a drawer from the start side */
+@media (max-width: 899px) {
+  /* a backdrop-filter makes the bar the containing block of its fixed children,
+     which would trap the drawer inside the bar's height */
+  html.mode-edit .topnav { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--surface); }
+  html.mode-edit .topnav .navtoggle {
+    display: flex; align-items: center; gap: 9px; width: 100%; padding: 11px 20px;
+    background: none; border: none; cursor: pointer; font-family: var(--sans); font-size: 13.5px; color: var(--ink);
+  }
+  html.mode-edit .topnav .wrap {
+    display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch;
+    position: fixed; top: 0; bottom: 0; inset-inline-start: 0; width: min(280px, 84vw); max-width: none; margin: 0;
+    padding: 16px 12px; gap: 2px; overflow-y: auto; z-index: 70;
+    background: var(--surface); border-inline-end: 1px solid var(--line); box-shadow: var(--e3);
+    transform: translateX(-105%); transition: transform .22s var(--ease); visibility: hidden;
+  }
+  html[dir="rtl"].mode-edit .topnav .wrap { transform: translateX(105%); }
+  html.mode-edit .topnav.open .wrap { transform: none !important; visibility: visible; }
+  html.mode-edit .topnav.open::after { content: ''; position: fixed; inset: 0; z-index: 65; background: rgba(8,14,16,.35); }
+  html.mode-edit .nav-brand { display: flex; }
+}

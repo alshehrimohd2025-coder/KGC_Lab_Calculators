@@ -612,6 +612,7 @@ html[dir="ltr"] .input-label .unit{margin-left:0; margin-right:0}
     <span class="navtoggle-now" id="navtoggle-now"></span>
   </button>
   <div class="wrap" id="navlist">
+      <div class="nav-brand"><img src="logo.png" alt="" onerror="this.remove()"><span data-i18n="nav.brand">مختبر الجلفنة</span></div>
       <div class="navgroup">
         <span class="navgroup-label" data-i18n="nav.g.daily">يومي</span>
         <button type="button" class="active" data-page="page-tanks" onclick="showAppPage('page-tanks', this)">
@@ -1592,6 +1593,41 @@ function renderAll() {
 
 /* Nav: collapsed on a phone, always open on a wide screen. The toggle shows
    which page is current so the bar can stay shut without losing your place. */
+/* Side menu: each section header folds its group away, remembered per
+   browser; the group holding the open page never folds. On a phone the
+   menu is a drawer that closes once a page is picked. */
+function setupNavGroups() {
+  let folded = {};
+  try { folded = JSON.parse(localStorage.getItem('kgc-nav-folded') || '{}'); } catch (e) {}
+  document.querySelectorAll('.topnav .navgroup').forEach(function (g) {
+    const lbl = g.querySelector('.navgroup-label');
+    if (!lbl) return;
+    const key = lbl.getAttribute('data-i18n') || lbl.textContent;
+    lbl.setAttribute('role', 'button'); lbl.setAttribute('tabindex', '0');
+    if (folded[key] && !g.querySelector('button.active')) g.classList.add('folded');
+    const flip = function () {
+      if (g.querySelector('button.active') && !g.classList.contains('folded')) return;
+      g.classList.toggle('folded');
+      folded[key] = g.classList.contains('folded');
+      try { localStorage.setItem('kgc-nav-folded', JSON.stringify(folded)); } catch (e) {}
+    };
+    lbl.addEventListener('click', flip);
+    lbl.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } });
+  });
+  document.querySelectorAll('.topnav button[data-page]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const nav = document.querySelector('.topnav');
+      if (nav && nav.classList.contains('open') && window.innerWidth < 900) toggleNav();
+    });
+  });
+  // tap outside the drawer to close it
+  document.addEventListener('click', function (e) {
+    const nav = document.querySelector('.topnav');
+    if (nav && nav.classList.contains('open') && window.innerWidth < 900 && !e.target.closest('#navlist') && !e.target.closest('#navtoggle')) toggleNav();
+  });
+}
+document.addEventListener('DOMContentLoaded', setupNavGroups);
+
 function toggleNav() {
   const nav = document.querySelector('.topnav');
   if (!nav) return;
