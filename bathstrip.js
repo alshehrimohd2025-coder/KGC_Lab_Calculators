@@ -19,7 +19,7 @@
     const mount = document.getElementById('bath-strip');
     if (!mount) return;
     const F = window.KGCForecast;
-    const list = F && F.all ? F.all() : [];
+    const list = F && F.byLine ? F.byLine() : [];  // plant line order, not due date
     if (!list.length) { mount.innerHTML = ''; return; }
     mount.innerHTML =
       '<h3 class="zb-h" style="margin:28px 2px 4px">' + esc(t('bs.title')) + '</h3>' +
