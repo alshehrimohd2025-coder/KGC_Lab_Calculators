@@ -36,8 +36,8 @@ TIMEOUT = 30
 STAGE_NAMES = {
     "loading": "التحميل", "crane_attach": "التركيب على الرافعة",
     "crane_wait": "انتظار الرافعة", "crane_move": "حركة الرافعة",
-    "degreasing": "الديجريسنج", "rinse_pre_acid": "رينسينج قبل الحمض",
-    "acid": "الحمض", "rinse_post_acid": "رينسينج بعد الحمض",
+    "degreasing": "إزالة الشحوم", "rinse_pre_acid": "غسيل قبل الحمض",
+    "acid": "الحمض", "rinse_post_acid": "غسيل بعد الحمض",
     "flux": "الفلكس", "drying": "الدراينج", "wait_zinc": "انتظار الفرن",
     "zinc": "فرن الزنك", "cooling": "التبريد", "inspection": "فحص الجودة",
     "rework": "إعادة معالجة",
@@ -48,15 +48,16 @@ KIND_NAMES = {
 }
 TANK_NAMES = {
     "acid_1": "حمض 1", "acid_2": "حمض 2", "acid_3": "حمض 3", "acid_4": "حمض 4",
-    "rinse_1": "رينسينج 1", "rinse_2": "رينسينج 2", "stripping": "ستريبنج أسيد",
+    "rinse_1": "غسيل 1", "rinse_2": "غسيل 2", "stripping": "حمض التعرية",
 }
 TANK_LABELS = {
     "Flux Tank": "تانك الفلكس", "Rinsing Tank 1": "تانك غسيل 1",
-    "Rinsing Tank 2": "تانك غسيل 2", "Rinsing Before Acid": "رينسينج قبل الحمض",
+    "Rinsing Tank 2": "تانك غسيل 2", "Rinsing Before Acid": "تانك غسيل قبل الحمض",
+    "Temporary Acid Tank": "تانك حمض مؤقت",
     "Stripping Acid": "تانك حمض التعرية", "Acid Tank 1": "تانك حمض 1",
     "Acid Tank 2": "تانك حمض 2", "Acid Tank 3": "تانك حمض 3",
     "Acid Tank 4": "تانك حمض 4", "Degreasing Tank": "تانك إزالة الشحوم",
-    "Drying": "تانك الدراينج", "Zinc Tank": "حوض الزنك",
+    "Drying": "الدراينج", "Zinc Tank": "فرن الزنك",
 }
 STATUS_LABELS = {
     "in_service": "داخل الخدمة", "maintenance": "تحت الصيانة",
