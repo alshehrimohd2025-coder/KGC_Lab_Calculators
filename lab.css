@@ -676,3 +676,16 @@ html[dir="rtl"] .rh-grid dd[dir="ltr"] { justify-content: flex-end; }
 .vs-c { width: 10px; height: 10px; border-radius: 2px; background: var(--line); }
 .vs-c.on { background: var(--accent); }
 .diag-off { margin: 12px 0 0; }
+.vs-card { margin: 0 0 14px; padding: 12px 16px; border: 1px solid var(--fact-line); border-radius: 12px; background: var(--fact-soft); }
+.vs-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.vs-head b { font-size: 14px; color: var(--ink); }
+.vs-head span { font-size: 11px; color: var(--fact); font-weight: 600; }
+.vs-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.vs-stat { display: flex; flex-direction: column; gap: 1px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+.vs-k { font-size: 11.5px; color: var(--ink-3); }
+.vs-v { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--ink); }
+.vs-sub { font-size: 11px; color: var(--ink-3); }
+.vs-strip-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 10px; }
+.vs-card .vs-c { width: 14px; height: 14px; border-radius: 3px; }
+.vs-card .vs-none { margin: 0; font-size: 12.5px; color: var(--ink-2); }
+.vs-stat:first-child .vs-v { font-family: inherit; font-size: 18px; }

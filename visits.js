@@ -68,13 +68,19 @@
       const n = Object.keys((visits || {})[k] || {}).length;
       cells.push('<i class="vs-c' + (n ? ' on' : '') + '" style="' + (n ? 'opacity:' + Math.min(1, .35 + n * .2) : '') + '" title="' + k + ': ' + n + '"></i>');
     }
-    mount.innerHTML = '<div class="vs">' +
-      '<b class="vs-t">' + esc(t('vs.title')) + '</b>' +
+    const last = list[0];
+    const stat = (k, v, sub) => '<div class="vs-stat"><span class="vs-k">' + esc(k) + '</span><span class="vs-v">' + v + '</span>' +
+      (sub ? '<span class="vs-sub">' + esc(sub) + '</span>' : '') + '</div>';
+    mount.innerHTML = '<div class="vs-card">' +
+      '<div class="vs-head"><b>' + esc(t('vs.title')) + '</b><span>' + esc(t('vs.private')) + '</span></div>' +
       (list.length
-        ? '<span>' + esc(t('vs.last', { w: when(list[0].ts), dev: t('vs.dev.' + list[0].dev) })) + '</span>' +
-          '<span>' + esc(t('vs.counts', { a: since(7), b: since(30) })) + '</span>' +
-          '<span class="vs-strip" dir="ltr">' + cells.join('') + '</span>'
-        : '<span class="vs-none">' + esc(t('vs.none')) + '</span>') +
+        ? '<div class="vs-stats">' +
+            stat(t('vs.k.last'), esc(when(last.ts)), t('vs.dev.' + last.dev)) +
+            stat(t('vs.k.week'), String(since(7)), t('vs.times')) +
+            stat(t('vs.k.month'), String(since(30)), t('vs.times')) +
+          '</div>' +
+          '<div class="vs-strip-wrap"><span class="vs-k">' + esc(t('vs.k.days')) + '</span><span class="vs-strip" dir="ltr">' + cells.join('') + '</span></div>'
+        : '<p class="vs-none">' + esc(t('vs.none')) + '</p>') +
       '</div>';
   }
 
