@@ -1,6 +1,14 @@
 {
   "rules": {
     ".read": "auth != null",
-    ".write": "auth != null && auth.token.email === 'alshehri.mohd.2025@gmail.com'"
+    ".write": "auth != null && auth.token.email === 'alshehri.mohd.2025@gmail.com'",
+    "visits": {
+      ".read": "auth != null && auth.token.email === 'alshehri.mohd.2025@gmail.com'",
+      "$day": {
+        "$id": {
+          ".write": "!data.exists() && newData.hasChildren(['ts','dev']) && newData.child('ts').isNumber()"
+        }
+      }
+    }
   }
 }

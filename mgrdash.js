@@ -123,25 +123,112 @@
     return out;
   }
 
+  /* ---------------- what the manager sees ----------------
+     Every block can be switched off from the engineer's page; the choice is
+     stored at mgr_settings/show and applies on the manager's screen at once.
+     The engineer still sees hidden blocks, dimmed and labelled, so the page
+     can be checked without switching views. */
+  const BLOCKS = ['status', 'fresh', 'cons', 'prod', 'added', 'dross'];
+  let show = {}, readings = {};
+  const isOn = k => show[k] !== false;
+  const editor = () => typeof IS_EDITOR !== 'undefined' && IS_EDITOR;
+  const canSave = () => editor() && typeof IS_AUTHED !== 'undefined' && IS_AUTHED;
+  // hidden from the manager: not drawn at all; for the engineer: drawn, dimmed
+  const wrap = (k, html) => !html ? '' : isOn(k) ? html : editor()
+    ? '<div class="mg-off" data-off-label="' + esc(t('mg.hiddenTag')) + '">' + html + '</div>' : '';
+
+  /* one sentence: what needs attention right now */
+  function statusLine(W) {
+    const H = window.KGCHints, F = window.KGCForecast;
+    const parts = [];
+    if (H && typeof tanks !== 'undefined') {
+      const bad = tanks.slice().sort((a, b) => a.id - b.id)
+        .map(tk => ({ tk: tk, d: H.diagnose(tk) })).filter(x => x.d && (x.d.tier === 'warn' || x.d.tier === 'crit'));
+      const crit = bad.some(x => x.d.tier === 'crit');
+      parts.push(bad.length
+        ? '<span class="st-' + (crit ? 'crit' : 'warn') + '">' + esc(t('mg.st.need', { n: bad.length })) + '</span> ' +
+          esc(bad.map(x => tankLabel(x.tk.name)).join('، '))
+        : '<span class="st-good">' + esc(t('mg.st.allOk')) + '</span>');
+    }
+    const next = F && F.all ? F.all()[0] : null;
+    if (next) {
+      parts.push(esc(next.f.remaining < 0
+        ? t('mg.st.overdue', { tank: tankLabel(next.tank.name), n: Math.abs(next.f.remaining) })
+        : t('mg.st.next', { tank: tankLabel(next.tank.name), n: next.f.remaining })));
+    }
+    if (W && W.C.kg && W.P.kg) {
+      if (W.C.days < MIN_DAYS) parts.push(esc(t('mg.st.consEarly')));
+      else {
+        const pct = (W.C.cons - W.P.cons) / W.P.cons * 100;
+        parts.push(Math.abs(pct) < 1.5 ? esc(t('mg.st.consSame'))
+          : '<span class="st-' + (pct > 0 ? 'warn' : 'good') + '">' + esc(t(pct > 0 ? 'mg.st.consUp' : 'mg.st.consDown', { p: Math.abs(pct).toFixed(0) })) + '</span>');
+      }
+    }
+    return parts.length ? '<div class="mg-status">' + parts.join('<i>·</i>') + '</div>' : '';
+  }
+
+  /* how old the figures are, so a stale page is never read as today */
+  function freshLine(W) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const age = d => d ? Math.round((today - new Date(d + 'T00:00:00')) / 86400000) : null;
+    let lastRead = '';
+    Object.values(readings || {}).forEach(r => { if (r && r.date && r.date > lastRead) lastRead = r.date; });
+    const item = (label, d, warnAfter) => {
+      if (!d) return '';
+      const a = age(d);
+      const txt = a <= 0 ? t('mg.fr.today') : a === 1 ? t('mg.fr.yesterday') : t('mg.fr.ago', { n: a });
+      return '<span' + (a > warnAfter ? ' class="st-warn"' : '') + '>' + esc(label) + ': <b dir="ltr">' + esc(d) + '</b> (' + esc(txt) + ')</span>';
+    };
+    const html = [item(t('mg.fr.report'), W && W.last, 2), item(t('mg.fr.readings'), lastRead, 3)].filter(Boolean).join('<i>·</i>');
+    return html ? '<div class="mg-fresh">' + html + '</div>' : '';
+  }
+
+  function settingsHTML() {
+    if (!editor()) return '';
+    return '<details class="mg-set"><summary>' + esc(t('mg.set.title')) + '</summary>' +
+      '<p>' + esc(t('mg.set.sub')) + '</p><div class="mg-set-list">' +
+      BLOCKS.map(k => '<label><input type="checkbox" data-mg-show="' + k + '"' + (isOn(k) ? ' checked' : '') +
+        (canSave() ? '' : ' disabled') + '> ' + esc(t('mg.set.' + k)) + '</label>').join('') +
+      '</div><span class="mg-set-msg"></span></details>';
+  }
+
   function render() {
     const mount = document.getElementById('mgr-kpis');
     if (!mount) return;
     const W = windows();
-    if (!W) { mount.innerHTML = ''; return; }
+    const openSet = !!(mount.querySelector('.mg-set') && mount.querySelector('.mg-set').open);
+    if (!W) { mount.innerHTML = settingsHTML(); return; }
     const why = reasons(W);
-    mount.innerHTML = '<div class="mg-grid">' +
-      card(t('mg.cons'), 'kg/t', 1, W, 'cons', true, why.cons) +
-      card(t('mg.prod'), 't', 1, W, 'perDay', false, why.prod) +
-      card(t('mg.added'), 'kg/t', 1, W, 'relT', true, why.added || why.cons) +
-      card(t('mg.dross'), 'kg/t', 1, W, 'drossT', true, why.dross || why.cons, function (r) {
+    const cards = [
+      wrap('cons', card(t('mg.cons'), 'kg/t', 1, W, 'cons', true, why.cons)),
+      wrap('prod', card(t('mg.prod'), 't', 1, W, 'perDay', false, why.prod)),
+      wrap('added', card(t('mg.added'), 'kg/t', 1, W, 'relT', true, why.added || why.cons)),
+      wrap('dross', card(t('mg.dross'), 'kg/t', 1, W, 'drossT', true, why.dross || why.cons, function (r) {
         // the weighed total behind the rate, and how many times it was taken out
         return '<b>' + fmt(r.dross) + '</b> ' + esc(t('mg.kgTotal')) +
           (r.drossDays.length ? '<small>' + esc(t('mg.drossTimes', { n: r.drossDays.length, d: r.drossDays.map(x => Number(x.date.slice(8))).join('، ') })) + '</small>' : '');
-      }) +
-      '</div><p class="mg-foot">' + esc(t('mg.foot')) + '</p>';
+      }))
+    ].join('');
+    mount.innerHTML = settingsHTML() +
+      wrap('status', statusLine(W)) + wrap('fresh', freshLine(W)) +
+      (cards ? '<div class="mg-grid">' + cards + '</div><p class="mg-foot">' + esc(t('mg.foot')) + '</p>' : '');
+    if (openSet && mount.querySelector('.mg-set')) mount.querySelector('.mg-set').open = true;
+    mount.querySelectorAll('[data-mg-show]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        if (!canSave()) return;
+        const msg = mount.querySelector('.mg-set-msg');
+        database.ref('mgr_settings/show/' + cb.getAttribute('data-mg-show')).set(cb.checked)
+          .then(() => { if (msg) msg.textContent = t('mg.set.saved'); })
+          .catch(e => { if (msg) msg.textContent = e.message; cb.checked = !cb.checked; });
+      });
+    });
   }
 
   database.ref('zinc_daily').on('value', () => setTimeout(render, 0));
+  database.ref('mgr_settings/show').on('value', s => { show = s.val() || {}; render(); });
+  database.ref('readings_log').on('value', s => { readings = s.val() || {}; render(); });
+  database.ref('tanks_data').on('value', () => setTimeout(render, 0));
+  database.ref('renewals').on('value', () => setTimeout(render, 0));
   if (window.I18N && I18N.onChange) I18N.onChange(render);
   window.KGCMgr = { render: render };
 })();

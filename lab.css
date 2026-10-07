@@ -645,3 +645,33 @@ html[dir="rtl"] .rh-grid dd[dir="ltr"] { justify-content: flex-end; }
 .mg-col-tot { font-size: 11.5px; color: var(--ink-2); border-top: 1px dashed var(--line); padding-top: 4px; margin-top: 2px; display: flex; flex-direction: column; }
 .mg-col-tot b { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
 .mg-col-tot small { font-size: 10.5px; color: var(--ink-3); }
+
+/* ---------- manager: status line, data age, visibility switches ---------- */
+.mg-status, .mg-fresh { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0 2px 10px; }
+.mg-status { font-size: 14px; color: var(--ink); padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.mg-fresh { font-size: 12px; color: var(--ink-3); }
+.mg-fresh b { font-family: var(--mono); font-weight: 600; color: var(--ink-2); }
+.mg-status i, .mg-fresh i { font-style: normal; color: var(--line-strong); }
+.st-good { color: var(--accent); font-weight: 600; }
+.st-warn { color: var(--warn); font-weight: 600; }
+.st-crit { color: var(--crit); font-weight: 600; }
+.mg-off { position: relative; opacity: .45; outline: 1px dashed var(--line-strong); outline-offset: 3px; border-radius: 12px; }
+.mg-off::before { content: attr(data-off-label); position: absolute; top: -9px; inset-inline-end: 10px; z-index: 1;
+  font-size: 10.5px; font-weight: 600; padding: 0 6px; background: var(--ground); color: var(--ink-2); border-radius: 4px; }
+.mg-grid > .mg-off { display: flex; }
+.mg-grid > .mg-off > .mg-card { flex: 1; }
+.mg-set { margin: 0 2px 12px; border: 1px dashed var(--line-strong); border-radius: 10px; padding: 8px 12px; font-size: 12.5px; }
+.mg-set summary { cursor: pointer; font-weight: 600; }
+.mg-set p { margin: 6px 0 8px; color: var(--ink-3); font-size: 12px; }
+.mg-set-list { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.mg-set-list label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.mg-set-msg { display: block; margin-top: 6px; color: var(--accent); font-size: 11.5px; }
+
+/* ---------- manager page visits (engineer only) ---------- */
+#visits-panel:empty { display: none; }
+.vs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin: 0 2px 10px; font-size: 12px; color: var(--ink-2); }
+.vs-t { color: var(--ink); }
+.vs-none { color: var(--ink-3); }
+.vs-strip { display: inline-flex; gap: 3px; }
+.vs-c { width: 10px; height: 10px; border-radius: 2px; background: var(--line); }
+.vs-c.on { background: var(--accent); }
