@@ -306,7 +306,7 @@
 
   function chart(list) {
     if (!list.length) return '';
-    const W = 680, H = 244, PL = 46, PR = 48, PT = 26, PB = 44;
+    const W = 680, H = 280, PL = 50, PR = 24, PT = 28, PB = 44;
     const iw = W - PL - PR, ih = H - PT - PB;
 
     // left scale — zinc consumption %  (full plot height)
@@ -314,27 +314,12 @@
     const X = i => PL + (list.length === 1 ? iw / 2 : i / (list.length - 1) * iw);
     const Yp = v => PT + ih - (v / maxP) * ih;
 
-    // right scale — daily tonnage, held to the lower half of the plot so it
-    // sits *beneath* the % line as a second series to compare against by eye
-    const rawT = Math.max(1, ...list.map(d => d.totalTon || 0));
-    const magT = Math.pow(10, Math.floor(Math.log10(rawT)));
-    const maxT = Math.max(magT, Math.ceil((rawT * 1.08) / magT) * magT);
-    const tTop = PT + ih * 0.5;                          // tonnage never climbs above the midline
-    const Yt = v => (PT + ih) - (v / maxT) * (PT + ih - tTop);
-
     // horizontal % gridlines + left axis
     let grid = '';
     for (let v = 0; v <= maxP; v += 2) {
       grid += '<line class="grid" x1="' + PL + '" y1="' + Yp(v).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Yp(v).toFixed(1) + '"/>' +
               '<text class="axis-label" x="' + (PL - 8) + '" y="' + (Yp(v) + 3.5).toFixed(1) + '" text-anchor="end">' + v + '%</text>';
     }
-
-    // right axis — tonnage ticks, in the tonnage colour
-    let raxis = '';
-    [0, maxT / 2, maxT].forEach(function (v) {
-      raxis += '<text class="axis-label" x="' + (W - PR + 7) + '" y="' + (Yt(v) + 3.5).toFixed(1) +
-        '" text-anchor="start" fill="var(--fact)">' + shortTon(v) + '</text>';
-    });
 
     // the acceptable 4-9% band, straight from the plant's own sheet
     const band = '<rect x="' + PL + '" y="' + Yp(PCT_MAX).toFixed(1) + '" width="' + iw +
@@ -345,13 +330,14 @@
       '<text class="axis-limit" x="' + (PL + 4) + '" y="' + (Yp(PCT_MIN) + 11).toFixed(1) + '" text-anchor="start" fill="var(--warn)">' + PCT_MIN + '%</text>';
 
     // ---- zinc % series (left scale) ----
-    const pts = list.map((d, i) => ({ x: X(i), y: Yp(d.totalPct || 0), d: d }));
-    const line = pts.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' ');
-    const area = pts.length > 1
+    const pts = list.map((d, i) => ({ x: X(i), y: Yp(d.totalPct || 0), d: d, valid: Number.isFinite(d.totalPct) && d.totalPct > 0 }));
+    // Missing readings leave a gap instead of implying zero consumption.
+    const line = pts.map((p, i) => p.valid ? ((i && pts[i - 1].valid) ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1) : '').join(' ');
+    const area = pts.length > 1 && pts.every(p => p.valid)
       ? '<path d="' + line + ' L' + pts[pts.length - 1].x.toFixed(1) + ' ' + (PT + ih) + ' L' + pts[0].x.toFixed(1) + ' ' + (PT + ih) + ' Z" fill="var(--accent)" opacity=".07"/>'
       : '';
 
-    const dots = pts.map(function (p) {
+    const dots = pts.filter(p => p.valid).map(function (p) {
       const tr = tier(p.d.totalPct);
       const col = tr ? 'var(' + TIER_VAR[tr] + ')' : 'var(--ink-3)';
       const tip = '<b>' + p.d.date + '</b>' +
@@ -366,26 +352,6 @@
       '</g>';
     }).join('');
 
-    // ---- tonnage series (right scale, lower band) ----
-    const tpts = list.map((d, i) => ({ x: X(i), y: Yt(d.totalTon || 0), d: d }));
-    const tline = tpts.length > 1
-      ? '<path class="ton-line" d="' + tpts.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' ') + '"/>'
-      : '';
-    const tdots = tpts.map(function (p) {
-      const tip = '<b>' + p.d.date + '</b>' +
-        '<i>' + esc(t('zn.legend.ton')) + ': ' + fmtT(p.d.totalTon) + ' ' + esc(t('mgr.ton')) + '</i>' +
-        '<i>' + esc(t('zn.col.dayTon')) + ' ' + fmtT(p.d.dayTon) +
-          ' · ' + esc(t('zn.col.nightTon')) + ' ' + fmtT(p.d.nightTon) + '</i>' +
-        '<i>' + esc(t('zn.legend.pct')) + ': ' + (p.d.totalPct || 0).toFixed(2) + '%</i>';
-      // square marker to tell it apart from the round % dots at a glance
-      return '<g class="pt-g">' +
-        '<rect class="ton-dot" x="' + (p.x - 3.2).toFixed(1) + '" y="' + (p.y - 3.2).toFixed(1) +
-          '" width="6.4" height="6.4" rx="1.3"/>' +
-        '<circle class="hit" r="13" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) +
-          '" fill="transparent" data-tip="' + esc(tip) + '"/>' +
-      '</g>';
-    }).join('');
-
     // one date under every point, thinned out when they would collide
     const every = Math.ceil(list.length / 12);
     const xlabels = list.map(function (d, i) {
@@ -395,11 +361,11 @@
 
     const legend = '<div class="chart-legend">' +
       '<span class="lg"><i class="sw sw-pct"></i>' + esc(t('zn.legend.pct')) + '</span>' +
-      '<span class="lg"><i class="sw sw-ton"></i>' + esc(t('zn.legend.ton')) + '</span></div>';
+      '<span class="lg chart-range">' + esc(t('design.controlBand')) + ': ' + PCT_MIN + '–' + PCT_MAX + '%</span></div>';
 
     return '<div class="chart-wrap">' + legend + '<div class="chart-tip"></div>' +
       '<svg class="lab-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" preserveAspectRatio="xMidYMid meet">' +
-      grid + raxis + band + area + tline + '<path class="series" d="' + line + '"/>' + tdots + dots + xlabels + '</svg></div>';
+      '<title>' + esc(t('zn.legend.pct')) + '</title>' + band + grid + area + '<path class="series" d="' + line + '"/>' + dots + xlabels + '</svg></div>';
   }
 
   /** Average output per jig for one shift, over the days that logged both. */
@@ -560,7 +526,7 @@
       (chartDays.length >= 2 ? '<div class="lab-chart-card"><div class="lab-chart-head">' +
         '<span class="lab-chart-title">' + esc(t('zn.chartTitle')) + '</span>' +
         '<span class="lab-chart-meta">' + PCT_MIN + '% – ' + PCT_MAX + '%</span>' +
-        '</div>' + chart(chartDays) + '</div>' : '') +
+        '</div>' + chart(chartDays) + '</div><div class="lab-chart-card"><div class="lab-chart-head"><span class="lab-chart-title">' + esc(t('mgr.tonChart')) + '</span></div>' + tonnageChart(chartDays) + '</div>' : '') +
       '<div class="tablewrap"><table><thead><tr>' +
         '<th>' + esc(t('zn.col.date')) + '</th>' +
         '<th>' + esc(t('zn.col.dayTon')) + '</th>' +
@@ -586,9 +552,8 @@
 
   function tonnageChart(list) {
     if (!list.length) return '';
-    // No y-axis numbers here: every bar is labelled with its own value, so an
-    // axis scale would just be a second set of numbers competing with them.
-    const W = 680, H = 225, PL = 14, PR = 14, PT = 26, PB = 44;   // top room for value labels
+    // A zero baseline and explicit tonne ticks make daily output comparable.
+    const W = 680, H = 260, PL = 50, PR = 24, PT = 30, PB = 44;   // top room for value labels
     const iw = W - PL - PR, ih = H - PT - PB;
     const maxT = Math.max(1, ...list.map(d => d.totalTon || 0)) * 1.12;
     const slot = iw / Math.max(1, list.length);
@@ -601,7 +566,8 @@
     const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
     const step = Math.ceil(rawStep / mag) * mag;
     for (let v = 0; v <= maxT; v += step) {
-      grid += '<line class="grid" x1="' + PL + '" y1="' + Y(v).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Y(v).toFixed(1) + '"/>';
+      grid += '<line class="grid" x1="' + PL + '" y1="' + Y(v).toFixed(1) + '" x2="' + (W - PR) + '" y2="' + Y(v).toFixed(1) + '"/>' +
+        '<text class="axis-label" x="' + (PL - 8) + '" y="' + (Y(v) + 4).toFixed(1) + '" text-anchor="end">' + shortTon(v) + '</text>';
     }
     grid += '<line class="grid" x1="' + PL + '" y1="' + (PT + ih) + '" x2="' + (W - PR) + '" y2="' + (PT + ih) + '" stroke="var(--line-strong)"/>';
 
@@ -613,7 +579,7 @@
         '<i>' + esc(t('mgr.tonChart')) + ': ' + fmtT(val) + ' ' + esc(t('mgr.ton')) + '</i>' +
         '<i>' + esc(t('zn.col.dayTon')) + ' ' + fmtT(d.dayTon) +
         ' · ' + esc(t('zn.col.nightTon')) + ' ' + fmtT(d.nightTon) + '</i>' +
-        '<i>' + esc(t('zn.avgPct')) + ': ' + (d.totalPct || 0).toFixed(2) + '%</i>';
+        '<i>' + esc(t('zn.avgPct')) + ': ' + (Number.isFinite(d.totalPct) && d.totalPct > 0 ? d.totalPct.toFixed(2) + '%' : '—') + '</i>';
       const showDate = i % every === 0 || i === list.length - 1;
       return '<g class="bar-g">' +
         '<rect class="bar" x="' + (X(i) - bw / 2).toFixed(1) + '" y="' + y.toFixed(1) +
@@ -627,7 +593,7 @@
 
     return '<div class="chart-wrap"><div class="chart-tip"></div>' +
       '<svg class="lab-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" preserveAspectRatio="xMidYMid meet">' +
-      grid + bars + '</svg></div>';
+      '<title>' + esc(t('mgr.tonChart')) + ' · ' + esc(t('mgr.ton')) + '</title>' + grid + bars + '</svg><div class="chart-caption">' + esc(t('design.chartHelp')) + '</div></div>';
   }
 
   /** Wire hover/touch tooltips for any chart inside `root`. */
@@ -648,6 +614,14 @@
         tip.classList.add('on');
       };
       wrap.querySelectorAll('[data-tip]').forEach(function (el) {
+        el.setAttribute('tabindex', '0');
+        el.setAttribute('role', 'img');
+        const label = document.createElement('div');
+        label.innerHTML = el.getAttribute('data-tip');
+        el.setAttribute('aria-label', label.textContent);
+        el.addEventListener('focus', function () { show(el); });
+        el.addEventListener('blur', function () { tip.classList.remove('on'); });
+        el.addEventListener('keydown', function (e) { if (e.key === 'Escape') tip.classList.remove('on'); });
         el.addEventListener('mouseenter', function () { show(el); });
         el.addEventListener('mouseleave', function () { tip.classList.remove('on'); });
         el.addEventListener('touchstart', function (e) { show(el); e.stopPropagation(); }, { passive: true });
