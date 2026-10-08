@@ -15,6 +15,8 @@
 
   const DICT = {
     ar: {
+      'design.controlBand': 'النطاق التشغيلي',
+      'design.chartHelp': 'الإنتاج بالطن · مرّر المؤشر أو المس العمود لعرض تفاصيل اليوم',
       /* chrome */
       'nav.tanks': 'لوحة الأحواض',
       'nav.g.daily': 'يومي',
@@ -1398,6 +1400,8 @@
     },
 
     en: {
+      'design.controlBand': 'Operating range',
+      'design.chartHelp': 'Production in tonnes · Hover or tap a bar for daily details',
       'nav.tanks': 'Tank dashboard',
       'nav.g.daily': 'Daily',
       'nav.g.lab': 'Lab',

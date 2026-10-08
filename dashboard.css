@@ -1,0 +1,77 @@
+/* Presentation only: shared by the lab and management views. */
+:root {
+  --ground: #f3f5fa; --recess: #f4f6fb; --line: #e0e6ef;
+  --line-strong: #becbdc; --ink: #16263f; --ink-2: #40536e; --ink-3: #62738c;
+  --fact: #3267cf; --fact-soft: #edf3ff; --fact-line: #b6cbf3;
+  --chart: #3267cf; --chart-fill: #e7efff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#101827; --surface:#182338; --recess:#1e2b41; --line:#2c3b53;
+    --line-strong:#4e6482; --ink:#eef3fc; --ink-2:#c3cee0; --ink-3:#9cadc6;
+    --fact:#86adff; --fact-soft:#203658; --fact-line:#456797;
+    --chart:#86adff; --chart-fill:#203658;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#101827; --surface:#182338; --recess:#1e2b41; --line:#2c3b53;
+  --line-strong:#4e6482; --ink:#eef3fc; --ink-2:#c3cee0; --ink-3:#9cadc6;
+  --fact:#86adff; --fact-soft:#203658; --fact-line:#456797;
+  --chart:#86adff; --chart-fill:#203658;
+}
+body { background:var(--ground); }
+body .wrap { max-width:1240px; }
+body .masthead { border-bottom:1px solid var(--line); }
+body .mg-grid { gap:16px; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); }
+body .mg-card, body .pt-stat, body .lab-chart-card {
+  border:1px solid var(--line); border-radius:18px; background:var(--surface);
+  box-shadow:0 4px 20px rgb(19 42 79 / 4%);
+}
+body .mg-card { padding:20px; gap:9px; }
+body .mg-k { font-size:14px; color:var(--ink-2); }
+body .mg-pair { gap:12px; }
+body .mg-col { padding:12px; border-radius:12px; }
+body .mg-col.now { background:var(--fact-soft); border-color:var(--fact-line); }
+body .mg-col-v { font-size:27px; letter-spacing:-1px; line-height:1.5; }
+body .mg-col-k, body .mg-col-d { color:var(--ink-2); }
+body .mg-why { padding:12px; line-height:1.8; font-size:12px; }
+body .mg-status { padding:16px 20px; border-radius:14px; }
+body .pt-stats { gap:14px; }
+body .pt-stat { padding:20px; border-top:3px solid var(--fact); }
+body .pt-stat.hot { border-top-color:var(--warn); }
+body .pt-stat .k { font-size:13px; color:var(--ink-2); }
+body .pt-stat .v { font-size:30px; letter-spacing:-1px; }
+body .lab-chart-card { padding:22px 24px 14px; margin-bottom:20px; }
+body .lab-chart-head { gap:12px; align-items:center; padding-bottom:14px; border-bottom:1px solid var(--line); margin-bottom:16px; }
+body .lab-chart-title { font-size:16px; font-weight:700; }
+body .lab-chart-meta { background:var(--recess); border-radius:7px; padding:5px 9px; color:var(--ink-2); }
+body .lab-svg { direction:ltr; }
+body .lab-svg .grid { stroke:var(--line); stroke-dasharray:3 5; }
+body .lab-svg .axis-label { font-size:11px; fill:var(--ink-3); }
+body .lab-svg .series { stroke:var(--chart); stroke-width:2.7; stroke-linejoin:round; fill:none; }
+body .lab-svg .bar { fill:var(--chart); opacity:.85; }
+body .lab-svg .bar-g:hover .bar, body .lab-svg .bar-g:focus-within .bar { opacity:1; }
+body .lab-svg .bar-val { font-size:11px; fill:var(--ink-2); font-weight:600; }
+body .lab-svg .hit:focus { outline:2px solid var(--fact); outline-offset:2px; }
+body .chart-legend .sw-pct { background:var(--chart); border-color:var(--chart); }
+body .chart-legend { justify-content:space-between; gap:12px; padding:6px 0 12px; }
+.chart-range { color:var(--accent); }
+.chart-caption { color:var(--ink-3); font-size:12px; padding:8px 0 2px; }
+body .chart-tip { border-radius:10px; box-shadow:0 8px 28px rgb(15 28 48 / 16%); line-height:1.7; }
+body .tablewrap { border-radius:12px; }
+body th { background:var(--recess); color:var(--ink-2); }
+body tbody tr:hover { background:var(--fact-soft); }
+@media (max-width:600px) {
+  body .wrap { padding-inline:14px; }
+  body .mg-grid { grid-template-columns:1fr; }
+  body .mg-card, body .pt-stat { padding:16px; }
+  body .lab-chart-card { padding:16px 10px 12px; }
+  body .lab-chart-head { flex-wrap:wrap; padding-inline:4px; }
+  body .chart-wrap { overflow-x:auto; }
+  body .chart-wrap .lab-svg { min-width:560px; }
+  body .pt-stat .v { font-size:26px; }
+}
+@media print {
+  body .mg-card, body .pt-stat, body .lab-chart-card { box-shadow:none; break-inside:avoid; }
+  body .chart-wrap { overflow:visible; }
+}
