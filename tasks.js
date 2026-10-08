@@ -36,9 +36,8 @@
     return;
   }
 
-  /* Until the plant sets its own schedule, every tank is due every three
-     days — the same age at which the dashboard already calls a reading stale. */
-  const DEFAULT_EVERY = 3;
+  // The plant samples every bath once a week; a tank can be set apart on the page.
+  const DEFAULT_EVERY = 7;
   /* The acid baths are sampled for free acid and iron; Baumé and SG are
      there when wanted, not on the routine. Other tanks default to every
      parameter their standard defines. */
@@ -46,8 +45,6 @@
     3: ['acidPercent', 'fe'], 4: ['acidPercent', 'fe'], 5: ['acidPercent', 'fe'],
     6: ['acidPercent', 'fe'], 8: ['acidPercent', 'fe'], 7: ['acidPercent', 'zn', 'fe']
   };
-  // An out-of-range reading older than this is something to re-check, not a breach.
-  const FRESH_DAYS = 3;
   // How far back an addition still asks for a re-measure.
   const AFTER_WINDOW_DAYS = 7;
   // A jump is only questioned while the reading is recent enough to redo.
@@ -243,7 +240,8 @@
         const last = lastMeasured(idx, tk.id, p.key);
         if (r.tier === 'warn' || r.tier === 'crit') {
           const age = last ? daysBetween(last, today) : null;
-          if (age != null && age <= FRESH_DAYS) {
+          // a reading stands until the next sample is due; past that it is only a lead
+          if (age != null && age <= scheduleFor(tk.id).every) {
             bad.push({ p: p, tier: r.tier, v: Number(tk[p.key]) });
             if (last > freshest) freshest = last;
           } else {
