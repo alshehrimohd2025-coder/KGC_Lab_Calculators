@@ -104,6 +104,12 @@
     }).filter(Boolean).sort((a, b) => a.f.remaining - b.f.remaining);
   }
 
+  /** The same list in plant line order (tank ids run along the line:
+      degreasing 1, acid 1-4, ... flux 10) — how the cards are laid out. */
+  function byLine() {
+    return all().sort((a, b) => a.tank.id - b.tank.id);
+  }
+
   /** Baths past their usual life — read by the attention panel. */
   function overdue() {
     return all().filter(x => x.f.tier !== 'good').map(function (x) {
@@ -122,7 +128,7 @@
   function render() {
     const mount = document.getElementById('forecast-body');
     if (!mount) return;
-    const list = all();
+    const list = all();  // soonest first, for the "next up" figure
 
     if (!list.length) {
       mount.innerHTML = '<div class="lab-empty">' + esc(t('fc.empty', { n: MIN_CYCLES })) + '</div>';
@@ -135,7 +141,7 @@
       '<div class="pt-stat' + (hot ? ' hot' : '') + '"><span class="k">' + esc(k) + '</span>' +
       '<span class="v">' + v + (unit ? '<small>' + esc(unit) + '</small>' : '') + '</span></div>';
 
-    const cards = list.map(function (x) {
+    const cards = byLine().map(function (x) {
       const f = x.f, c = TIER[f.tier];
       const when = f.remaining < 0
         ? t('fc.overdueBy', { n: Math.abs(f.remaining) })
@@ -169,5 +175,5 @@
   if (window.I18N) I18N.onChange(render);
   document.addEventListener('DOMContentLoaded', render);
 
-  window.KGCForecast = { forecast: forecast, all: all, overdue: overdue, render: render };
+  window.KGCForecast = { forecast: forecast, all: all, byLine: byLine, overdue: overdue, render: render };
 })();
