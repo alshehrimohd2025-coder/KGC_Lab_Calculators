@@ -123,9 +123,10 @@
     if (!Object.keys(after).length) return { result: 'insufficient', why: t('ac.sg.noAfter') };
     let targets = Object.keys(before).filter(k => ['warn', 'crit'].indexOf(tierOf(c.tankId, k, before[k])) !== -1);
     if (!targets.length) targets = Object.keys(before);
-    if (targets.length && !targets.some(k => after[k] != null)) {
-      return { result: 'insufficient', why: t('ac.sg.noTarget', { p: targets.map(paramLabel).join(' · ') }) };
-    }
+    // Each affected parameter needs an assessable re-measure. A live tank
+    // value may come from another treatment and cannot fill a gap on this card.
+    const missing = targets.filter(k => after[k] == null ||
+      ['good', 'warn', 'crit'].indexOf(tierOf(c.tankId, k, after[k])) === -1);
     const outAfter = Object.keys(after).filter(k => ['warn', 'crit'].indexOf(tierOf(c.tankId, k, after[k])) !== -1);
     const tk = tankById(c.tankId);
     const others = (T() ? T().measurable(Number(c.tankId)) : []).map(p => p.key)
@@ -133,6 +134,9 @@
     if (outAfter.length || others.length) {
       return { result: 'followup', why: t('ac.sg.stillOut', {
         p: outAfter.concat(others).map(k => paramLabel(k)).join(' · ') }), out: outAfter.concat(others) };
+    }
+    if (missing.length) {
+      return { result: 'insufficient', why: t('ac.sg.missingTargets', { p: missing.map(paramLabel).join(' · ') }) };
     }
     return { result: 'achieved', why: t('ac.sg.allIn') };
   }
