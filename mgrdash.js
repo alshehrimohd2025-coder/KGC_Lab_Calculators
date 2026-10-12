@@ -201,10 +201,11 @@
 
   function render() {
     const mount = document.getElementById('mgr-kpis');
-    if (!mount) return;
+    const alerts = document.getElementById('mgr-alerts');
+    if (!mount || !alerts) return;
     const W = windows();
     const openSet = !!(mount.querySelector('.mg-set') && mount.querySelector('.mg-set').open);
-    if (!W) { mount.innerHTML = settingsHTML(); return; }
+    if (!W) { alerts.innerHTML = ''; mount.innerHTML = settingsHTML(); return; }
     const why = reasons(W);
     const cards = [
       wrap('cons', card(t('mg.cons'), 'kg/t', 1, W, 'cons', true, why.cons)),
@@ -216,8 +217,8 @@
           (r.drossDays.length ? '<small>' + esc(t('mg.drossTimes', { n: r.drossDays.length, d: r.drossDays.map(x => Number(x.date.slice(8))).join('، ') })) + '</small>' : '');
       }))
     ].join('');
+    alerts.innerHTML = wrap('status', statusLine(W)) + wrap('fresh', freshLine(W));
     mount.innerHTML = settingsHTML() +
-      wrap('status', statusLine(W)) + wrap('fresh', freshLine(W)) +
       (cards ? '<div class="mg-grid">' + cards + '</div><p class="mg-foot">' + esc(t('mg.foot')) + '</p>' : '');
     if (openSet && mount.querySelector('.mg-set')) mount.querySelector('.mg-set').open = true;
     mount.querySelectorAll('[data-mg-show]').forEach(function (cb) {

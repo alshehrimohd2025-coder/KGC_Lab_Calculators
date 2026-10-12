@@ -118,6 +118,12 @@ body #page-tanks { max-width:1440px; padding:0 36px 64px; margin-inline:auto; }
 .experience-overline { font-size:10px; font-weight:600; letter-spacing:.8px; color:var(--brand); margin:0 0 5px; }
 .experience-section-head h2 { font-size:20px; font-weight:600; margin:0; }
 .experience-section-note { font-size:11px; color:var(--ink-3); }
+#mgr-alerts { margin-bottom:30px; }
+#mgr-alerts .mg-status { border-inline-start:3px solid var(--warn); box-shadow:var(--e1); }
+#mgr-production > .sechead .secnum { display:none; }
+#mgr-production > .sechead { margin-top:0; }
+#mgr-production > .secsub { padding-inline:0; max-width:760px; }
+.manager-comparison { margin-top:48px; padding-top:34px; border-top:1px solid var(--line); }
 body .mg-fresh { gap:8px 14px; font-size:11px; margin:0 0 16px; }
 body .mg-status { padding:13px 17px; border:1px solid var(--line); border-radius:10px; background:var(--surface); font-size:12px; margin:0 0 12px; }
 body .mg-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; margin-bottom:24px; }
@@ -206,6 +212,7 @@ body .chart-tip { direction:inherit; text-align:start; white-space:normal; backg
   .zn-chart-grid { grid-template-columns:1fr; }
 }
 @media (max-width:899px) {
+  body .pt-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
   html.mode-edit .topnav { background:var(--surface); border-bottom:1px solid var(--line); }
   html.mode-edit .topnav .navtoggle { padding:13px 24px; color:var(--ink); }
   html.mode-edit .topnav .navtoggle svg { width:19px; height:19px; color:var(--brand); }

@@ -739,9 +739,9 @@
       '<p class="secsub">' + esc(t('mgr.sub')) + '</p>' +
       '<div class="pt-stats">' +
         stat(t('mgr.lastDay'), fmtT(last.totalTon), t('mgr.ton')) +
-        stat(t('zn.totalTon'), fmtT(totTon), t('mgr.ton')) +
-        stat(t('zn.avgPct'), mean.toFixed(2), '%', tier(mean) !== 'ok') +
         stat(t('mgr.lastPct'), (last.totalPct || 0).toFixed(2), '%', tier(last.totalPct) !== 'ok') +
+        stat(t('zn.avgPct'), mean.toFixed(2), '%', tier(mean) !== 'ok') +
+        stat(t('zn.totalTon'), fmtT(totTon), t('mgr.ton')) +
       '</div>' +
       chartsHTML(chartDays, 'manager') +
       line;

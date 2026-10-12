@@ -23,7 +23,8 @@ test('the complete experience ships every new visible string in Arabic and Engli
   const i18n = loadI18n();
   const required = [
     'experience.skip', 'experience.navSub', 'experience.workspace', 'experience.managerTitle',
-    'experience.overview', 'experience.production', 'experience.tanks', 'experience.engineer',
+    'experience.overview', 'experience.nowNote', 'experience.comparison',
+    'experience.comparisonNote', 'experience.production', 'experience.tanks', 'experience.engineer',
     'experience.viewer', 'experience.desc.manager', 'experience.desc.tasks', 'experience.desc.acid',
     'experience.desc.flux', 'experience.desc.zinc', 'experience.desc.weekly',
     'design.chart.productionDays', 'design.chart.controlBand', 'design.chart.missing',
@@ -47,6 +48,10 @@ test('workspace structure remains addressable and stylesheet order avoids an uns
   for (const page of ['tasks', 'tanks', 'timing', 'actions', 'acid', 'pickling', 'flux', 'lab', 'kettle', 'coating', 'standards', 'zinc', 'zincbal', 'weekly']) {
     assert.equal((html.match(new RegExp(`id="page-${page}"`, 'g')) || []).length, 1, `page-${page} mount changed`);
   }
+  const managerOrder = ['id="mgr-alerts"', 'id="mgr-production"', 'id="manager-comparison"', 'id="tanks-dashboard"']
+    .map(marker => html.indexOf(marker));
+  assert.ok(managerOrder.every(position => position >= 0), 'manager decision sections exist');
+  assert.deepEqual([...managerOrder].sort((a, b) => a - b), managerOrder, 'manager decision sections keep their intended order');
 });
 
 test('new presentation styles are structurally balanced', () => {
