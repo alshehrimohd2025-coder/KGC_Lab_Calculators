@@ -48,7 +48,7 @@ test('workspace structure remains addressable and stylesheet order avoids an uns
   for (const page of ['tasks', 'tanks', 'timing', 'actions', 'acid', 'pickling', 'flux', 'lab', 'kettle', 'coating', 'standards', 'zinc', 'zincbal', 'weekly']) {
     assert.equal((html.match(new RegExp(`id="page-${page}"`, 'g')) || []).length, 1, `page-${page} mount changed`);
   }
-  const managerOrder = ['id="mgr-alerts"', 'id="mgr-production"', 'id="manager-comparison"', 'id="tanks-dashboard"']
+  const managerOrder = ['id="mgr-alerts"', 'id="tanks-dashboard"', 'id="mgr-production"', 'id="manager-comparison"']
     .map(marker => html.indexOf(marker));
   assert.ok(managerOrder.every(position => position >= 0), 'manager decision sections exist');
   assert.deepEqual([...managerOrder].sort((a, b) => a - b), managerOrder, 'manager decision sections keep their intended order');
