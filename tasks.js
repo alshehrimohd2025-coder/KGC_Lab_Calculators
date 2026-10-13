@@ -21,7 +21,7 @@
      { status: 'postponed', until, reason }
      { status: 'done', note }      a questioned reading confirmed as correct
    Every result entered from this page is also appended to lab_tasks_log,
-   which is what the weekly report counts as follow-ups done.
+   the history behind the page's list of what was done today.
    The analysis schedule lives at lab_schedule/<tankId> = { every, params }.
 
    Depends on globals from index.html: database, tanks, tankLabel(),
@@ -579,7 +579,7 @@
     if (btn && typeof showAppPage === 'function') showAppPage(id, btn);
   }
 
-  /** Append to the follow-up history the weekly report reads. */
+  /** Append to the follow-up history (lab_tasks_log). */
   function logDone(task, what, note) {
     return database.ref('lab_tasks_log').push({
       id: task.id, ts: Date.now(), kind: task.kind, tankId: task.tankId || null,

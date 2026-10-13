@@ -3,9 +3,10 @@
    ------------------------------------------------------------
    Takes the model weekly.js computes for the period on screen and
    writes a single-sheet workbook laid out for A4 landscape: the KSC
-   logo and title, a row of key figures against the previous period,
-   then the four questions and consumption as tables, each with the
-   engineer's comment under it.
+   logo and title, a row of key figures against the previous period
+   (production, jigs, zinc, the dross to expect, tanks out of standard),
+   then the tanks, what changed, what is needed and the materials added,
+   each with the engineer's comment under it.
 
    The file is English only, by the plant's choice. Dates read
    13-Oct-2026 whatever the reader's Excel locale. Numbers are real
@@ -354,15 +355,16 @@
 
   /* Six key figures across the page, each against the previous period. */
   function cards(sh, m) {
-    const k = m.kpi, partial = m.production.partial && m.production.cur.records > 0;
+    const k = m.kpi, cur = m.production.cur, partial = m.production.partial && cur.records > 0;
+    const star = partial ? ' *' : '';
     const list = [
-      { label: 'OUT-OF-STANDARD PARAMETERS', v: k.breaches.cur, p: k.breaches.prev, fmt: '0', d: 0, hot: k.breaches.cur > 0 },
-      { label: 'CRITICAL READINGS', v: k.crit.cur, p: k.crit.prev, fmt: '0', d: 0, hot: k.crit.cur > 0 },
-      { label: 'ANALYSIS COMPLETENESS', v: k.completeness.cur, p: k.completeness.prev, fmt: '0%', pct: true,
-        hot: k.completeness.cur != null && k.completeness.cur < 0.8 },
-      { label: 'PRODUCTION (t)' + (partial ? ' *' : ''), v: k.tonnes.cur, p: k.tonnes.prev, fmt: '#,##0.0', d: 1 },
-      { label: 'ZINC CONSUMPTION (kg/t)' + (partial ? ' *' : ''), v: k.zincPerT.cur, p: k.zincPerT.prev, fmt: '0.0', d: 1 },
-      { label: 'DROSS (kg)' + (partial ? ' *' : ''), v: k.dross.cur, p: k.dross.prev, fmt: '#,##0', d: 0 }
+      { label: 'PRODUCTION (t)' + star, v: k.tonnes.cur, p: k.tonnes.prev, fmt: '#,##0.0', d: 1 },
+      { label: 'JIGS PRODUCED' + star, v: k.jigs.cur, p: k.jigs.prev, fmt: '#,##0', d: 0 },
+      { label: 'ZINC CONSUMED (kg)' + star, v: k.zincKg.cur, p: k.zincKg.prev, fmt: '#,##0', d: 0 },
+      { label: 'ZINC CONSUMPTION (kg/t)' + star, v: k.zincPerT.cur, p: k.zincPerT.prev, fmt: '0.0', d: 1 },
+      { label: 'EXPECTED DROSS (kg)' + star, v: k.drossExp.cur, p: k.drossExp.prev, fmt: '#,##0', d: 0 },
+      { label: 'TANKS OUT OF STANDARD', v: k.tanksOut.cur, p: k.tanksOut.prev, fmt: '0" / ' + k.tanksOut.of + '"', d: 0,
+        hot: k.tanksOut.cur > 0 }
     ];
     sh.next(8);
     const rl = sh.next(26), rv = sh.next(30), rp = sh.next(18);
@@ -373,18 +375,42 @@
         border: Object.assign({ t: ['medium', C.navy] }, side), align: { h: 'center', wrap: 1 } });
       sh.span(rv, c1, c2, isNum(card.v) ? card.v : '—', { font: { b: 1, sz: 18, color: card.hot ? C.critFg : C.navy },
         fill: C.band, border: side, fmt: card.fmt, align: { h: 'center' } });
-      const prev = card.pct
-        ? (isNum(card.p) ? Math.round(card.p * 100) + '%' : '—') + (isNum(card.v) && isNum(card.p) ? '   Δ ' + signed((card.v - card.p) * 100, 0) + ' pts' : '')
-        : fixed(card.p, card.d) + (isNum(card.v) && isNum(card.p) ? '   Δ ' + signed(card.v - card.p, card.d) : '');
+      const prev = fixed(card.p, card.d) + (isNum(card.v) && isNum(card.p) ? '   Δ ' + signed(card.v - card.p, card.d) : '');
       sh.span(rp, c1, c2, 'Prev: ' + prev, { font: { sz: 8, color: C.muted }, fill: C.band,
         border: Object.assign({ b: THIN }, side), align: { h: 'center' } });
     });
-    note(sh, 'Each figure is compared with the ' + prevWord(m) + ' (' + (m.kind === 'day' ? fmtDate(m.prevS) : fmtDate(m.prevS) + ' to ' + fmtDate(m.prevE)) + ').' +
-      (partial ? ' * Production data covers ' + m.production.cur.records + ' of ' + m.days + ' days, so production figures are partial.' : ''));
+    note(sh, 'Each figure is compared with the ' + prevWord(m) + ' (' + (m.kind === 'day' ? fmtDate(m.prevS) : fmtDate(m.prevS) + ' to ' + fmtDate(m.prevE)) + '). ' +
+      'Production, jigs and zinc are from the production report.' +
+      (partial ? ' * Production data covers ' + cur.records + ' of ' + m.days + ' days, so these figures are partial.' : ''));
+    note(sh, drossText(m));
+  }
+
+  /** Where the expected dross comes from, in one sentence the reader can check. */
+  function drossText(m) {
+    const cur = m.production.cur, b = m.dross.basis;
+    if (!cur.records) return 'No production data for this period — upload the production report on the zinc efficiency page.';
+    if (!b) return 'Expected dross needs at least two drossings in the production report to know the rate; there are not enough yet.';
+    return 'Expected dross = ' + fixed(b.rate, 1) + ' kg/t × ' + fixed(cur.tonnes, 1) + ' t produced. The rate is the last ' +
+      (b.n === 1 ? 'drossing' : b.n + ' drossings') + ' (' + b.dates.map(fmtDate).join(', ') + ': ' + fixed(b.dross, 0) + ' kg) over the ' +
+      fixed(b.tonnes, 1) + ' t produced since the drossing before ' + (b.n === 1 ? 'it' : 'them') + '. ' +
+      'Dross actually removed in this period: ' + fixed(m.dross.removed, 0) + ' kg. It is an estimate, not a weighing.';
+  }
+
+  /** A short labelled line under a table: the label in colour, the list beside it. */
+  function pair(sh, label, text, tier) {
+    if (!text) return;
+    const tt = TIER[tier] || TIER.none;
+    const lines = linesFor(text, NCOL - 2, 9);
+    const r = sh.next();
+    sh.span(r, 0, 1, label, { font: { b: 1, sz: 9, color: tt.color }, fill: tt.fill, border: { all: THIN },
+      align: { h: 'left', indent: 1, wrap: 1, v: 'top' } });
+    sh.span(r, 2, NCOL - 1, text, { font: { sz: 9, color: C.ink }, border: { all: THIN },
+      align: { h: 'left', indent: 1, wrap: 1, v: 'top' } });
+    sh.height(r, Math.max(17, Math.max(lines, linesFor(label, 2, 9)) * 12 + 5));
   }
 
   function sectionStatus(sh, m) {
-    bar(sh, '1   HOW WERE THE BATHS?');
+    bar(sh, '1   TANKS OUT OF STANDARD');
     subTitle(sh, 'Out-of-standard readings (' + m.readings + ' reading records in the period)');
     if (m.breaches.length) {
       table(sh, [
@@ -396,53 +422,37 @@
         { v: x.tank, b: 1 }, x.param, x.bad + ' / ' + x.n,
         x.crit ? { v: x.crit, color: C.critFg, b: 1 } : 0,
         x.worst, x.worstDate, x.last, x.lastDate, status(x.lastTier), x.range
-      ]));
+      ]), { limit: 20 });
     } else emptyLine(sh, m.readings ? 'No reading outside the standard in this period.' : 'No readings were recorded in this period.');
+    pair(sh, 'Within standard', m.inStandard.join('  ·  '), 'good');
+    pair(sh, 'No reading in the period', m.noReading.join('  ·  '), 'warn');
+    if (m.excluded.length) note(sh, 'Not included in this report (chosen on the site): ' + m.excluded.join(', ') + '.');
 
-    subTitle(sh, 'Analysis completeness against the schedule');
-    if (m.completeness.length) {
-      const word = x => x.pct == null ? { v: 'Not due', color: C.muted, h: 'center' }
-        : x.pct >= 1 ? Object.assign(status('good'), { v: 'Complete' })
-        : x.pct > 0 ? Object.assign(status('warn'), { v: 'Incomplete' })
-        : Object.assign(status('crit'), { v: 'Missing' });
-      table(sh, [
-        { label: 'Tank', span: 2 }, { label: 'Schedule', span: 4 }, { label: 'Samples due', span: 1, h: 'center' },
-        { label: 'Full samples', span: 1, h: 'center' }, { label: 'Partial', span: 1, h: 'center' },
-        { label: 'Completeness', span: 1, h: 'center' }, { label: 'Status', span: 2, h: 'center' }
-      ], m.completeness.map(x => [{ v: x.tank, b: 1 }, x.schedule, x.expected, x.full, x.partial,
-        x.pct == null ? { v: 'n/a', color: C.muted } : { v: x.pct, fmt: '0%' }, word(x)]), { limit: 20 });
+    if (m.completeness) {
+      subTitle(sh, 'Analysis completeness against the schedule' +
+        (m.completenessShare != null ? ' — ' + Math.round(m.completenessShare * 100) + '% of the samples due' : ''));
+      if (m.completeness.length) {
+        const word = x => x.pct == null ? { v: 'Not due', color: C.muted, h: 'center' }
+          : x.pct >= 1 ? Object.assign(status('good'), { v: 'Complete' })
+          : x.pct > 0 ? Object.assign(status('warn'), { v: 'Incomplete' })
+          : Object.assign(status('crit'), { v: 'Missing' });
+        table(sh, [
+          { label: 'Tank', span: 2 }, { label: 'Schedule', span: 4 }, { label: 'Samples due', span: 1, h: 'center' },
+          { label: 'Full samples', span: 1, h: 'center' }, { label: 'Partial', span: 1, h: 'center' },
+          { label: 'Completeness', span: 1, h: 'center' }, { label: 'Status', span: 2, h: 'center' }
+        ], m.completeness.map(x => [{ v: x.tank, b: 1 }, x.schedule, x.expected, x.full, x.partial,
+          x.pct == null ? { v: 'n/a', color: C.muted } : { v: x.pct, fmt: '0%' }, word(x)]), { limit: 20 });
+      }
+      note(sh, m.notes.full);
     }
     note(sh, m.notes.limits);
     comment(sh, m.comments.status);
   }
 
-  function sectionDone(sh, m) {
-    bar(sh, '2   WHAT DID WE DO?');
-    subTitle(sh, 'Additions, treatments, analyses and calibrations (' + m.events.length + ')');
-    if (m.events.length) {
-      table(sh, [
-        { label: 'Date', span: 1, h: 'center' }, { label: 'Tank', span: 2 }, { label: 'Type', span: 2 }, { label: 'Details', span: 7 }
-      ], m.events.map(x => [x.date, { v: x.tank, b: 1 }, x.type, x.detail]));
-    } else emptyLine(sh, 'No additions or treatments were recorded in this period.');
-
-    if (m.followups.n) note(sh, 'Follow-ups closed from the tasks page: ' + m.followups.n + (m.followups.kinds ? ' (' + m.followups.kinds + ')' : '') + '.');
-    if (m.postponed.length) {
-      subTitle(sh, 'Tasks postponed, and why');
-      table(sh, [{ label: 'Task', span: 3 }, { label: 'Reason', span: 7 }, { label: 'Postponed until', span: 2, h: 'center' }],
-        m.postponed.map(x => [{ v: x.title, b: 1 }, x.reason, x.until]));
-    }
-    if (m.maint.length) {
-      subTitle(sh, 'Tanks under maintenance or out of service now');
-      table(sh, [{ label: 'Tank', span: 3 }, { label: 'Status', span: 2, h: 'center' }, { label: 'Note', span: 7 }],
-        m.maint.map(x => [{ v: x.tank, b: 1 }, Object.assign(status('warn'), { v: x.status }), x.note]));
-    }
-    note(sh, m.notes.maint);
-    comment(sh, m.comments.done);
-  }
-
   function sectionChanged(sh, m) {
-    bar(sh, '3   WHAT CHANGED?');
-    subTitle(sh, 'Before / after results of treatments in the period');
+    const all = m.options.unchanged;
+    bar(sh, '2   WHAT CHANGED?');
+    subTitle(sh, 'Before / after results of treatments in the period' + (all ? '' : ' — values that changed'));
     if (m.cards.length) {
       table(sh, [
         { label: 'Tank', span: 2 }, { label: 'Material', span: 2 }, { label: 'Parameter', span: 1 },
@@ -455,7 +465,10 @@
         x.evalNote ? x.evaluation + ' — ' + x.evalNote : x.evaluation,
         { v: x.stage, h: 'center' }
       ]));
-    } else emptyLine(sh, 'No treatment card had an action or a re-measure in this period.');
+      if (m.quietCards) note(sh, 'Not listed: ' + m.quietCards + ' treatment card' + (m.quietCards === 1 ? '' : 's') + ' with no change, or no re-measure yet.');
+    } else emptyLine(sh, m.quietCards
+      ? 'No treatment card changed a reading in this period (' + m.quietCards + ' with no change, or no re-measure yet).'
+      : 'No treatment card had an action or a re-measure in this period.');
 
     subTitle(sh, 'Problems: start of the period against the end');
     if (m.movement.length) {
@@ -468,13 +481,15 @@
         Object.assign(status(MOVE[x.move][1]), { v: MOVE[x.move][0], h: 'left' }),
         { v: x.tank, b: 1 }, x.param, x.from, x.to, x.toDate, status(x.tier), x.range
       ]));
-    } else emptyLine(sh, 'No parameter was out of standard at the start or the end of the period.');
+    } else emptyLine(sh, m.still.length ? 'No parameter came back into standard or went out of it in this period.'
+      : 'No parameter was out of standard at the start or the end of the period.');
+    pair(sh, 'Still out, no change', m.still.map(x => x.tank + ' · ' + x.param).join(',  '), 'warn');
     note(sh, 'Treatment cards open now: ' + m.openCards + '.');
     comment(sh, m.comments.changed);
   }
 
   function sectionNeeds(sh, m) {
-    bar(sh, '4   WHAT DO WE NEED?');
+    bar(sh, '3   WHAT DO WE NEED?');
     if (m.needs.length) {
       const P = { high: 'crit', medium: 'warn', low: 'good' };
       table(sh, [
@@ -488,38 +503,43 @@
     comment(sh, m.comments.needs);
   }
 
+  /* Materials always; the production figures and the product mix only when
+     the site is set to show them (they wait for the batch data to be complete). */
   function sectionConsumption(sh, m) {
     const cur = m.production.cur, prev = m.production.prev, partial = m.production.partial && cur.records > 0;
-    bar(sh, '5   CONSUMPTION AND PRODUCTION');
-    if (cur.records || prev.records) {
-      subTitle(sh, 'Key figures');
-      const row = (label, a, b, fmt, d, noteText) => [
-        { v: label, b: 1 }, isNum(a) ? { v: a, fmt: fmt } : null, isNum(b) ? { v: b, fmt: fmt } : null,
-        isNum(a) && isNum(b) ? { v: a - b, fmt: fmt.indexOf('.') !== -1 ? '+#,##0.0;-#,##0.0;0.0' : '+#,##0;-#,##0;0' } : null,
-        noteText || { v: '', blank: 1 }
-      ];
-      const perT = (x) => x.tonnes > 0 && x.records ? x.dross / x.tonnes : null;
-      table(sh, [
-        { label: 'Figure', span: 4 }, { label: 'This period', span: 2, h: 'right' }, { label: 'Previous period', span: 2, h: 'right' },
-        { label: 'Change', span: 2, h: 'right' }, { label: 'Note', span: 2 }
-      ], [
-        [{ v: 'Days with production data', b: 1 }, { v: cur.records + ' / ' + m.days, h: 'right' }, { v: prev.records + ' / ' + m.prevDays, h: 'right' }, null, { v: '', blank: 1 }],
-        row('Steel produced (t)' + (partial ? ' *' : ''), cur.records ? cur.tonnes : null, prev.records ? prev.tonnes : null, '#,##0.0', 1),
-        row('Zinc consumption (kg/t)' + (partial ? ' *' : ''), cur.zincPerT, prev.zincPerT, '0.0', 1, 'Lower is not an improvement by itself'),
-        row('Zinc consumed (kg)' + (partial ? ' *' : ''), cur.records ? cur.zincKg : null, prev.records ? prev.zincKg : null, '#,##0', 0),
-        row('Dross removed (kg)' + (partial ? ' *' : ''), cur.records ? cur.dross : null, prev.records ? prev.dross : null, '#,##0', 0),
-        row('Dross per tonne (kg/t)' + (partial ? ' *' : ''), perT(cur), perT(prev), '0.0', 1)
-      ]);
-      if (m.znNote) note(sh, m.znNote);
-    } else emptyLine(sh, 'No production data for this period — upload the production report on the zinc efficiency page.');
+    const full = m.options.production;
+    bar(sh, full ? '4   CONSUMPTION AND PRODUCTION' : '4   MATERIALS ADDED TO THE BATHS');
+    if (full) {
+      if (cur.records || prev.records) {
+        subTitle(sh, 'Key figures');
+        const row = (label, a, b, fmt, d, noteText) => [
+          { v: label, b: 1 }, isNum(a) ? { v: a, fmt: fmt } : null, isNum(b) ? { v: b, fmt: fmt } : null,
+          isNum(a) && isNum(b) ? { v: a - b, fmt: fmt.indexOf('.') !== -1 ? '+#,##0.0;-#,##0.0;0.0' : '+#,##0;-#,##0;0' } : null,
+          noteText || { v: '', blank: 1 }
+        ];
+        const perT = (x) => x.tonnes > 0 && x.records ? x.dross / x.tonnes : null;
+        table(sh, [
+          { label: 'Figure', span: 4 }, { label: 'This period', span: 2, h: 'right' }, { label: 'Previous period', span: 2, h: 'right' },
+          { label: 'Change', span: 2, h: 'right' }, { label: 'Note', span: 2 }
+        ], [
+          [{ v: 'Days with production data', b: 1 }, { v: cur.records + ' / ' + m.days, h: 'right' }, { v: prev.records + ' / ' + m.prevDays, h: 'right' }, null, { v: '', blank: 1 }],
+          row('Steel produced (t)' + (partial ? ' *' : ''), cur.records ? cur.tonnes : null, prev.records ? prev.tonnes : null, '#,##0.0', 1),
+          row('Zinc consumption (kg/t)' + (partial ? ' *' : ''), cur.zincPerT, prev.zincPerT, '0.0', 1, 'Lower is not an improvement by itself'),
+          row('Zinc consumed (kg)' + (partial ? ' *' : ''), cur.records ? cur.zincKg : null, prev.records ? prev.zincKg : null, '#,##0', 0),
+          row('Dross removed (kg)' + (partial ? ' *' : ''), cur.records ? cur.dross : null, prev.records ? prev.dross : null, '#,##0', 0),
+          row('Dross per tonne (kg/t)' + (partial ? ' *' : ''), perT(cur), perT(prev), '0.0', 1)
+        ]);
+        if (m.znNote) note(sh, m.znNote);
+      } else emptyLine(sh, 'No production data for this period — upload the production report on the zinc efficiency page.');
 
-    subTitle(sh, 'Product mix (from production timing)');
-    if (m.mix.length) {
-      table(sh, [{ label: 'Product', span: 6 }, { label: 'Steel (t)', span: 2, h: 'right' }, { label: 'Share', span: 2, h: 'right' }, { label: 'Batches', span: 2, h: 'right' }],
-        m.mix.map(x => [{ v: x.product, b: 1 }, { v: x.tonnes, fmt: '#,##0.0' }, x.share != null ? { v: x.share, fmt: '0%' } : null, x.n]), { limit: 8 });
-    } else emptyLine(sh, 'No batches were recorded in production timing, so the product mix cannot be compared.');
+      subTitle(sh, 'Product mix (from production timing)');
+      if (m.mix.length) {
+        table(sh, [{ label: 'Product', span: 6 }, { label: 'Steel (t)', span: 2, h: 'right' }, { label: 'Share', span: 2, h: 'right' }, { label: 'Batches', span: 2, h: 'right' }],
+          m.mix.map(x => [{ v: x.product, b: 1 }, { v: x.tonnes, fmt: '#,##0.0' }, x.share != null ? { v: x.share, fmt: '0%' } : null, x.n]), { limit: 8 });
+      } else emptyLine(sh, 'No batches were recorded in production timing, so the product mix cannot be compared.');
+      subTitle(sh, 'Materials added to the baths');
+    } else sh.next(4);
 
-    subTitle(sh, 'Materials added to the baths');
     if (m.materials.length) {
       table(sh, [{ label: 'Material', span: 4 }, { label: 'Quantity', span: 2, h: 'right' }, { label: 'Unit', span: 1, h: 'center' },
         { label: 'Per tonne produced' + (partial ? ' *' : ''), span: 2, h: 'right' }, { label: 'Source', span: 3 }],
@@ -527,7 +547,7 @@
           isNum(x.perT) ? { v: x.perT, fmt: '0.000' } : null, x.source]));
     } else emptyLine(sh, 'No additions were recorded in this period.');
     note(sh, m.notes.partial ? '* ' + m.notes.partial.replace(/^\*\s*/, '') : '');
-    note(sh, m.notes.zinc);
+    if (full) note(sh, m.notes.zinc);
     note(sh, m.notes.money);
     comment(sh, m.comments.consumption);
   }
@@ -567,13 +587,12 @@
       comment(sh, m.comments.summary, null);
     }
     sectionStatus(sh, m);
-    sectionDone(sh, m);
     sectionChanged(sh, m);
     sectionNeeds(sh, m);
     sectionConsumption(sh, m);
     sh.next(10);
     const rf = sh.next();
-    const foot = 'Built from the KGC galvanizing line records on the site: tank readings, treatment cards, addition and treatment logs, tasks, and the production report. ' +
+    const foot = 'Built from the KGC galvanizing line records on the site: tank readings, treatment cards, addition and treatment logs, and the production report. ' +
       'Readings are judged against the standard limits set on the site on ' + fmtDate(m.generated) + '. No financial figures are computed.';
     sh.span(rf, 0, NCOL - 1, foot, ST.footer);
     sh.height(rf, linesFor(foot, NCOL, 8) * 11 + 4);
@@ -653,16 +672,17 @@
       '',
       'Please find attached the KGC galvanizing line ' + KIND[m.kind].toLowerCase() + ' report for ' + periodLabel(m) + '.',
       '',
-      'Key points:',
-      '• Out-of-standard parameters: ' + k.breaches.cur + ' (critical readings: ' + k.crit.cur + ')',
-      '• Analysis completeness: ' + (k.completeness.cur == null ? 'no samples were due' : Math.round(k.completeness.cur * 100) + '% of scheduled samples')
+      'Key points:'
     ];
     if (cur.records) {
-      lines.push('• Production: ' + fixed(cur.tonnes, 1) + ' t · zinc consumption ' + fixed(cur.zincPerT, 1) + ' kg/t' +
-        (isNum(k.zincPerT.prev) ? ' (' + prevWord(m) + ': ' + fixed(k.zincPerT.prev, 1) + ')' : '') +
-        (partial ? ' — production data for ' + cur.records + ' of ' + m.days + ' days' : ''));
-    }
-    lines.push('• Treatments and additions recorded: ' + m.events.length + ' · treatment cards open: ' + m.openCards);
+      lines.push('• Production: ' + fixed(cur.tonnes, 1) + ' t' + (isNum(k.jigs.cur) ? ' · ' + fixed(k.jigs.cur, 0) + ' jigs' : '') +
+        (partial ? ' (production data for ' + cur.records + ' of ' + m.days + ' days)' : ''));
+      lines.push('• Zinc: ' + fixed(cur.zincKg, 0) + ' kg · ' + fixed(cur.zincPerT, 1) + ' kg/t' +
+        (isNum(k.zincPerT.prev) ? ' (' + prevWord(m) + ': ' + fixed(k.zincPerT.prev, 1) + ' kg/t)' : ''));
+      if (isNum(k.drossExp.cur)) lines.push('• Expected dross: ' + fixed(k.drossExp.cur, 0) + ' kg (' + fixed(m.dross.basis.rate, 1) + ' kg/t from the last drossings)');
+    } else lines.push('• No production data for this period yet');
+    lines.push('• Tanks out of standard: ' + k.tanksOut.cur + ' of ' + k.tanksOut.of +
+      (m.breaches.length ? ' (' + m.breaches.filter((x, i, a) => a.findIndex(y => y.tank === x.tank) === i).map(x => x.tank).join(', ') + ')' : ''));
     lines.push('• Needs listed: ' + m.needs.length + (high ? ' (high priority: ' + high + ')' : ''));
     const summary = String(m.comments.summary || '').trim();
     if (summary) lines.push('', 'Summary: ' + summary);
