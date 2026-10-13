@@ -336,8 +336,49 @@
 
   /* ---------------- 3. needs ---------------- */
 
-  function suggestions() {
+  /* What each bath out of standard needs, from its last reading — the
+     tanks in the report only. One need per tank, its reason naming every
+     parameter out with the reading's day, so a stale or mistyped reading
+     shows for what it is; one older than a week asks for a re-measure first.
+     Far out (critical, or beyond the width of the range) is high priority
+     and wanted tomorrow; otherwise medium, the day after. */
+  const RINSES = [2, 9], ACIDS = [3, 4, 5, 6, 8];
+  function tankNeeds() {
     const out = [];
+    const all = values(readings), today = dayKey();
+    shownTanks().forEach(function (tk) {
+      const bad = [];
+      measurable(tk.id).forEach(function (p) {
+        const last = lastPoint(tk, p.key, today, all);
+        if (!last) return;
+        const tier = evalTier(tk.id, p.key, last.v);
+        if (!isBad(tier)) return;
+        bad.push({ key: p.key, v: last.v, date: last.date, high: p.max != null && last.v > p.max,
+          far: tier === 'crit' || outside(p, last.v) > 1,
+          text: t('wk.sg.reading', { p: paramLabel(p.key), v: fmt(last.v) + (p.unit ? ' ' + p.unit : ''),
+            r: T() ? T().rangeOf(p) : '', d: last.date || t('wk.noDate') }) });
+      });
+      if (!bad.length) return;
+      const has = k => bad.find(x => x.key === k);
+      const stale = bad.some(x => !x.date || daysBetween(x.date, today) > 7);
+      const urgent = bad.some(x => x.far);
+      const tank = tankName(tk.id);
+      let kind = 'maintenance', what;
+      if (tk.id === 1 && has('conc') && !has('conc').high) what = t('wk.sg.degrease');
+      else if (RINSES.indexOf(tk.id) !== -1) what = t('wk.sg.rinse', { tk: tank });
+      else if (ACIDS.indexOf(tk.id) !== -1 && has('fe') && has('fe').high) { kind = 'decision'; what = t('wk.sg.acidRenew', { tk: tank }); }
+      else if (tk.id === 7 && ((has('zn') && has('zn').high) || (has('fe') && has('fe').high))) { kind = 'decision'; what = t('wk.sg.stripRenew'); }
+      else if (tk.id === 10 && has('fe') && has('fe').high) what = t('wk.sg.fluxFe');
+      else what = t('wk.sg.correct', { tk: tank, p: bad.map(x => paramLabel(x.key)).join(' · ') });
+      out.push({ kind: kind, what: what, priority: urgent ? 'high' : 'medium', due: addDays(today, urgent ? 1 : 2),
+        owner: kind === 'maintenance' ? t('wk.sg.owner') : null,
+        why: bad.map(x => x.text).join(' · ') + (stale ? ' — ' + t('wk.sg.stale') : '') });
+    });
+    return out;
+  }
+
+  function suggestions() {
+    const out = tankNeeds();
     const L = window.KGCLab;
     if (L && L._inventory) {
       const inv = L._inventory();
@@ -724,8 +765,11 @@
         '<div class="tk-actions"><button class="btn mini" id="wk-n-paste-go">' + esc(t('wk.paste.go')) + '</button>' +
           '<span class="tk-msg" id="wk-n-paste-msg" style="color:var(--accent)">' + esc(pasteNote) + '</span></div>' +
       '</details>' : '') +
-      (edit && sg.length ? '<div class="wk-sg no-print"><p class="wk-sub">' + esc(t('wk.h.suggest')) + '</p>' +
-        sg.map((s, i) => '<div class="tk-row"><span class="wk-kind k-' + esc(s.kind) + '">' + esc(t('wk.kind.' + s.kind)) + '</span> <b>' + esc(s.what) + '</b> — ' + esc(s.why) +
+      (edit && sg.length ? '<div class="wk-sg no-print"><p class="wk-sub">' + esc(t('wk.h.suggest')) +
+          (sg.length > 1 ? ' <button class="btn mini" data-wk-sg-all>' + esc(t('wk.b.useAll', { n: sg.length })) + '</button>' : '') + '</p>' +
+        sg.map((s, i) => '<div class="tk-row"><span class="wk-kind k-' + esc(s.kind) + '">' + esc(t('wk.kind.' + s.kind)) + '</span> ' +
+          (s.priority ? '<span class="wk-prio p-' + esc(s.priority) + '">' + esc(t('wk.prio.' + s.priority)) + '</span> ' : '') +
+          '<b>' + esc(s.what) + '</b> — ' + esc(s.why) +
           ' <button class="btn mini ghost" data-wk-sg="' + i + '">' + esc(t('wk.b.useSuggest')) + '</button></div>').join('') + '</div>' : '') +
       '<p class="wk-note">' + esc(t('wk.n.needs')) + '</p>' +
       commentBox('needs', rep) +
@@ -1000,12 +1044,19 @@
         });
     });
     const sg = pendingSuggestions(reports[key] || {});
+    // the owner is kept in English, as the file is
+    const fromSuggestion = (x, i) => ({ ts: Date.now() + (i || 0), kind: x.s.kind, priority: x.s.priority || 'medium',
+      what: x.s.what, why: x.s.why, whatEn: x.en.what, whyEn: x.en.why, owner: x.en.owner || null, due: x.s.due || null });
     mount.querySelectorAll('[data-wk-sg]').forEach(function (b) {
       b.addEventListener('click', function () {
         const x = sg[Number(b.getAttribute('data-wk-sg'))];
-        if (x) addNeed({ kind: x.s.kind, priority: 'medium', what: x.s.what, why: x.s.why,
-          whatEn: x.en.what, whyEn: x.en.why, owner: null, due: x.s.due || null });
+        if (x) addNeed(fromSuggestion(x));
       });
+    });
+    const sgAll = mount.querySelector('[data-wk-sg-all]');
+    if (sgAll) sgAll.addEventListener('click', function () {
+      sgAll.disabled = true;
+      sg.reduce((p, x, i) => p.then(() => addNeed(fromSuggestion(x, i))), Promise.resolve());
     });
     mount.querySelectorAll('[data-wk-prio]').forEach(function (sel) {
       sel.addEventListener('change', function () {
