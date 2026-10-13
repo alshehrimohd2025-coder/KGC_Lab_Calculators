@@ -6,7 +6,8 @@
    logo and title, a row of key figures against the previous period
    (production, jigs, zinc, the dross to expect, tanks out of standard),
    then the tanks, what changed, what is needed and the materials added,
-   each with the engineer's comment under it.
+   each with the engineer's comment under it, and an empty notes box at
+   the end to write in before the file is sent.
 
    The file is English only, by the plant's choice. Dates read
    13-Oct-2026 whatever the reader's Excel locale. Numbers are real
@@ -558,6 +559,18 @@
     comment(sh, m.comments.consumption);
   }
 
+  /* An empty box at the end to type in before sending, for what the site
+     does not hold. Excel does not grow a merged cell to fit, so it starts
+     tall; a longer note needs the row dragged taller. */
+  const NOTES_H = 120;
+  function notesBox(sh) {
+    sh.keep(6 + 21 + NOTES_H);
+    bar(sh, 'ENGINEER NOTES');
+    const r = sh.next(NOTES_H);
+    sh.span(r, 0, NCOL - 1, '', { font: { sz: 10, color: C.ink }, border: { all: THIN },
+      align: { h: 'left', v: 'top', wrap: 1, indent: 1 } });
+  }
+
   /* ---------------- package ---------------- */
 
   function pngSize(bytes) {
@@ -596,6 +609,7 @@
     sectionChanged(sh, m);
     sectionNeeds(sh, m);
     sectionConsumption(sh, m);
+    notesBox(sh);
     sh.next(10);
     const rf = sh.next();
     const foot = 'Built from the KGC galvanizing line records on the site: tank readings, treatment cards, addition and treatment logs, and the production report. ' +
