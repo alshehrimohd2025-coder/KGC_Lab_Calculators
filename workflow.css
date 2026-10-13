@@ -264,3 +264,27 @@ html:not(.authed) .wk-comment.empty { display: none; }
 .wk-prio.p-medium, .wk-prio-sel.p-medium { --pc: var(--warn); }
 .wk-prio.p-low, .wk-prio-sel.p-low { --pc: var(--accent); }
 @media print { html.print-weekly .wk-mail { display: none !important; } }
+
+/* report contents: which tanks, and the optional parts */
+.wk-set {
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface);
+  margin-bottom: 16px; padding: 10px 14px;
+}
+.wk-set summary { cursor: pointer; font-size: 13.5px; color: var(--ink); }
+.wk-set summary small { color: var(--ink-3); font-weight: 400; margin-inline-start: 6px; }
+.wk-set-body .wk-sub:first-child { margin-top: 12px; }
+.wk-chips { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+.wk-chips.col { flex-direction: column; align-items: flex-start; }
+.wk-chk {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2);
+  padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--recess); cursor: pointer;
+}
+.wk-chk:has(input:checked) { border-color: var(--accent); color: var(--ink); }
+.wk-chk input { margin: 0; accent-color: var(--accent); }
+.wk-chk-all { margin-bottom: 8px; font-weight: 700; }
+.wk-x-acid { margin: 4px 0 10px; }
+.wk-line { font-size: 13px; color: var(--ink-2); margin: 8px 0 0; line-height: 1.8; }
+.wk-line b { color: var(--warn); margin-inline-end: 4px; }
+.wk-line.ok b { color: var(--accent); }
+/* the six figures at the top sit in two even rows rather than five and one */
+@media (min-width: 900px) { .wk-top .pt-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

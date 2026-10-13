@@ -11,26 +11,35 @@
    The period is a day, a Sunday-to-Saturday week or a calendar month.
    Each opens on the last complete one: yesterday, last week, last month.
 
-   It answers four questions, in this order:
-     1. How were the baths?   breaches, and how complete the analysis was
-     2. What did we do?       additions, treatments, calibration, follow-ups
-     3. What changed?         before/after results, problems closed or still open
-     4. What do we need?      decision / purchase / maintenance, with why,
-                              who and by when
+   It reads, in this order:
+     top           production, jigs, zinc, the dross to expect, and how many
+                   tanks were out of standard — each against the period before
+     1. Tanks      which baths left their standard, and which stayed in it
+     2. Changed    before/after results, problems that closed or opened
+     3. Needs      decision / purchase / maintenance, with why, who and by when
+     4. Materials  what was put into the baths
+
+   What goes in is chosen on the page and kept at report_settings:
+     { tanksOff: { <tankId>: true }, completeness, unchanged, production }
+   Every tank with a standard is in unless taken out. The three options are
+   off unless turned on: the analysis-completeness table, the items that did
+   not change, and the production figures and product mix (kept for when the
+   batch data is complete).
 
    Two rules it keeps:
      - A lower zinc figure is never called an improvement: it moves with
-       the kind of steel put through, so it is shown beside the product mix
-       and described only as higher or lower.
+       the kind of steel put through, so it is described only as higher or
+       lower.
      - No money is computed. There is no documented price basis here, and a
        saving figure without one is a guess with a currency sign on it.
 
    Gaps are said out loud: days with no production data, readings judged
-   against today's limits, totals that are estimates.
+   against today's limits, totals that are estimates — the expected dross is
+   one, taken from the last drossings.
 
    Stored at weekly_reports/<key>, where the key is the week's first day
    (as it always was), day_<date> for a day, or month_<YYYY-MM> for a month:
-     { preparedBy, preparedTitle, comments: { summary, status, done, changed, needs, consumption },
+     { preparedBy, preparedTitle, comments: { summary, status, changed, needs, consumption },
        needs: { <pushId>: { kind, priority, what, why, owner, due } } }
 
    Depends on globals from index.html: database, tanks, tankLabel(),
@@ -49,11 +58,14 @@
   const NEED_KINDS = ['decision', 'purchase', 'maintenance'];
   const PRIORITIES = ['high', 'medium', 'low'];
   const PERIOD_KINDS = ['day', 'week', 'month'];
+  const ACID_TANKS = [3, 4, 5, 6];
+  const OPTIONS = ['completeness', 'unchanged', 'production'];
+  // drossings the expected-dross rate is averaged over
+  const DROSS_BASIS = 3;
   // the preparer's title until one is typed for the report; clearing it leaves it blank
   const DEFAULT_TITLE = 'Chemical Engineer';
 
-  let readings = {}, renewals = {}, acidAdds = {}, fluxT = {}, peroxT = {}, saltAdds = {}, bath = {}, calib = {},
-      taskLog = {}, taskState = {}, reports = {};
+  let readings = {}, renewals = {}, acidAdds = {}, fluxT = {}, peroxT = {}, saltAdds = {}, reports = {}, settings = {};
   let period = null;            // { kind: 'day' | 'week' | 'month', start: 'YYYY-MM-DD' }
   let exported = null;          // { file, text } — the email text shown after a download
   let held = false;
@@ -141,6 +153,32 @@
 
   function measurable(tankId) { return T() ? T().measurable(tankId) : []; }
 
+  /* ---------------- what goes in the report ---------------- */
+
+  const included = id => !(settings.tanksOff && settings.tanksOff[id]);
+  const opt = k => !!settings[k];
+
+  /** Tanks with a standard, in line order: the ones a report can speak about. */
+  function reportTanks() {
+    return typeof tanks === 'undefined' ? [] : tanks.slice().sort((a, b) => a.id - b.id).filter(tk => measurable(tk.id).length);
+  }
+  const shownTanks = () => reportTanks().filter(tk => included(tk.id));
+  const acidIn = () => ACID_TANKS.every(included);
+
+  /* A choice shows at once. The editor's is also kept for the next report;
+     anyone else's lasts until the page is reloaded. */
+  function setSettings(updates) {
+    const next = JSON.parse(JSON.stringify(settings));
+    Object.keys(updates).forEach(function (path) {
+      const ps = path.split('/');
+      let o = next;
+      for (let i = 0; i < ps.length - 1; i++) o = o[ps[i]] = (o[ps[i]] && typeof o[ps[i]] === 'object') ? o[ps[i]] : {};
+      if (updates[path] == null) delete o[ps[ps.length - 1]]; else o[ps[ps.length - 1]] = updates[path];
+    });
+    settings = next;
+    if (canEdit()) database.ref('report_settings').update(updates);
+  }
+
   function evalTier(tankId, key, v) {
     const SP = window.KGCSpecs;
     const p = measurable(tankId).find(x => x.key === key);
@@ -163,8 +201,7 @@
 
   function breaches(rows) {
     const out = [];
-    if (typeof tanks === 'undefined') return out;
-    tanks.slice().sort((a, b) => a.id - b.id).forEach(function (tk) {
+    shownTanks().forEach(function (tk) {
       measurable(tk.id).forEach(function (p) {
         const pts = rows.filter(r => Number(r.tankId) === tk.id && r[p.key] != null && r[p.key] !== '' && Number(r[p.key]) !== 0)
           .sort((a, b) => a.date < b.date ? -1 : 1);
@@ -184,11 +221,24 @@
     return out.sort((a, b) => b.crit - a.crit || b.bad - a.bad);
   }
 
+  /** Tanks in the report that stayed in standard, and those with no reading at all. */
+  function standing(rows, br) {
+    const out = { ok: [], none: [] };
+    shownTanks().forEach(function (tk) {
+      if (br.some(x => x.tankId === tk.id)) return;
+      const keys = measurable(tk.id).map(p => p.key);
+      const seen = rows.some(r => Number(r.tankId) === tk.id && keys.some(k => r[k] != null && r[k] !== '' && Number(r[k]) !== 0));
+      out[seen ? 'ok' : 'none'].push(tk.id);
+    });
+    return out;
+  }
+  const tanksOut = br => br.filter((x, i) => br.findIndex(y => y.tankId === x.tankId) === i).length;
+
   function completeness(S, E, days) {
     const out = [];
-    if (typeof tanks === 'undefined' || !T()) return out;
+    if (!T()) return out;
     const all = values(readings);
-    tanks.slice().sort((a, b) => a.id - b.id).forEach(function (tk) {
+    shownTanks().forEach(function (tk) {
       const sc = T().scheduleFor(tk.id);
       if (sc.off || !sc.params.length) return;
       const mine = all.filter(r => Number(r.tankId) === tk.id);
@@ -220,71 +270,13 @@
     return exp ? got / exp : null;
   }
 
-  /* ---------------- 2. what was done ---------------- */
-
-  function events(S, E) {
-    const out = [];
-    const A = window.KGCActions;
-    const add = (date, tankId, type, detail, card) => out.push({ date: date, tankId: tankId, type: type, detail: detail, card: !!card });
-
-    if (A) A.list().forEach(function (c) {
-      const a = c.action;
-      if (!a || !inRange(String(a.at || '').slice(0, 10), S, E)) return;
-      const sug = a.suggestedQty != null ? t('wk.ev.suggested', { q: fmt(a.suggestedQty) + ' ' + (a.suggestedUnit || '') }) : '';
-      add(String(a.at).slice(0, 10), c.tankId, t('wk.type.card'),
-        A.materialText(a) + ' — ' + t('wk.ev.actual', { q: fmt(a.actualQty) + ' ' + (a.actualUnit || '') }) +
-        (sug ? ' · ' + sug : '') + (c.evaluation ? ' · ' + t('ac.res.' + c.evaluation.result) : ' · ' + t('wk.ev.noEval')), true);
-    });
-    values(renewals).forEach(function (r) {
-      if (!inRange(r.date, S, E)) return;
-      add(r.date, r.tankId, t('lab.type.' + r.type), (r.qty ? fmt(r.qty) + ' ' + (r.unit || '') : '') + (r.note ? ' — ' + r.note : ''));
-    });
-    values(acidAdds).forEach(function (r) {
-      if (!inRange(r.date, S, E)) return;
-      add(r.date, r.tankId, t('wk.type.acid'), fmt(r.tons) + ' t' +
-        (r.before != null ? ' · ' + t('wk.ev.before', { v: fmt(r.before) + '%' }) : '') + (r.operator ? ' · ' + r.operator : ''));
-    });
-    values(fluxT).forEach(function (r) {
-      if (!inRange(r.date, S, E)) return;
-      add(r.date, 10, t('wk.type.ammonia'), fmt(r.liters) + ' L · pH ' + fmt(r.phBefore) + ' → ' + fmt(r.phAfter) + (r.operator ? ' · ' + r.operator : ''));
-    });
-    values(peroxT).forEach(function (r) {
-      if (!inRange(r.date, S, E)) return;
-      add(r.date, 10, t('wk.type.peroxide'), fmt(r.liters) + ' L · Fe ' + fmt(r.feBefore) + ' → ' + fmt(r.feAfter) + ' g/L' + (r.operator ? ' · ' + r.operator : ''));
-    });
-    values(saltAdds).forEach(function (r) {
-      if (!inRange(r.date, S, E)) return;
-      add(r.date, 10, t('wk.type.salt'), fmt(r.kg) + ' kg' +
-        (r.beBefore != null ? ' · Bé ' + fmt(r.beBefore) + ' → ' + (r.beAfter != null ? fmt(r.beAfter) : '?') : ''));
-    });
-    values(bath).forEach(function (r) {
-      if (!inRange(r.date, S, E)) return;
-      add(r.date, 12, t('wk.type.bath'), t('wk.ev.bath'));
-    });
-    Object.keys(calib).forEach(function (k) {
-      const r = calib[k];
-      if (!r || !inRange(r.last, S, E)) return;
-      add(r.last, null, t('wk.type.calib'), t('kettle.inst.' + k) + (r.due ? ' · ' + t('wk.ev.nextDue', { d: r.due }) : '') + (r.by ? ' · ' + r.by : ''));
-    });
-    return out.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
-  }
-
-  function followUps(S, E) {
-    const done = values(taskLog).filter(r => inRange(tsDay(r.ts), S, E));
-    const byKind = {};
-    done.forEach(r => { byKind[r.kind] = (byKind[r.kind] || 0) + 1; });
-    const postponed = values(taskState).filter(r => r.status === 'postponed' && inRange(tsDay(r.ts), S, E));
-    return { done: done, byKind: byKind, postponed: postponed };
-  }
-
-  /* ---------------- 3. what changed ---------------- */
+  /* ---------------- 2. what changed ---------------- */
 
   /** Each parameter's standing at the start of the week against its end. */
   function issueMovement(S, E) {
     const out = { closed: [], opened: [], still: [] };
-    if (typeof tanks === 'undefined') return out;
     const all = values(readings);
-    tanks.slice().sort((a, b) => a.id - b.id).forEach(function (tk) {
+    shownTanks().forEach(function (tk) {
       measurable(tk.id).forEach(function (p) {
         const pts = all.filter(r => Number(r.tankId) === tk.id && r[p.key] != null && r[p.key] !== '' && Number(r[p.key]) !== 0)
           .sort((a, b) => a.date < b.date ? -1 : 1);
@@ -306,13 +298,14 @@
     const A = window.KGCActions;
     if (!A) return [];
     return A.list().filter(function (c) {
+      if (!included(c.tankId)) return false;
       const actDay = c.action ? String(c.action.at || '').slice(0, 10) : '';
       const afterIn = A.aftersOf(c).some(x => inRange(String(x.at || '').slice(0, 10), S, E));
       return inRange(actDay, S, E) || afterIn;
     });
   }
 
-  /* ---------------- 4. needs ---------------- */
+  /* ---------------- 3. needs ---------------- */
 
   function suggestions() {
     const out = [];
@@ -365,19 +358,49 @@
 
   /* ---------------- production and consumption ---------------- */
 
+  const zincDays = () => { const Z = window.KGCZinc; return Object.values((Z && Z._days && Z._days()) || {}).filter(d => d && d.date); };
+  const dayKg = d => num(d.dayTon) + num(d.nightTon);
+
+  /* From the production report. Jigs are the sheet's own count per shift;
+     a period whose sheets carry no jig row says so rather than showing 0. */
   function production(S, E) {
-    const Z = window.KGCZinc;
-    const days = Object.values((Z && Z._days && Z._days()) || {}).filter(d => d && inRange(d.date, S, E));
-    let kg = 0, zn = 0, dross = 0, release = 0, prodDays = 0;
+    const days = zincDays().filter(d => inRange(d.date, S, E));
+    let kg = 0, zn = 0, dross = 0, release = 0, prodDays = 0, jigs = 0, jigKnown = false;
     days.forEach(function (d) {
-      const k = num(d.dayTon) + num(d.nightTon);
+      const k = dayKg(d);
       kg += k;
       zn += num(d.dayPct) / 100 * num(d.dayTon) + num(d.nightPct) / 100 * num(d.nightTon);
       dross += num(d.dross); release += num(d.release);
+      jigs += num(d.dayJigs) + num(d.nightJigs);
+      if (num(d.dayJigs) + num(d.nightJigs) > 0) jigKnown = true;
       if (k > 0) prodDays++;
     });
-    return { records: days.length, prodDays: prodDays, tonnes: kg / 1000, zincKg: zn,
-      zincPerT: kg > 0 && zn > 0 ? zn / kg * 1000 : null, dross: dross, release: release };
+    const out = { records: days.length, prodDays: prodDays, tonnes: kg / 1000, zincKg: zn,
+      zincPerT: kg > 0 && zn > 0 ? zn / kg * 1000 : null, dross: dross, release: release,
+      jigs: jigKnown ? jigs : null };
+    out.drossRate = drossRate(E);
+    out.drossExpected = out.drossRate && days.length ? out.drossRate.rate * out.tonnes : null;
+    return out;
+  }
+
+  /* Dross builds up with the steel put through and is pulled out on stop
+     days, so each weighing covers the production since the one before it.
+     The rate is the last few weighings over the tonnes they covered; the
+     dross to expect for a period is that rate times what it produced. It is
+     an estimate, and the report says what it was taken from. */
+  function drossRate(E) {
+    const days = zincDays().filter(d => d.date <= E).sort((a, b) => a.date < b.date ? -1 : 1);
+    const pulls = days.filter(d => num(d.dross) > 0);
+    const spans = [];
+    for (let i = pulls.length - 1; i > 0 && spans.length < DROSS_BASIS; i--) {
+      const a = pulls[i - 1].date, b = pulls[i].date;
+      const kg = days.filter(d => d.date > a && d.date <= b).reduce((s, d) => s + dayKg(d), 0);
+      if (kg > 0) spans.push({ from: a, to: b, dross: num(pulls[i].dross), tonnes: kg / 1000 });
+    }
+    if (!spans.length) return null;
+    const dross = spans.reduce((s, x) => s + x.dross, 0), tonnes = spans.reduce((s, x) => s + x.tonnes, 0);
+    return { rate: dross / tonnes, n: spans.length, dross: dross, tonnes: tonnes,
+      since: spans[spans.length - 1].from, dates: spans.map(x => x.to).reverse() };
   }
 
   /** Steel put through, by product, from the batch tracker. */
@@ -452,12 +475,45 @@
   const TIER_COL = { good: 'var(--accent)', warn: 'var(--warn)', crit: 'var(--crit)' };
   const tv = (tankId, key, v) => '<b style="color:' + (TIER_COL[evalTier(tankId, key, v)] || 'var(--ink)') + '">' + fmt(v) + '</b>';
 
-  function statusHTML(b, rep) {
-    const rows = rowsIn(b.S, b.E);
-    const br = breaches(rows);
-    const cp = completeness(b.S, b.E, b.days);
-    const share = completenessShare(cp);
-    const overall = share == null ? null : Math.round(share * 100);
+  /** Everything the top of the report and its first section share. */
+  function figures(p) {
+    const b = bounds(p), pb = bounds(shift(p, -1));
+    const ids = shownTanks().map(tk => tk.id);
+    const rows = rowsIn(b.S, b.E).filter(r => ids.indexOf(Number(r.tankId)) !== -1);
+    const br = breaches(rows), pbr = breaches(rowsIn(pb.S, pb.E));
+    return { b: b, rows: rows, br: br, out: tanksOut(br), prevOut: tanksOut(pbr),
+      cur: production(b.S, b.E), prev: production(pb.S, pb.E) };
+  }
+
+  function drossNote(cur) {
+    const dr = cur.drossRate;
+    return t('wk.n.dross', { r: fmt(dr.rate, 1), t: fmt(cur.tonnes, 1), n: dr.n, d: dr.dates.join(' · '),
+      kg: fmt(dr.dross, 0), bt: fmt(dr.tonnes, 1), rm: fmt(cur.dross, 0) });
+  }
+
+  function topHTML(F) {
+    const cur = F.cur, partial = cur.records > 0 && cur.records < F.b.days, star = partial ? ' *' : '';
+    return '<section class="wk-sec wk-top">' +
+      '<div class="pt-stats">' +
+        stat(t('wk.s.tonnes') + star, cur.records ? fmt(cur.tonnes, 1) + '<small>t</small>' : '—') +
+        stat(t('wk.s.jigs') + star, cur.jigs != null ? fmt(cur.jigs, 0) : '—') +
+        stat(t('wk.s.zincKg') + star, cur.zincKg > 0 ? fmt(cur.zincKg, 0) + '<small>kg</small>' : '—') +
+        stat(t('wk.s.zincPerT') + star, cur.zincPerT != null ? fmt(cur.zincPerT, 1) + '<small>kg/t</small>' : '—') +
+        stat(t('wk.s.drossExp') + star, cur.drossExpected != null ? fmt(cur.drossExpected, 0) + '<small>kg</small>' : '—') +
+        stat(t('wk.s.tanksOut'), F.out + '<small>/ ' + shownTanks().length + '</small>', F.out > 0) +
+      '</div>' +
+      (!cur.records ? '<p class="wk-note">' + esc(t('wk.noProduction')) + '</p>'
+        : cur.drossRate ? '<p class="wk-note">' + esc(drossNote(cur)) + '</p>'
+        : '<p class="wk-note">' + esc(t('wk.n.noDrossRate')) + '</p>') +
+      (partial ? '<p class="wk-note">' + esc(t('wk.n.partial', { n: cur.records, d: F.b.days })) + '</p>' : '') +
+    '</section>';
+  }
+
+  function statusHTML(F, rep) {
+    const b = F.b, rows = F.rows, br = F.br;
+    const st = standing(rows, br);
+    const off = reportTanks().filter(tk => !included(tk.id)).map(tk => tk.id);
+    const names = ids => ids.map(tankName).join(' · ');
 
     const brTable = br.length ? table(
       [t('lab.col.tank'), t('spec.param'), t('wk.col.outOf'), t('wk.col.worst'), t('wk.col.last'), t('ac.col.range')],
@@ -468,67 +524,62 @@
         '<td class="num" dir="ltr">' + esc(T() ? T().rangeOf(x.p) : '') + '</td></tr>'))
       : '<div class="att-clear"><span class="att-ok">✓</span>' + esc(t(rows.length ? 'wk.noBreach' : 'wk.noReadings')) + '</div>';
 
-    const cpTable = cp.length ? table(
-      [t('lab.col.tank'), t('wk.col.schedule'), t('wk.col.expected'), t('wk.col.full'), t('wk.col.partial'), t('wk.col.pct')],
-      cp.map(x => '<tr><td class="name">' + esc(tankName(x.tankId)) + '</td>' +
-        '<td>' + esc(t('wk.every', { n: x.sc.every, p: x.sc.params.map(paramLabel).join(' · ') })) + '</td>' +
-        '<td class="num">' + x.expected + '</td><td class="num">' + x.full + '</td><td class="num">' + x.partial + '</td>' +
-        '<td class="num">' + (x.pct == null ? '<span class="ac-none">' + esc(t('wk.notDue')) + '</span>'
-          : '<b style="color:' + (x.pct >= 100 ? 'var(--accent)' : x.pct >= 50 ? 'var(--warn)' : 'var(--crit)') + '">' + x.pct + '%</b>') + '</td></tr>'))
-      : '';
+    let cpPart = '';
+    if (opt('completeness')) {
+      const cp = completeness(b.S, b.E, b.days);
+      const share = completenessShare(cp);
+      cpPart = '<p class="wk-sub">' + esc(t('wk.h.complete')) +
+          (share == null ? '' : ' — ' + Math.round(share * 100) + '%') + '</p>' +
+        (cp.length ? table(
+          [t('lab.col.tank'), t('wk.col.schedule'), t('wk.col.expected'), t('wk.col.full'), t('wk.col.partial'), t('wk.col.pct')],
+          cp.map(x => '<tr><td class="name">' + esc(tankName(x.tankId)) + '</td>' +
+            '<td>' + esc(t('wk.every', { n: x.sc.every, p: x.sc.params.map(paramLabel).join(' · ') })) + '</td>' +
+            '<td class="num">' + x.expected + '</td><td class="num">' + x.full + '</td><td class="num">' + x.partial + '</td>' +
+            '<td class="num">' + (x.pct == null ? '<span class="ac-none">' + esc(t('wk.notDue')) + '</span>'
+              : '<b style="color:' + (x.pct >= 100 ? 'var(--accent)' : x.pct >= 50 ? 'var(--warn)' : 'var(--crit)') + '">' + x.pct + '%</b>') + '</td></tr>'))
+          : '') +
+        '<p class="wk-note">' + esc(t('wk.n.full')) + '</p>';
+    }
 
     return '<section class="wk-sec">' +
       '<h3 class="wk-h"><span class="wk-n">1</span>' + esc(t('wk.q1')) + '</h3>' +
-      '<div class="pt-stats">' +
-        stat(t('wk.s.breachParams'), br.length, br.length > 0) +
-        stat(t('wk.s.critReadings'), br.reduce((s, x) => s + x.crit, 0), br.some(x => x.crit)) +
-        stat(t('wk.s.readings'), rows.length) +
-        stat(t('wk.s.complete'), overall == null ? '—' : overall + '%', overall != null && overall < 80) +
-      '</div>' +
-      '<p class="wk-sub">' + esc(t('wk.h.breaches')) + '</p>' + brTable +
-      '<p class="wk-sub">' + esc(t('wk.h.complete')) + '</p>' + cpTable +
+      '<p class="wk-sub">' + esc(t('wk.h.breaches', { n: rows.length })) + '</p>' + brTable +
+      (st.ok.length ? '<p class="wk-line ok"><b>' + esc(t('wk.st.ok')) + '</b> ' + esc(names(st.ok)) + '</p>' : '') +
+      (st.none.length ? '<p class="wk-line"><b>' + esc(t('wk.st.none')) + '</b> ' + esc(names(st.none)) + '</p>' : '') +
+      (off.length ? '<p class="wk-note">' + esc(t('wk.st.off', { list: names(off) })) + '</p>' : '') +
+      cpPart +
       '<p class="wk-note">' + esc(t('wk.n.limits')) + '</p>' +
       commentBox('status', rep) +
     '</section>';
   }
 
-  function doneHTML(b, rep) {
-    const ev = events(b.S, b.E);
-    const fu = followUps(b.S, b.E);
-    const maint = (typeof tanks !== 'undefined' ? tanks : []).filter(tk => tk.status === 'maintenance' || tk.status === 'out_of_service');
-    const kinds = Object.keys(fu.byKind).map(k => t('tk.kind.' + k) + ' ' + fu.byKind[k]).join(' · ');
-    return '<section class="wk-sec">' +
-      '<h3 class="wk-h"><span class="wk-n">2</span>' + esc(t('wk.q2')) + '</h3>' +
-      '<div class="pt-stats">' +
-        stat(t('wk.s.events'), ev.length) +
-        stat(t('wk.s.cards'), ev.filter(x => x.card).length) +
-        stat(t('wk.s.followups'), fu.done.length) +
-        stat(t('wk.s.postponed'), fu.postponed.length, fu.postponed.length > 0) +
-      '</div>' +
-      (ev.length ? table([t('lab.col.date'), t('lab.col.tank'), t('lab.col.type'), t('wk.col.detail')],
-        ev.map(x => '<tr><td class="num">' + esc(x.date) + '</td><td class="name">' + esc(x.tankId != null ? tankName(x.tankId) : '—') + '</td>' +
-          '<td>' + esc(x.type) + '</td><td>' + esc(x.detail) + '</td></tr>'))
-        : '<div class="lab-empty">' + esc(t('wk.noEvents')) + '</div>') +
-      (fu.done.length ? '<p class="wk-sub">' + esc(t('wk.h.followups', { n: fu.done.length })) + (kinds ? ' — ' + esc(kinds) : '') + '</p>' : '') +
-      (fu.postponed.length ? '<p class="wk-sub">' + esc(t('wk.h.postponed')) + '</p><ul class="wk-ul">' +
-        fu.postponed.map(r => '<li><b>' + esc(r.title || '') + '</b> — ' + esc(r.reason || '') + ' <small>(' + esc(t('wk.ppUntil', { d: r.until })) + ')</small></li>').join('') + '</ul>' : '') +
-      (maint.length ? '<p class="wk-sub">' + esc(t('wk.h.maintNow')) + '</p><ul class="wk-ul">' +
-        maint.map(tk => '<li><b>' + esc(tankName(tk.id)) + '</b> — ' + esc(t('st.' + tk.status)) + (tk.note ? ' · ' + esc(tk.note) : '') + '</li>').join('') + '</ul>' : '') +
-      '<p class="wk-note">' + esc(t('wk.n.maint')) + '</p>' +
-      commentBox('done', rep) +
-    '</section>';
+  /* Only what moved: a card parameter whose value changed, a problem that
+     closed or opened. What stayed the same is named under the table, or
+     listed in it when the report is set to show unchanged items. */
+  function changes(b) {
+    const A = window.KGCActions;
+    const all = opt('unchanged');
+    const out = { cards: [], quiet: 0, mv: issueMovement(b.S, b.E) };
+    if (A) cardResults(b.S, b.E).forEach(function (c) {
+      const before = (c.before && c.before.readings) || {};
+      const after = A.mergedAfter(c);
+      const keys = all ? Object.keys(before).concat(Object.keys(after).filter(k => before[k] == null))
+        : Object.keys(before).filter(k => after[k] != null && Number(after[k]) !== Number(before[k]));
+      if (keys.length || all) out.cards.push({ c: c, keys: keys, before: before, after: after });
+      else out.quiet++;
+    });
+    return out;
   }
 
   function changedHTML(b, rep) {
     const A = window.KGCActions;
-    const cards = cardResults(b.S, b.E);
-    const mv = issueMovement(b.S, b.E);
-    const cardRows = cards.map(function (c) {
-      const before = (c.before && c.before.readings) || {};
-      const after = A.mergedAfter(c);
-      const keys = Object.keys(before).filter(k => after[k] != null);
-      const diff = keys.length
-        ? keys.map(k => esc(paramLabel(k)) + ' <span dir="ltr">' + tv(c.tankId, k, before[k]) + ' → ' + tv(c.tankId, k, after[k]) + '</span>').join('<br>')
+    const all = opt('unchanged');
+    const ch = changes(b), mv = ch.mv;
+    const cardRows = ch.cards.map(function (x) {
+      const c = x.c;
+      const diff = x.keys.length
+        ? x.keys.map(k => esc(paramLabel(k)) + ' <span dir="ltr">' + (x.before[k] != null ? tv(c.tankId, k, x.before[k]) : '—') +
+            ' → ' + (x.after[k] != null ? tv(c.tankId, k, x.after[k]) : '—') + '</span>').join('<br>')
         : '<span class="ac-none">' + esc(t('ac.none.after')) + '</span>';
       const ev = c.evaluation ? t('ac.res.' + c.evaluation.result) : t('wk.ev.noEval');
       return '<tr><td class="name">' + esc(tankName(c.tankId)) + '</td><td>' + esc(c.action ? A.materialText(c.action) : '—') + '</td>' +
@@ -538,26 +589,25 @@
     const mvList = (arr, cls) => arr.map(x => '<li class="' + cls + '"><b>' + esc(tankName(x.tankId)) + '</b> · ' + esc(paramLabel(x.key)) + ' ' +
       '<span dir="ltr">' + (x.from != null ? tv(x.tankId, x.key, x.from) + ' → ' : '') + tv(x.tankId, x.key, x.to) + '</span>' +
       ' <small dir="ltr">(' + esc(x.range) + ')</small> <small>' + esc(x.toDate) + '</small></li>').join('');
-    const openNow = A ? A.list().filter(c => c.status !== 'closed').length : 0;
+    const still = all ? mv.still : [];
+    const openNow = A ? A.list().filter(c => c.status !== 'closed' && included(c.tankId)).length : 0;
     return '<section class="wk-sec">' +
-      '<h3 class="wk-h"><span class="wk-n">3</span>' + esc(t('wk.q3')) + '</h3>' +
-      '<div class="pt-stats">' +
-        stat(t('wk.s.closed'), mv.closed.length) +
-        stat(t('wk.s.opened'), mv.opened.length, mv.opened.length > 0) +
-        stat(t('wk.s.still'), mv.still.length, mv.still.length > 0) +
-        stat(t('wk.s.openCards'), openNow) +
-      '</div>' +
+      '<h3 class="wk-h"><span class="wk-n">2</span>' + esc(t('wk.q3')) + '</h3>' +
       '<p class="wk-sub">' + esc(t('wk.h.cards')) + '</p>' +
       (cardRows.length ? table([t('lab.col.tank'), t('ac.f.material'), t('wk.col.beforeAfter'), t('ac.st.eval'), t('ac.col.status')], cardRows)
-        : '<div class="lab-empty">' + esc(t('wk.noCards')) + '</div>') +
+        : '<div class="lab-empty">' + esc(t(ch.quiet ? 'wk.noCardChange' : 'wk.noCards')) + '</div>') +
+      (ch.quiet && cardRows.length ? '<p class="wk-note">' + esc(t('wk.n.quietCards', { n: ch.quiet })) + '</p>' : '') +
       '<p class="wk-sub">' + esc(t('wk.h.movement')) + '</p>' +
-      ((mv.closed.length + mv.opened.length + mv.still.length)
+      ((mv.closed.length + mv.opened.length + still.length)
         ? '<ul class="wk-ul wk-mv">' +
             (mv.closed.length ? '<li class="wk-mv-h">' + esc(t('wk.mv.closed')) + '</li>' + mvList(mv.closed, 'ok') : '') +
             (mv.opened.length ? '<li class="wk-mv-h">' + esc(t('wk.mv.opened')) + '</li>' + mvList(mv.opened, 'bad') : '') +
-            (mv.still.length ? '<li class="wk-mv-h">' + esc(t('wk.mv.still')) + '</li>' + mvList(mv.still, 'bad') : '') +
+            (still.length ? '<li class="wk-mv-h">' + esc(t('wk.mv.still')) + '</li>' + mvList(still, 'bad') : '') +
           '</ul>'
-        : '<div class="lab-empty">' + esc(t('wk.noMovement')) + '</div>') +
+        : '<div class="lab-empty">' + esc(t(mv.still.length ? 'wk.noMovementStill' : 'wk.noMovement')) + '</div>') +
+      (!all && mv.still.length ? '<p class="wk-line"><b>' + esc(t('wk.st.still')) + '</b> ' +
+        esc(mv.still.map(x => tankName(x.tankId) + ' · ' + paramLabel(x.key)).join(', ')) + '</p>' : '') +
+      '<p class="wk-note">' + esc(t('wk.n.openCards', { n: openNow })) + '</p>' +
       commentBox('changed', rep) +
     '</section>';
   }
@@ -578,7 +628,7 @@
         '</select>'
       : (n.priority ? '<span class="wk-prio p-' + esc(n.priority) + '">' + esc(t('wk.prio.' + n.priority)) + '</span>' : '—');
     return '<section class="wk-sec">' +
-      '<h3 class="wk-h"><span class="wk-n">4</span>' + esc(t('wk.q4')) + '</h3>' +
+      '<h3 class="wk-h"><span class="wk-n">3</span>' + esc(t('wk.q4')) + '</h3>' +
       (saved.length ? table([t('wk.col.priority'), t('wk.col.kind'), t('wk.col.what'), t('wk.col.why'), t('wk.col.owner'), t('wk.col.due')].concat(edit ? [''] : []),
         saved.map(n => '<tr><td>' + prioCell(n) + '</td><td><span class="wk-kind k-' + esc(n.kind) + '">' + esc(t('wk.kind.' + n.kind)) + '</span></td>' +
           '<td class="name">' + esc(needText(n, 'what')) + '</td><td>' + esc(needText(n, 'why')) + '</td><td>' + esc(n.owner || '—') + '</td>' +
@@ -605,45 +655,69 @@
     '</section>';
   }
 
-  function consumptionHTML(b, rep) {
-    const pb = bounds(shift(period, -1));
-    const cur = production(b.S, b.E);
-    const prev = production(pb.S, pb.E);
-    const mix = productMix(b.S, b.E);
+  /* Materials always; the production figures and the product mix only when
+     the report is set to show them — they wait for the batch data to be complete. */
+  function materialsHTML(F, rep) {
+    const b = F.b, cur = F.cur, prev = F.prev;
     const mats = materials(b.S, b.E);
-    const partial = cur.records < b.days;
-
-    let znLine = '';
-    if (cur.zincPerT != null && prev.zincPerT != null) {
-      const d = cur.zincPerT - prev.zincPerT;
-      znLine = '<p class="wk-note">' + esc(t(Math.abs(d) < 0.05 ? 'wk.zn.same' : d < 0 ? 'wk.zn.lower' : 'wk.zn.higher',
-        { a: fmt(cur.zincPerT, 1), b: fmt(prev.zincPerT, 1) })) + '</p>';
+    const partial = cur.records > 0 && cur.records < b.days;
+    let prodPart = '';
+    if (opt('production')) {
+      const mix = productMix(b.S, b.E);
+      let znLine = '';
+      if (cur.zincPerT != null && prev.zincPerT != null) {
+        const d = cur.zincPerT - prev.zincPerT;
+        znLine = '<p class="wk-note">' + esc(t(Math.abs(d) < 0.05 ? 'wk.zn.same' : d < 0 ? 'wk.zn.lower' : 'wk.zn.higher',
+          { a: fmt(cur.zincPerT, 1), b: fmt(prev.zincPerT, 1) })) + '</p>';
+      }
+      prodPart = (cur.records
+          ? '<div class="pt-stats">' +
+              stat(t('wk.s.coverage'), cur.records + ' / ' + b.days, partial) +
+              stat(t('wk.s.tonnes'), fmt(cur.tonnes, 1) + '<small>t</small>') +
+              stat(t('wk.s.zincPerT') + (partial ? ' *' : ''), cur.zincPerT != null ? fmt(cur.zincPerT, 1) + '<small>kg/t</small>' : '—') +
+              stat(t('wk.s.dross'), fmt(cur.dross, 0) + '<small>kg</small>') +
+            '</div>' + znLine
+          : '<div class="lab-empty">' + esc(t('wk.noProduction')) + '</div>') +
+        (mix.length ? '<p class="wk-sub">' + esc(t('wk.h.mix')) + '</p><ul class="wk-ul">' +
+          mix.slice(0, 6).map(m => '<li><b>' + esc(m.product) + '</b> — ' + fmt(m.kg / 1000, 1) + ' t · ' + esc(t('wk.batches', { n: m.n })) + '</li>').join('') + '</ul>'
+          : '<p class="wk-note">' + esc(t('wk.noMix')) + '</p>') +
+        '<p class="wk-note">' + esc(t('wk.n.zinc')) + '</p>';
     }
 
     return '<section class="wk-sec">' +
-      '<h3 class="wk-h"><span class="wk-n">+</span>' + esc(t('wk.q5')) + '</h3>' +
-      (cur.records
-        ? '<div class="pt-stats">' +
-            stat(t('wk.s.coverage'), cur.records + ' / ' + b.days, partial) +
-            stat(t('wk.s.tonnes'), fmt(cur.tonnes, 1) + '<small>t</small>') +
-            stat(t('wk.s.zincPerT') + (partial ? ' *' : ''), cur.zincPerT != null ? fmt(cur.zincPerT, 1) + '<small>kg/t</small>' : '—') +
-            stat(t('wk.s.dross'), fmt(cur.dross, 0) + '<small>kg</small>') +
-          '</div>' + znLine
-        : '<div class="lab-empty">' + esc(t('wk.noProduction')) + '</div>') +
-      (mix.length ? '<p class="wk-sub">' + esc(t('wk.h.mix')) + '</p><ul class="wk-ul">' +
-        mix.slice(0, 6).map(m => '<li><b>' + esc(m.product) + '</b> — ' + fmt(m.kg / 1000, 1) + ' t · ' + esc(t('wk.batches', { n: m.n })) + '</li>').join('') + '</ul>'
-        : '<p class="wk-note">' + esc(t('wk.noMix')) + '</p>') +
-      '<p class="wk-sub">' + esc(t('wk.h.materials')) + '</p>' +
+      '<h3 class="wk-h"><span class="wk-n">4</span>' + esc(t(opt('production') ? 'wk.q5' : 'wk.h.materials')) + '</h3>' +
+      prodPart +
+      (opt('production') ? '<p class="wk-sub">' + esc(t('wk.h.materials')) + '</p>' : '') +
       (mats.length ? table([t('ac.f.material'), t('wk.col.qty'), t('wk.col.perT'), t('wk.col.source')],
         mats.map(m => '<tr><td class="name">' + esc(matLabel(m.mat)) + '</td><td class="num">' + fmt(m.q) + ' ' + esc(m.unit) + '</td>' +
           '<td class="num">' + (cur.tonnes > 0 ? fmt(m.q / cur.tonnes, 3) + ' ' + esc(m.unit) + '/t' + (partial ? ' *' : '') : '—') + '</td>' +
           '<td>' + esc(Object.keys(m.srcs).map(s => t('wk.src.' + s)).join(' + ')) + '</td></tr>'))
         : '<div class="lab-empty">' + esc(t('wk.noMaterials')) + '</div>') +
-      (partial && cur.records ? '<p class="wk-note">' + esc(t('wk.n.partial', { n: cur.records, d: b.days })) + '</p>' : '') +
-      '<p class="wk-note">' + esc(t('wk.n.zinc')) + '</p>' +
       '<p class="wk-note">' + esc(t('wk.n.money')) + '</p>' +
       commentBox('consumption', rep) +
     '</section>';
+  }
+
+  /* What goes in the report: the tanks, and the three parts that are off
+     unless asked for. The same choice drives the page, the print and the file. */
+  let setOpen = false;
+  function settingsHTML() {
+    const list = reportTanks();
+    return '<details class="wk-set no-print"' + (setOpen ? ' open' : '') + '>' +
+      '<summary><b>' + esc(t('wk.set.title')) + '</b> <small>' + esc(t('wk.set.count', { n: shownTanks().length, m: list.length })) + '</small></summary>' +
+      '<div class="wk-set-body">' +
+        '<p class="wk-sub">' + esc(t('wk.set.tanks')) + '</p>' +
+        '<label class="wk-chk wk-chk-all"><input type="checkbox" data-wk-acid' + (acidIn() ? ' checked' : '') + '> ' + esc(t('wk.set.acid')) + '</label>' +
+        '<div class="wk-chips">' + list.map(tk =>
+          '<label class="wk-chk"><input type="checkbox" data-wk-tank="' + tk.id + '"' + (included(tk.id) ? ' checked' : '') + '> ' + esc(tankName(tk.id)) + '</label>').join('') +
+        '</div>' +
+        '<p class="wk-sub">' + esc(t('wk.set.parts')) + '</p>' +
+        '<div class="wk-chips col">' + OPTIONS.map(k =>
+          '<label class="wk-chk"><input type="checkbox" data-wk-opt="' + k + '"' + (opt(k) ? ' checked' : '') + '> ' + esc(t('wk.set.' + k)) + '</label>').join('') +
+        '</div>' +
+        '<p class="tk-hint">' + esc(t(canEdit() ? 'wk.set.saved' : 'wk.set.local')) + '</p>' +
+      '</div>' +
+    '</details>';
   }
 
   const stat = (k, v, hot) =>
@@ -651,7 +725,9 @@
 
   function typing(mount) {
     const a = document.activeElement;
-    return !!(a && mount.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
+    // a ticked box is not typing: the page follows it at once
+    return !!(a && mount.contains(a) && (/^(TEXTAREA|SELECT)$/.test(a.tagName) ||
+      (a.tagName === 'INPUT' && !/^(checkbox|radio)$/.test(a.type))));
   }
 
   function render() {
@@ -666,7 +742,8 @@
       });
     }
     if (!period) period = defaultPeriod('week');
-    const b = bounds(period);
+    const F = figures(period);
+    const b = F.b;
     const key = reportKey(period);
     const rep = reports[key] || {};
     const pick = period.kind === 'month'
@@ -685,6 +762,7 @@
         '<button class="btn ghost" id="wk-print">' + esc(t('wk.b.print')) + '</button>' +
         '<button class="btn" id="wk-excel">' + esc(t('wk.b.excel')) + '</button>' +
       '</div>' +
+      settingsHTML() +
       (exported ? '<div class="wk-mail no-print">' +
         '<p class="wk-sub">' + esc(t('wk.x.done', { f: exported.file })) + '</p>' +
         '<textarea id="wk-mail-text" readonly rows="10">' + esc(exported.text) + '</textarea>' +
@@ -702,17 +780,23 @@
             '<span class="wk-print-text inline" data-wk-mirror="by">' + esc(rep.preparedBy || '') + (titleOf(rep) ? ', ' + esc(titleOf(rep)) : '') + '</span></p>' +
         '</header>' +
         commentBox('summary', rep) +
-        statusHTML(b, rep) +
-        doneHTML(b, rep) +
+        topHTML(F) +
+        statusHTML(F, rep) +
         changedHTML(b, rep) +
         needsHTML(b, rep) +
-        consumptionHTML(b, rep) +
+        materialsHTML(F, rep) +
       '</div>';
 
     wire(mount, key);
   }
 
   /* ---------------- writes ---------------- */
+
+  function setAcid(on) {
+    const up = {};
+    ACID_TANKS.forEach(id => { up['tanksOff/' + id] = on ? null : true; });
+    setSettings(up);
+  }
 
   function wire(mount, key) {
     const go = p => { period = p; if (document.activeElement) document.activeElement.blur(); render(); };
@@ -728,6 +812,23 @@
     if (start) start.addEventListener('change', function () {
       if (period.kind === 'month' && /^\d{4}-\d{2}$/.test(start.value)) go({ kind: 'month', start: start.value + '-01' });
       else if (/^\d{4}-\d{2}-\d{2}$/.test(start.value)) go({ kind: period.kind, start: start.value });
+    });
+
+    const set = mount.querySelector('.wk-set');
+    if (set) set.addEventListener('toggle', () => { setOpen = set.open; });
+    const acid = mount.querySelector('[data-wk-acid]');
+    if (acid) {
+      acid.indeterminate = !acidIn() && ACID_TANKS.some(included);
+      acid.addEventListener('change', function () { setAcid(acid.checked); render(); });
+    }
+    mount.querySelectorAll('[data-wk-tank]').forEach(function (el) {
+      el.addEventListener('change', function () {
+        setSettings({ ['tanksOff/' + el.getAttribute('data-wk-tank')]: el.checked ? null : true });
+        render();
+      });
+    });
+    mount.querySelectorAll('[data-wk-opt]').forEach(function (el) {
+      el.addEventListener('change', function () { setSettings({ [el.getAttribute('data-wk-opt')]: el.checked || null }); render(); });
     });
 
     const xl = mount.querySelector('#wk-excel');
@@ -823,40 +924,36 @@
      the page — so the file and the screen cannot disagree. Text comes out in
      whatever language t() is answering in; the export asks for English. */
   function model(p) {
-    const b = bounds(p), pb = bounds(shift(p, -1));
+    const F = figures(p), b = F.b, pb = bounds(shift(p, -1));
     const rep = reports[reportKey(p)] || {};
     const A = window.KGCActions;
-    const rows = rowsIn(b.S, b.E), prows = rowsIn(pb.S, pb.E);
-    const br = breaches(rows), pbr = breaches(prows);
-    const cp = completeness(b.S, b.E, b.days), pcp = completeness(pb.S, pb.E, pb.days);
-    const cur = production(b.S, b.E), prev = production(pb.S, pb.E);
-    const fu = followUps(b.S, b.E);
-    const mv = issueMovement(b.S, b.E);
-    const sum = (list, f) => list.reduce((s, x) => s + x[f], 0);
+    const cur = F.cur, prev = F.prev;
+    const all = opt('unchanged'), showProd = opt('production');
+    const ch = changes(b), mv = ch.mv;
+    const st = standing(F.rows, F.br);
+    const cp = opt('completeness') ? completeness(b.S, b.E, b.days) : null;
 
     const cardRows = [];
-    if (A) cardResults(b.S, b.E).forEach(function (c) {
-      const before = (c.before && c.before.readings) || {};
-      const after = A.mergedAfter(c);
-      const keys = Object.keys(before).concat(Object.keys(after).filter(k => before[k] == null));
+    ch.cards.forEach(function (x) {
+      const c = x.c;
       const base = {
         tank: tankName(c.tankId), material: c.action ? A.materialText(c.action) : '—',
         evaluation: c.evaluation ? t('ac.res.' + c.evaluation.result) : t('wk.ev.noEval'),
         result: c.evaluation ? c.evaluation.result : null,
         evalNote: (c.evaluation && c.evaluation.note) || '', stage: t('ac.stage.' + A.stage(c))
       };
-      (keys.length ? keys : [null]).forEach(function (k) {
+      (x.keys.length ? x.keys : [null]).forEach(function (k) {
         cardRows.push(Object.assign({}, base, k == null ? { param: '—' } : {
           param: paramLabel(k),
-          before: before[k] != null ? Number(before[k]) : null,
-          after: after[k] != null ? Number(after[k]) : null,
-          afterTier: after[k] != null ? evalTier(c.tankId, k, after[k]) : 'none'
+          before: x.before[k] != null ? Number(x.before[k]) : null,
+          after: x.after[k] != null ? Number(x.after[k]) : null,
+          afterTier: x.after[k] != null ? evalTier(c.tankId, k, x.after[k]) : 'none'
         }));
       });
     });
 
     const move = [];
-    [['closed', mv.closed], ['opened', mv.opened], ['still', mv.still]].forEach(function (g) {
+    [['closed', mv.closed], ['opened', mv.opened]].concat(all ? [['still', mv.still]] : []).forEach(function (g) {
       g[1].forEach(x => move.push({ move: g[0], tank: tankName(x.tankId), param: paramLabel(x.key),
         from: x.from, to: x.to, toDate: x.toDate, range: x.range, tier: evalTier(x.tankId, x.key, x.to) }));
     });
@@ -867,35 +964,41 @@
       znNote = t(Math.abs(d) < 0.05 ? 'wk.zn.same' : d < 0 ? 'wk.zn.lower' : 'wk.zn.higher',
         { a: fmt(cur.zincPerT, 1), b: fmt(prev.zincPerT, 1) });
     }
-    const mix = productMix(b.S, b.E);
+    const mix = showProd ? productMix(b.S, b.E) : [];
     const mixKg = mix.reduce((s, m) => s + m.kg, 0);
+    const dr = cur.drossRate;
+    const orNull = (x, v) => x.records ? v : null;
 
     return {
       kind: p.kind, S: b.S, E: b.E, days: b.days, prevS: pb.S, prevE: pb.E, prevDays: pb.days, generated: dayKey(),
       preparedBy: rep.preparedBy || '', preparedTitle: titleOf(rep), comments: rep.comments || {},
+      options: { completeness: !!cp, unchanged: all, production: showProd },
       kpi: {
-        breaches: { cur: br.length, prev: pbr.length },
-        crit: { cur: sum(br, 'crit'), prev: sum(pbr, 'crit') },
-        completeness: { cur: completenessShare(cp), prev: completenessShare(pcp) },
-        tonnes: { cur: cur.records ? cur.tonnes : null, prev: prev.records ? prev.tonnes : null },
+        tonnes: { cur: orNull(cur, cur.tonnes), prev: orNull(prev, prev.tonnes) },
+        jigs: { cur: cur.jigs, prev: prev.jigs },
+        zincKg: { cur: cur.zincKg > 0 ? cur.zincKg : null, prev: prev.zincKg > 0 ? prev.zincKg : null },
         zincPerT: { cur: cur.zincPerT, prev: prev.zincPerT },
-        dross: { cur: cur.records ? cur.dross : null, prev: prev.records ? prev.dross : null }
+        drossExp: { cur: cur.drossExpected, prev: prev.drossExpected },
+        tanksOut: { cur: F.out, prev: F.prevOut, of: shownTanks().length }
       },
-      readings: rows.length,
-      breaches: br.map(x => ({ tank: tankName(x.tankId), param: paramLabel(x.key), unit: x.p.unit || '', n: x.n, bad: x.bad, crit: x.crit,
+      dross: { removed: orNull(cur, cur.dross),
+        basis: dr ? { rate: dr.rate, n: dr.n, dates: dr.dates, dross: dr.dross, tonnes: dr.tonnes } : null },
+      readings: F.rows.length,
+      breaches: F.br.map(x => ({ tank: tankName(x.tankId), param: paramLabel(x.key), unit: x.p.unit || '', n: x.n, bad: x.bad, crit: x.crit,
         worst: x.worst, worstDate: x.worstDate, last: x.last, lastDate: x.lastDate, lastTier: x.lastTier,
         range: T() ? T().rangeOf(x.p) : '' })),
-      completeness: cp.map(x => ({ tank: tankName(x.tankId),
+      inStandard: st.ok.map(tankName),
+      noReading: st.none.map(tankName),
+      excluded: reportTanks().filter(tk => !included(tk.id)).map(tk => tankName(tk.id)),
+      completeness: cp && cp.map(x => ({ tank: tankName(x.tankId),
         schedule: t('wk.every', { n: x.sc.every, p: x.sc.params.map(paramLabel).join(' · ') }),
         expected: x.expected, full: x.full, partial: x.partial, pct: x.pct == null ? null : x.pct / 100 })),
-      events: events(b.S, b.E).map(x => ({ date: x.date, tank: x.tankId != null ? tankName(x.tankId) : '—', type: x.type, detail: x.detail })),
-      followups: { n: fu.done.length, kinds: Object.keys(fu.byKind).map(k => t('tk.kind.' + k) + ' ' + fu.byKind[k]).join(' · ') },
-      postponed: fu.postponed.map(r => ({ title: r.title || '', reason: r.reason || '', until: r.until || '' })),
-      maint: (typeof tanks !== 'undefined' ? tanks : []).filter(tk => tk.status === 'maintenance' || tk.status === 'out_of_service')
-        .map(tk => ({ tank: tankName(tk.id), status: t('st.' + tk.status), note: tk.note || '' })),
+      completenessShare: cp ? completenessShare(cp) : null,
       cards: cardRows,
-      openCards: A ? A.list().filter(c => c.status !== 'closed').length : 0,
+      quietCards: ch.quiet,
+      openCards: A ? A.list().filter(c => c.status !== 'closed' && included(c.tankId)).length : 0,
       movement: move,
+      still: all ? [] : mv.still.map(x => ({ tank: tankName(x.tankId), param: paramLabel(x.key) })),
       needs: savedNeeds(rep).map(n => ({ priority: n.priority || '', priorityText: n.priority ? t('wk.prio.' + n.priority) : '',
         kind: t('wk.kind.' + n.kind), what: needText(n, 'what'), why: needText(n, 'why'), owner: n.owner || '', due: n.due || '' })),
       production: { cur: cur, prev: prev, partial: cur.records < b.days },
@@ -903,7 +1006,7 @@
       mix: mix.map(m => ({ product: m.product, tonnes: m.kg / 1000, share: mixKg ? m.kg / mixKg : null, n: m.n })),
       materials: materials(b.S, b.E).map(m => ({ name: matLabel(m.mat), q: m.q, unit: m.unit,
         perT: cur.tonnes > 0 ? m.q / cur.tonnes : null, source: Object.keys(m.srcs).map(s => t('wk.src.' + s)).join(' + ') })),
-      notes: { limits: t('wk.n.limits'), maint: t('wk.n.maint'), zinc: t('wk.n.zinc'), money: t('wk.n.money'),
+      notes: { limits: t('wk.n.limits'), full: t('wk.n.full'), zinc: t('wk.n.zinc'), money: t('wk.n.money'),
         partial: cur.records && cur.records < b.days ? t('wk.n.partial', { n: cur.records, d: b.days }) : '' }
     };
   }
@@ -941,6 +1044,8 @@
               '<span><b>' + esc(c.id === 'screen' ? t('wk.x.screen') : t('wk.x.last.' + c.p.kind)) + '</b>' +
               '<small>' + esc(t('wk.pk.' + c.p.kind)) + ' · <bdi dir="ltr">' + esc(rangeText(c.p)) + '</bdi></small></span></label>').join('') +
           '</div>' +
+          '<label class="wk-chk wk-x-acid"><input type="checkbox" id="wk-x-acid"' + (acidIn() ? ' checked' : '') + '> ' +
+            esc(t('wk.x.acid')) + '</label>' +
           '<p class="tk-hint">' + esc(t('wk.x.commentsNote')) + '</p>' +
         '</div>' +
         '<div class="pt-modal-foot">' +
@@ -953,7 +1058,13 @@
     const close = () => wrap.remove();
     wrap.addEventListener('mousedown', e => { if (e.target === wrap) close(); });
     wrap.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', close));
+    // a mixed choice made on the page stays as it is unless the box is touched here
+    const acid = wrap.querySelector('#wk-x-acid');
+    let acidTouched = false;
+    acid.indeterminate = !acidIn() && ACID_TANKS.some(included);
+    acid.addEventListener('change', () => { acidTouched = true; });
     wrap.querySelector('#wk-x-go').addEventListener('click', function () {
+      if (acidTouched) setAcid(acid.checked);
       const pick = wrap.querySelector('input[name="wk-x"]:checked');
       const c = choices[Number(pick ? pick.value : 0)];
       const msg = wrap.querySelector('#wk-x-msg');
@@ -999,11 +1110,9 @@
   database.ref('flux_treatments').on('value', s => { fluxT = s.val() || {}; render(); });
   database.ref('peroxide_treatments').on('value', s => { peroxT = s.val() || {}; render(); });
   database.ref('flux_salt_additions').on('value', s => { saltAdds = s.val() || {}; render(); });
-  database.ref('zinc_bath').on('value', s => { bath = s.val() || {}; render(); });
-  database.ref('calibration').on('value', s => { calib = s.val() || {}; render(); });
-  database.ref('lab_tasks_log').on('value', s => { taskLog = s.val() || {}; render(); });
-  database.ref('lab_tasks').on('value', s => { taskState = s.val() || {}; render(); });
-  ['actions', 'lab_schedule', 'tanks_data', 'tank_specs', 'zinc_daily', 'production/batches', 'inventory']
+  database.ref('report_settings').on('value', s => { settings = s.val() || {}; render(); });
+  // the needs suggestions read calibration and stock through their own pages
+  ['actions', 'lab_schedule', 'tanks_data', 'tank_specs', 'zinc_daily', 'production/batches', 'inventory', 'calibration']
     .forEach(p => database.ref(p).on('value', later));
   if (window.I18N) I18N.onChange(render);
   document.addEventListener('DOMContentLoaded', render);
