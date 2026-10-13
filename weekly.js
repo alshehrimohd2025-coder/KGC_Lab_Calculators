@@ -199,40 +199,70 @@
     return values(readings).filter(r => inRange(r.date, S, E));
   }
 
-  function breaches(rows) {
+  const isBad = tier => tier === 'warn' || tier === 'crit';
+  const reading = v => v != null && v !== '' && isFinite(Number(v)) && Number(v) !== 0;
+
+  /* A parameter's last value up to a day, wherever it was entered. Usually
+     that is the reading log; the tank card also counts, because a value typed
+     there before readings were dated never reached the log and is still what
+     the tank dashboard shows. An undated card value stands only for a period
+     that reaches today, and only when nothing dated exists. */
+  function lastPoint(tk, key, E, all) {
+    let best = null;
+    all.forEach(function (r) {
+      if (Number(r.tankId) !== tk.id || !r.date || r.date > E || !reading(r[key])) return;
+      if (!best || r.date > best.date) best = { date: r.date, v: Number(r[key]) };
+    });
+    if (reading(tk[key])) {
+      const m = tk.measured && tk.measured[key];
+      if (m && m <= E && (!best || m > best.date)) best = { date: m, v: Number(tk[key]) };
+      else if (!m && !best && E >= dayKey()) best = { date: null, v: Number(tk[key]) };
+    }
+    return best;
+  }
+
+  /* One row per parameter that is out of standard on its last reading up to
+     the end of the period — however old that reading is, since a bath nobody
+     re-measured is still the bath it was — or that went out at any reading
+     taken inside the period. */
+  function breaches(S, E) {
     const out = [];
+    const all = values(readings);
     shownTanks().forEach(function (tk) {
       measurable(tk.id).forEach(function (p) {
-        const pts = rows.filter(r => Number(r.tankId) === tk.id && r[p.key] != null && r[p.key] !== '' && Number(r[p.key]) !== 0)
-          .sort((a, b) => a.date < b.date ? -1 : 1);
-        if (!pts.length) return;
-        const bad = pts.filter(r => ['warn', 'crit'].indexOf(evalTier(tk.id, p.key, r[p.key])) !== -1);
-        if (!bad.length) return;
+        const last = lastPoint(tk, p.key, E, all);
+        if (!last) return;
+        const lastTier = evalTier(tk.id, p.key, last.v);
+        const pts = all.filter(r => Number(r.tankId) === tk.id && inRange(r.date, S, E) && reading(r[p.key]));
+        const bad = pts.filter(r => isBad(evalTier(tk.id, p.key, r[p.key])));
+        if (!isBad(lastTier) && !bad.length) return;
         const worst = bad.slice().sort((a, b) => outside(p, Number(b[p.key])) - outside(p, Number(a[p.key])))[0];
-        const last = pts[pts.length - 1];
         out.push({
           tankId: tk.id, key: p.key, p: p, n: pts.length, bad: bad.length,
           crit: bad.filter(r => evalTier(tk.id, p.key, r[p.key]) === 'crit').length,
-          worst: Number(worst[p.key]), worstDate: worst.date,
-          last: Number(last[p.key]), lastDate: last.date, lastTier: evalTier(tk.id, p.key, last[p.key])
+          worst: worst ? Number(worst[p.key]) : null, worstDate: worst ? worst.date : null,
+          last: last.v, lastDate: last.date, lastTier: lastTier, old: !last.date || last.date < S
         });
       });
     });
-    return out.sort((a, b) => b.crit - a.crit || b.bad - a.bad);
+    // in line order, as the plant reads its tanks; the ones back in standard after them
+    return out.filter(x => isBad(x.lastTier)).concat(out.filter(x => !isBad(x.lastTier)));
   }
 
-  /** Tanks in the report that stayed in standard, and those with no reading at all. */
-  function standing(rows, br) {
+  /** Tanks in the report that are within standard on their last reading (with its day), and those never measured. */
+  function standing(br, E) {
     const out = { ok: [], none: [] };
+    const all = values(readings);
     shownTanks().forEach(function (tk) {
-      if (br.some(x => x.tankId === tk.id)) return;
-      const keys = measurable(tk.id).map(p => p.key);
-      const seen = rows.some(r => Number(r.tankId) === tk.id && keys.some(k => r[k] != null && r[k] !== '' && Number(r[k]) !== 0));
-      out[seen ? 'ok' : 'none'].push(tk.id);
+      if (br.some(x => x.tankId === tk.id && isBad(x.lastTier))) return;
+      const dates = measurable(tk.id).map(p => lastPoint(tk, p.key, E, all)).filter(Boolean).map(x => x.date || '');
+      if (!dates.length) out.none.push(tk.id);
+      else out.ok.push({ tankId: tk.id, date: dates.sort().pop() || null });
     });
     return out;
   }
-  const tanksOut = br => br.filter((x, i) => br.findIndex(y => y.tankId === x.tankId) === i).length;
+  const outTankIds = br => br.filter(x => isBad(x.lastTier)).map(x => x.tankId)
+    .filter((id, i, a) => a.indexOf(id) === i);
 
   function completeness(S, E, days) {
     const out = [];
@@ -278,17 +308,16 @@
     const all = values(readings);
     shownTanks().forEach(function (tk) {
       measurable(tk.id).forEach(function (p) {
-        const pts = all.filter(r => Number(r.tankId) === tk.id && r[p.key] != null && r[p.key] !== '' && Number(r[p.key]) !== 0)
-          .sort((a, b) => a.date < b.date ? -1 : 1);
-        const startPt = pts.filter(r => r.date < S).pop();
-        const endPt = pts.filter(r => r.date <= E).pop();
+        const startPt = lastPoint(tk, p.key, addDays(S, -1), all);
+        const endPt = lastPoint(tk, p.key, E, all);
         if (!endPt) return;
-        const bad = r => r && ['warn', 'crit'].indexOf(evalTier(tk.id, p.key, r[p.key])) !== -1;
-        const item = { tankId: tk.id, key: p.key, from: startPt ? Number(startPt[p.key]) : null,
-          to: Number(endPt[p.key]), toDate: endPt.date, range: T() ? T().rangeOf(p) : '' };
+        const bad = pt => !!pt && isBad(evalTier(tk.id, p.key, pt.v));
+        const item = { tankId: tk.id, key: p.key, from: startPt ? startPt.v : null,
+          to: endPt.v, toDate: endPt.date, range: T() ? T().rangeOf(p) : '' };
         if (bad(startPt) && !bad(endPt)) out.closed.push(item);
-        else if (!bad(startPt) && bad(endPt) && endPt.date >= S) out.opened.push(item);
-        else if (bad(startPt) && bad(endPt)) out.still.push(item);
+        else if (!bad(startPt) && bad(endPt) && endPt.date && endPt.date >= S) out.opened.push(item);
+        // an undated card value cannot be placed in the period, so it is not news
+        else if (bad(endPt)) out.still.push(item);
       });
     });
     return out;
@@ -480,8 +509,8 @@
     const b = bounds(p), pb = bounds(shift(p, -1));
     const ids = shownTanks().map(tk => tk.id);
     const rows = rowsIn(b.S, b.E).filter(r => ids.indexOf(Number(r.tankId)) !== -1);
-    const br = breaches(rows), pbr = breaches(rowsIn(pb.S, pb.E));
-    return { b: b, rows: rows, br: br, out: tanksOut(br), prevOut: tanksOut(pbr),
+    const br = breaches(b.S, b.E);
+    return { b: b, rows: rows, br: br, out: outTankIds(br).length, prevOut: outTankIds(breaches(pb.S, pb.E)).length,
       cur: production(b.S, b.E), prev: production(pb.S, pb.E) };
   }
 
@@ -511,18 +540,21 @@
 
   function statusHTML(F, rep) {
     const b = F.b, rows = F.rows, br = F.br;
-    const st = standing(rows, br);
+    const st = standing(br, b.E);
     const off = reportTanks().filter(tk => !included(tk.id)).map(tk => tk.id);
     const names = ids => ids.map(tankName).join(' · ');
+    const day = (d, old) => d ? '<small' + (old ? ' class="wk-old"' : '') + '>' + esc(d) + '</small>'
+      : '<small class="wk-old">' + esc(t('wk.noDate')) + '</small>';
 
     const brTable = br.length ? table(
-      [t('lab.col.tank'), t('spec.param'), t('wk.col.outOf'), t('wk.col.worst'), t('wk.col.last'), t('ac.col.range')],
+      [t('lab.col.tank'), t('spec.param'), t('wk.col.last'), t('ac.col.status'), t('ac.col.range'), t('wk.col.outOf'), t('wk.col.worst')],
       br.map(x => '<tr><td class="name">' + esc(tankName(x.tankId)) + '</td><td>' + esc(paramLabel(x.key)) + '</td>' +
-        '<td class="num">' + x.bad + ' / ' + x.n + (x.crit ? ' <small style="color:var(--crit)">(' + esc(t('wk.critN', { n: x.crit })) + ')</small>' : '') + '</td>' +
-        '<td class="num">' + tv(x.tankId, x.key, x.worst) + ' <small>' + esc(x.worstDate) + '</small></td>' +
-        '<td class="num">' + tv(x.tankId, x.key, x.last) + ' <small>' + esc(x.lastDate) + '</small></td>' +
-        '<td class="num" dir="ltr">' + esc(T() ? T().rangeOf(x.p) : '') + '</td></tr>'))
-      : '<div class="att-clear"><span class="att-ok">✓</span>' + esc(t(rows.length ? 'wk.noBreach' : 'wk.noReadings')) + '</div>';
+        '<td class="num">' + tv(x.tankId, x.key, x.last) + ' ' + day(x.lastDate, x.old) + '</td>' +
+        '<td>' + esc(t(isBad(x.lastTier) ? 'wk.tier.' + x.lastTier : 'wk.tier.back')) + '</td>' +
+        '<td class="num" dir="ltr">' + esc(T() ? T().rangeOf(x.p) : '') + '</td>' +
+        '<td class="num">' + (x.n ? x.bad + ' / ' + x.n + (x.crit ? ' <small style="color:var(--crit)">(' + esc(t('wk.critN', { n: x.crit })) + ')</small>' : '') : '—') + '</td>' +
+        '<td class="num">' + (x.worst != null ? tv(x.tankId, x.key, x.worst) + ' ' + day(x.worstDate) : '—') + '</td></tr>'))
+      : '<div class="att-clear"><span class="att-ok">✓</span>' + esc(t(st.ok.length ? 'wk.noBreach' : 'wk.noReadings')) + '</div>';
 
     let cpPart = '';
     if (opt('completeness')) {
@@ -544,7 +576,9 @@
     return '<section class="wk-sec">' +
       '<h3 class="wk-h"><span class="wk-n">1</span>' + esc(t('wk.q1')) + '</h3>' +
       '<p class="wk-sub">' + esc(t('wk.h.breaches', { n: rows.length })) + '</p>' + brTable +
-      (st.ok.length ? '<p class="wk-line ok"><b>' + esc(t('wk.st.ok')) + '</b> ' + esc(names(st.ok)) + '</p>' : '') +
+      (br.some(x => x.old) ? '<p class="wk-note">' + esc(t('wk.n.old')) + '</p>' : '') +
+      (st.ok.length ? '<p class="wk-line ok"><b>' + esc(t('wk.st.ok')) + '</b> ' +
+        esc(st.ok.map(x => tankName(x.tankId) + ' (' + (x.date || t('wk.noDate')) + ')').join(' · ')) + '</p>' : '') +
       (st.none.length ? '<p class="wk-line"><b>' + esc(t('wk.st.none')) + '</b> ' + esc(names(st.none)) + '</p>' : '') +
       (off.length ? '<p class="wk-note">' + esc(t('wk.st.off', { list: names(off) })) + '</p>' : '') +
       cpPart +
@@ -757,7 +791,9 @@
         '</div>' +
         '<button class="btn mini ghost" id="wk-prev">' + esc(t('wk.b.prev.' + period.kind)) + '</button>' +
         '<label class="wk-from"><span>' + esc(t('wk.from')) + '</span>' + pick + '</label>' +
-        '<button class="btn mini ghost" id="wk-next"' + (b.E >= dayKey() ? ' disabled' : '') + '>' + esc(t('wk.b.next.' + period.kind)) + '</button>' +
+        '<button class="btn mini ghost" id="wk-next"' + (shift(period, 1).start > dayKey() ? ' disabled' : '') + '>' + esc(t('wk.b.next.' + period.kind)) + '</button>' +
+        '<button class="btn mini ghost" id="wk-today"' + (samePeriod(period, { kind: 'day', start: dayKey() }) ? ' disabled' : '') + '>' +
+          esc(t('wk.b.today')) + '</button>' +
         '<span style="flex:1"></span>' +
         '<button class="btn ghost" id="wk-print">' + esc(t('wk.b.print')) + '</button>' +
         '<button class="btn" id="wk-excel">' + esc(t('wk.b.excel')) + '</button>' +
@@ -773,7 +809,7 @@
       '<div class="wk-doc">' +
         '<header class="wk-head">' +
           '<h2>' + esc(t('wk.docTitle.' + period.kind)) + '</h2>' +
-          '<p class="wk-period">' + esc(periodText(period)) + '</p>' +
+          '<p class="wk-period">' + esc(periodText(period)) + (b.E >= dayKey() ? ' — ' + esc(t('wk.soFar')) : '') + '</p>' +
           '<p class="wk-meta">' + esc(t('wk.generated', { d: dayKey() })) + ' · ' + esc(t('wk.preparedBy')) + ' ' +
             (canEdit() ? '<input type="text" id="wk-by" class="no-print-input" maxlength="80" value="' + esc(rep.preparedBy || '') + '">' +
               '<input type="text" id="wk-title" class="no-print-input" maxlength="80" placeholder="' + esc(t('wk.jobTitle')) + '" value="' + esc(titleOf(rep)) + '">' : '') +
@@ -809,6 +845,8 @@
     });
     if (prev) prev.addEventListener('click', () => go(shift(period, -1)));
     if (next) next.addEventListener('click', () => go(shift(period, 1)));
+    const today = mount.querySelector('#wk-today');
+    if (today) today.addEventListener('click', () => go({ kind: 'day', start: dayKey() }));
     if (start) start.addEventListener('change', function () {
       if (period.kind === 'month' && /^\d{4}-\d{2}$/.test(start.value)) go({ kind: 'month', start: start.value + '-01' });
       else if (/^\d{4}-\d{2}-\d{2}$/.test(start.value)) go({ kind: period.kind, start: start.value });
@@ -930,7 +968,7 @@
     const cur = F.cur, prev = F.prev;
     const all = opt('unchanged'), showProd = opt('production');
     const ch = changes(b), mv = ch.mv;
-    const st = standing(F.rows, F.br);
+    const st = standing(F.br, b.E);
     const cp = opt('completeness') ? completeness(b.S, b.E, b.days) : null;
 
     const cardRows = [];
@@ -971,6 +1009,7 @@
 
     return {
       kind: p.kind, S: b.S, E: b.E, days: b.days, prevS: pb.S, prevE: pb.E, prevDays: pb.days, generated: dayKey(),
+      generatedAt: pad(new Date().getHours()) + ':' + pad(new Date().getMinutes()), open: b.E >= dayKey(),
       preparedBy: rep.preparedBy || '', preparedTitle: titleOf(rep), comments: rep.comments || {},
       options: { completeness: !!cp, unchanged: all, production: showProd },
       kpi: {
@@ -985,9 +1024,10 @@
         basis: dr ? { rate: dr.rate, n: dr.n, dates: dr.dates, dross: dr.dross, tonnes: dr.tonnes } : null },
       readings: F.rows.length,
       breaches: F.br.map(x => ({ tank: tankName(x.tankId), param: paramLabel(x.key), unit: x.p.unit || '', n: x.n, bad: x.bad, crit: x.crit,
-        worst: x.worst, worstDate: x.worstDate, last: x.last, lastDate: x.lastDate, lastTier: x.lastTier,
+        worst: x.worst, worstDate: x.worstDate, last: x.last, lastDate: x.lastDate, lastTier: x.lastTier, old: x.old,
         range: T() ? T().rangeOf(x.p) : '' })),
-      inStandard: st.ok.map(tankName),
+      outTanks: outTankIds(F.br).map(tankName),
+      inStandard: st.ok.map(x => ({ tank: tankName(x.tankId), date: x.date })),
       noReading: st.none.map(tankName),
       excluded: reportTanks().filter(tk => !included(tk.id)).map(tk => tankName(tk.id)),
       completeness: cp && cp.map(x => ({ tank: tankName(x.tankId),
@@ -1027,6 +1067,9 @@
   /** Ask which period to send, then build and download the file. */
   function openExport() {
     const choices = [{ id: 'screen', p: period }];
+    // today so far, for a report sent before the day is over
+    const today = { kind: 'day', start: dayKey() };
+    if (!samePeriod(today, period)) choices.push({ id: 'today', p: today });
     ['day', 'week', 'month'].forEach(function (k) {
       const p = defaultPeriod(k);
       if (!samePeriod(p, period)) choices.push({ id: 'last-' + k, p: p });
@@ -1041,7 +1084,7 @@
           '<p class="tk-hint">' + esc(t('wk.x.sub')) + '</p>' +
           '<div class="wk-x-list">' + choices.map((c, i) =>
             '<label class="wk-x-opt"><input type="radio" name="wk-x" value="' + i + '"' + (i ? '' : ' checked') + '>' +
-              '<span><b>' + esc(c.id === 'screen' ? t('wk.x.screen') : t('wk.x.last.' + c.p.kind)) + '</b>' +
+              '<span><b>' + esc(c.id === 'screen' ? t('wk.x.screen') : c.id === 'today' ? t('wk.x.today') : t('wk.x.last.' + c.p.kind)) + '</b>' +
               '<small>' + esc(t('wk.pk.' + c.p.kind)) + ' · <bdi dir="ltr">' + esc(rangeText(c.p)) + '</bdi></small></span></label>').join('') +
           '</div>' +
           '<label class="wk-chk wk-x-acid"><input type="checkbox" id="wk-x-acid"' + (acidIn() ? ' checked' : '') + '> ' +
