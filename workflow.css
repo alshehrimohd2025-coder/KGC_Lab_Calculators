@@ -232,3 +232,35 @@ html:not(.authed) .wk-comment.empty { display: none; }
   html.print-weekly table { min-width: 0; font-size: 11.5px; }
   html.print-weekly .pt-stat { box-shadow: none; }
 }
+
+/* ---------- report period, priority and Excel export ---------- */
+.wk-kinds { display: inline-flex; gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--recess); }
+.wk-kinds .btn.mini { border-radius: 999px; }
+.wk-mail {
+  margin: 0 0 16px; padding: 14px 16px; border: 1px solid var(--accent-line);
+  border-radius: var(--r-md); background: var(--accent-soft);
+}
+.wk-mail textarea {
+  width: 100%; box-sizing: border-box; padding: 10px 12px; font-size: 12.5px; line-height: 1.6;
+  font-family: var(--mono); direction: ltr; text-align: left; resize: vertical;
+  border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface); color: var(--ink);
+}
+.wk-x-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.wk-x-opt {
+  display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface);
+}
+.wk-x-opt:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent); }
+.wk-x-opt span { display: flex; flex-direction: column; gap: 2px; }
+.wk-x-opt small { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); }
+.wk-prio, .wk-prio-sel {
+  --pc: var(--ink-3);
+  font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+  color: var(--pc); background: color-mix(in srgb, var(--pc) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pc) 40%, transparent);
+}
+.wk-prio-sel { font-family: var(--sans); cursor: pointer; }
+.wk-prio.p-high, .wk-prio-sel.p-high { --pc: var(--crit); }
+.wk-prio.p-medium, .wk-prio-sel.p-medium { --pc: var(--warn); }
+.wk-prio.p-low, .wk-prio-sel.p-low { --pc: var(--accent); }
+@media print { html.print-weekly .wk-mail { display: none !important; } }

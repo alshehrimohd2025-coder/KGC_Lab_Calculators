@@ -534,6 +534,8 @@
     _rows: collectRows,
     _cols: columnsFor,
     _events: collectEvents,
-    _scopes: SCOPES
+    _scopes: SCOPES,
+    // the zip writer, shared with the weekly report's Excel export
+    _zip: zip
   };
 })();

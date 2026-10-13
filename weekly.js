@@ -1,11 +1,15 @@
 /* ============================================================
-   Weekly report for management
+   Management report — a day, a week or a month
    ------------------------------------------------------------
    Built from the records, not typed up: the readings log, the
    before/after cards, the addition and treatment logs, the
    follow-ups closed on the tasks page, and the production report.
    The engineer reads it, adds a comment under each part and a list
-   of what is needed, then prints it (or saves it as PDF).
+   of what is needed, then prints it or exports it to Excel
+   (weekly_xlsx.js) to send by email.
+
+   The period is a day, a Sunday-to-Saturday week or a calendar month.
+   Each opens on the last complete one: yesterday, last week, last month.
 
    It answers four questions, in this order:
      1. How were the baths?   breaches, and how complete the analysis was
@@ -24,9 +28,10 @@
    Gaps are said out loud: days with no production data, readings judged
    against today's limits, totals that are estimates.
 
-   Stored at weekly_reports/<weekStart>:
-     { preparedBy, comments: { summary, status, done, changed, needs },
-       needs: { <pushId>: { kind, what, why, owner, due } } }
+   Stored at weekly_reports/<key>, where the key is the week's first day
+   (as it always was), day_<date> for a day, or month_<YYYY-MM> for a month:
+     { preparedBy, comments: { summary, status, done, changed, needs, consumption },
+       needs: { <pushId>: { kind, priority, what, why, owner, due } } }
 
    Depends on globals from index.html: database, tanks, tankLabel(),
    IS_EDITOR, IS_AUTHED, t(), and KGCSpecs / KGCTasks / KGCActions /
@@ -42,10 +47,13 @@
 
   const LOGGED = ['ph', 'fe', 'baume', 'acidPercent', 'sg', 'conc', 'temp', 'ec', 'zn', 'salt'];
   const NEED_KINDS = ['decision', 'purchase', 'maintenance'];
+  const PRIORITIES = ['high', 'medium', 'low'];
+  const PERIOD_KINDS = ['day', 'week', 'month'];
 
   let readings = {}, renewals = {}, acidAdds = {}, fluxT = {}, peroxT = {}, saltAdds = {}, bath = {}, calib = {},
       taskLog = {}, taskState = {}, reports = {};
-  let weekStart = null;
+  let period = null;            // { kind: 'day' | 'week' | 'month', start: 'YYYY-MM-DD' }
+  let exported = null;          // { file, text } — the email text shown after a download
   let held = false;
 
   /* ---------------- helpers ---------------- */
@@ -57,6 +65,7 @@
   const dayKey = d => { d = d || new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
   const parse = s => new Date(s + 'T00:00:00');
   const addDays = (s, n) => { const d = parse(s); d.setDate(d.getDate() + n); return dayKey(d); };
+  const daysBetween = (a, b) => Math.round((parse(b) - parse(a)) / 86400000);
   const canEdit = () => (typeof IS_EDITOR !== 'undefined' && IS_EDITOR) &&
                         (typeof IS_AUTHED !== 'undefined' && IS_AUTHED);
   const num = v => { const n = Number(v); return isFinite(n) ? n : 0; };
@@ -67,7 +76,63 @@
   const T = () => window.KGCTasks;
   const paramLabel = k => (T() ? T().paramLabel(k) : k);
   const tsDay = ts => { const n = typeof ts === 'number' ? ts : Date.parse(ts); return isFinite(n) ? dayKey(new Date(n)) : ''; };
-  const inWeek = (d, S, E) => !!d && d >= S && d <= E;
+  const inRange = (d, S, E) => !!d && d >= S && d <= E;
+  const prioRank = p => { const i = PRIORITIES.indexOf(p); return i === -1 ? PRIORITIES.length : i; };
+
+  /* ---------------- periods ---------------- */
+
+  /** First day of the last week that has fully ended (weeks run Sunday to Saturday). */
+  function lastWeekStart(today) {
+    const back = ((parse(today).getDay() + 1) % 7) || 7;     // days back to the last Saturday
+    return addDays(addDays(today, -back), -6);
+  }
+
+  /** The last complete period of a kind: yesterday, last week, last month. */
+  function defaultPeriod(kind) {
+    const today = dayKey();
+    if (kind === 'day') return { kind: 'day', start: addDays(today, -1) };
+    if (kind === 'month') {
+      const d = parse(today); d.setDate(1); d.setMonth(d.getMonth() - 1);
+      return { kind: 'month', start: dayKey(d) };
+    }
+    return { kind: 'week', start: lastWeekStart(today) };
+  }
+
+  function bounds(p) {
+    if (p.kind === 'day') return { S: p.start, E: p.start, days: 1 };
+    if (p.kind === 'month') {
+      const d = parse(p.start); d.setMonth(d.getMonth() + 1); d.setDate(0);
+      const E = dayKey(d);
+      return { S: p.start, E: E, days: daysBetween(p.start, E) + 1 };
+    }
+    return { S: p.start, E: addDays(p.start, 6), days: 7 };
+  }
+
+  function shift(p, n) {
+    if (p.kind === 'day') return { kind: 'day', start: addDays(p.start, n) };
+    if (p.kind === 'month') {
+      const d = parse(p.start); d.setMonth(d.getMonth() + n);
+      return { kind: 'month', start: dayKey(d) };
+    }
+    return { kind: 'week', start: addDays(p.start, 7 * n) };
+  }
+
+  // a week keeps the bare date as its key, so reports written before days
+  // and months existed are still found
+  const reportKey = p => p.kind === 'week' ? p.start
+    : p.kind === 'day' ? 'day_' + p.start : 'month_' + p.start.slice(0, 7);
+  const samePeriod = (a, b) => !!a && !!b && a.kind === b.kind && a.start === b.start;
+
+  // dates in an isolated left-to-right run, so they read the same inside Arabic text
+  function rangeText(p) {
+    const b = bounds(p);
+    return p.kind === 'day' ? b.S : b.S + ' → ' + b.E;
+  }
+
+  function periodText(p) {
+    const b = bounds(p);
+    return p.kind === 'day' ? t('wk.periodDay', { a: b.S }) : t('wk.period', { a: b.S, b: b.E });
+  }
   const values = o => Object.keys(o || {}).map(k => Object.assign({ _k: k }, o[k])).filter(Boolean);
 
   function measurable(tankId) { return T() ? T().measurable(tankId) : []; }
@@ -88,8 +153,8 @@
 
   /* ---------------- 1. status ---------------- */
 
-  function weekRows(S, E) {
-    return values(readings).filter(r => inWeek(r.date, S, E));
+  function rowsIn(S, E) {
+    return values(readings).filter(r => inRange(r.date, S, E));
   }
 
   function breaches(rows) {
@@ -115,23 +180,40 @@
     return out.sort((a, b) => b.crit - a.crit || b.bad - a.bad);
   }
 
-  function completeness(rows) {
+  function completeness(S, E, days) {
     const out = [];
     if (typeof tanks === 'undefined' || !T()) return out;
+    const all = values(readings);
     tanks.slice().sort((a, b) => a.id - b.id).forEach(function (tk) {
       const sc = T().scheduleFor(tk.id);
       if (sc.off || !sc.params.length) return;
-      const expected = Math.max(1, Math.floor(7 / sc.every));
+      const mine = all.filter(r => Number(r.tankId) === tk.id);
+      const have = r => sc.params.filter(k => r[k] != null && r[k] !== '').length;
       let full = 0, partial = 0;
-      rows.filter(r => Number(r.tankId) === tk.id).forEach(function (r) {
-        const have = sc.params.filter(k => r[k] != null && r[k] !== '').length;
-        if (have === sc.params.length) full++;
-        else if (have > 0) partial++;
+      mine.filter(r => inRange(r.date, S, E)).forEach(function (r) {
+        const n = have(r);
+        if (n === sc.params.length) full++;
+        else if (n > 0) partial++;
       });
+      /* Samples the schedule asked for in this window. A window shorter than
+         the interval (a single day against a weekly schedule) owes one only if
+         a sample fell due inside it; otherwise the tank is simply not due. */
+      let expected = Math.floor(days / sc.every);
+      if (!expected) {
+        const last = mine.filter(r => r.date < S && have(r) === sc.params.length).map(r => r.date).sort().pop();
+        expected = (!last || addDays(last, sc.every) <= E) ? 1 : 0;
+      }
       out.push({ tankId: tk.id, sc: sc, expected: expected, full: full, partial: partial,
-        pct: Math.min(100, Math.round(full / expected * 100)) });
+        pct: expected ? Math.min(100, Math.round(full / expected * 100)) : null });
     });
     return out;
+  }
+
+  /** Share of the samples due that were taken in full, or null when none was due. */
+  function completenessShare(list) {
+    const exp = list.reduce((s, x) => s + x.expected, 0);
+    const got = list.reduce((s, x) => s + Math.min(x.full, x.expected), 0);
+    return exp ? got / exp : null;
   }
 
   /* ---------------- 2. what was done ---------------- */
@@ -143,51 +225,51 @@
 
     if (A) A.list().forEach(function (c) {
       const a = c.action;
-      if (!a || !inWeek(String(a.at || '').slice(0, 10), S, E)) return;
+      if (!a || !inRange(String(a.at || '').slice(0, 10), S, E)) return;
       const sug = a.suggestedQty != null ? t('wk.ev.suggested', { q: fmt(a.suggestedQty) + ' ' + (a.suggestedUnit || '') }) : '';
       add(String(a.at).slice(0, 10), c.tankId, t('wk.type.card'),
         A.materialText(a) + ' — ' + t('wk.ev.actual', { q: fmt(a.actualQty) + ' ' + (a.actualUnit || '') }) +
         (sug ? ' · ' + sug : '') + (c.evaluation ? ' · ' + t('ac.res.' + c.evaluation.result) : ' · ' + t('wk.ev.noEval')), true);
     });
     values(renewals).forEach(function (r) {
-      if (!inWeek(r.date, S, E)) return;
+      if (!inRange(r.date, S, E)) return;
       add(r.date, r.tankId, t('lab.type.' + r.type), (r.qty ? fmt(r.qty) + ' ' + (r.unit || '') : '') + (r.note ? ' — ' + r.note : ''));
     });
     values(acidAdds).forEach(function (r) {
-      if (!inWeek(r.date, S, E)) return;
+      if (!inRange(r.date, S, E)) return;
       add(r.date, r.tankId, t('wk.type.acid'), fmt(r.tons) + ' t' +
         (r.before != null ? ' · ' + t('wk.ev.before', { v: fmt(r.before) + '%' }) : '') + (r.operator ? ' · ' + r.operator : ''));
     });
     values(fluxT).forEach(function (r) {
-      if (!inWeek(r.date, S, E)) return;
+      if (!inRange(r.date, S, E)) return;
       add(r.date, 10, t('wk.type.ammonia'), fmt(r.liters) + ' L · pH ' + fmt(r.phBefore) + ' → ' + fmt(r.phAfter) + (r.operator ? ' · ' + r.operator : ''));
     });
     values(peroxT).forEach(function (r) {
-      if (!inWeek(r.date, S, E)) return;
+      if (!inRange(r.date, S, E)) return;
       add(r.date, 10, t('wk.type.peroxide'), fmt(r.liters) + ' L · Fe ' + fmt(r.feBefore) + ' → ' + fmt(r.feAfter) + ' g/L' + (r.operator ? ' · ' + r.operator : ''));
     });
     values(saltAdds).forEach(function (r) {
-      if (!inWeek(r.date, S, E)) return;
+      if (!inRange(r.date, S, E)) return;
       add(r.date, 10, t('wk.type.salt'), fmt(r.kg) + ' kg' +
         (r.beBefore != null ? ' · Bé ' + fmt(r.beBefore) + ' → ' + (r.beAfter != null ? fmt(r.beAfter) : '?') : ''));
     });
     values(bath).forEach(function (r) {
-      if (!inWeek(r.date, S, E)) return;
+      if (!inRange(r.date, S, E)) return;
       add(r.date, 12, t('wk.type.bath'), t('wk.ev.bath'));
     });
     Object.keys(calib).forEach(function (k) {
       const r = calib[k];
-      if (!r || !inWeek(r.last, S, E)) return;
+      if (!r || !inRange(r.last, S, E)) return;
       add(r.last, null, t('wk.type.calib'), t('kettle.inst.' + k) + (r.due ? ' · ' + t('wk.ev.nextDue', { d: r.due }) : '') + (r.by ? ' · ' + r.by : ''));
     });
     return out.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
   }
 
   function followUps(S, E) {
-    const done = values(taskLog).filter(r => inWeek(tsDay(r.ts), S, E));
+    const done = values(taskLog).filter(r => inRange(tsDay(r.ts), S, E));
     const byKind = {};
     done.forEach(r => { byKind[r.kind] = (byKind[r.kind] || 0) + 1; });
-    const postponed = values(taskState).filter(r => r.status === 'postponed' && inWeek(tsDay(r.ts), S, E));
+    const postponed = values(taskState).filter(r => r.status === 'postponed' && inRange(tsDay(r.ts), S, E));
     return { done: done, byKind: byKind, postponed: postponed };
   }
 
@@ -221,8 +303,8 @@
     if (!A) return [];
     return A.list().filter(function (c) {
       const actDay = c.action ? String(c.action.at || '').slice(0, 10) : '';
-      const afterIn = A.aftersOf(c).some(x => inWeek(String(x.at || '').slice(0, 10), S, E));
-      return inWeek(actDay, S, E) || afterIn;
+      const afterIn = A.aftersOf(c).some(x => inRange(String(x.at || '').slice(0, 10), S, E));
+      return inRange(actDay, S, E) || afterIn;
     });
   }
 
@@ -262,11 +344,26 @@
     return out;
   }
 
+  /* A suggestion added to the list keeps an English copy of its wording, so
+     an English export never shows text the engineer only saw in Arabic. */
+  function pendingSuggestions(rep) {
+    const saved = values(rep.needs);
+    const here = suggestions();
+    const en = window.I18N && I18N.withLang ? I18N.withLang('en', suggestions) : here;
+    return here.map((s, i) => ({ s: s, en: en[i] || s }))
+      .filter(x => !saved.some(n => n.what === x.s.what || (n.whatEn && n.whatEn === x.en.what)));
+  }
+
+  function needText(n, f) {
+    const en = window.I18N && I18N.lang === 'en';
+    return (en && n[f + 'En']) || n[f] || '';
+  }
+
   /* ---------------- production and consumption ---------------- */
 
   function production(S, E) {
     const Z = window.KGCZinc;
-    const days = Object.values((Z && Z._days && Z._days()) || {}).filter(d => d && inWeek(d.date, S, E));
+    const days = Object.values((Z && Z._days && Z._days()) || {}).filter(d => d && inRange(d.date, S, E));
     let kg = 0, zn = 0, dross = 0, release = 0, prodDays = 0;
     days.forEach(function (d) {
       const k = num(d.dayTon) + num(d.nightTon);
@@ -285,7 +382,7 @@
     if (!P || !P._batches) return [];
     const by = {};
     Object.values(P._batches() || {}).forEach(function (b) {
-      if (!b || !inWeek(tsDay(b.startTs), S, E)) return;
+      if (!b || !inRange(tsDay(b.startTs), S, E)) return;
       const k = b.product || '—';
       by[k] = by[k] || { product: k, kg: 0, n: 0 };
       by[k].kg += num(b.weight); by[k].n++;
@@ -306,18 +403,18 @@
     };
     const logged = {};
     const mark = (mat, tankId, date) => { logged[mat + '|' + tankId + '|' + date] = 1; };
-    values(acidAdds).forEach(r => { if (inWeek(r.date, S, E)) { add('hcl', 't', num(r.tons), 'log'); mark('hcl', r.tankId, r.date); } });
+    values(acidAdds).forEach(r => { if (inRange(r.date, S, E)) { add('hcl', 't', num(r.tons), 'log'); mark('hcl', r.tankId, r.date); } });
     values(renewals).forEach(r => {
-      if (inWeek(r.date, S, E) && r.type === 'addition') { add('hcl', r.unit || 'L', num(r.qty), 'log'); mark('hcl', r.tankId, r.date); }
+      if (inRange(r.date, S, E) && r.type === 'addition') { add('hcl', r.unit || 'L', num(r.qty), 'log'); mark('hcl', r.tankId, r.date); }
     });
-    values(fluxT).forEach(r => { if (inWeek(r.date, S, E)) { add('ammonia', 'L', num(r.liters), 'log'); mark('ammonia', 10, r.date); } });
-    values(peroxT).forEach(r => { if (inWeek(r.date, S, E)) { add('peroxide', 'L', num(r.liters), 'log'); mark('peroxide', 10, r.date); } });
-    values(saltAdds).forEach(r => { if (inWeek(r.date, S, E)) { add('flux_salt', 'kg', num(r.kg), 'log'); mark('flux_salt', 10, r.date); } });
+    values(fluxT).forEach(r => { if (inRange(r.date, S, E)) { add('ammonia', 'L', num(r.liters), 'log'); mark('ammonia', 10, r.date); } });
+    values(peroxT).forEach(r => { if (inRange(r.date, S, E)) { add('peroxide', 'L', num(r.liters), 'log'); mark('peroxide', 10, r.date); } });
+    values(saltAdds).forEach(r => { if (inRange(r.date, S, E)) { add('flux_salt', 'kg', num(r.kg), 'log'); mark('flux_salt', 10, r.date); } });
     const A = window.KGCActions;
     if (A) A.list().forEach(function (c) {
       const a = c.action;
       const d = a ? String(a.at || '').slice(0, 10) : '';
-      if (!a || !inWeek(d, S, E) || logged[a.material + '|' + c.tankId + '|' + d]) return;
+      if (!a || !inRange(d, S, E) || logged[a.material + '|' + c.tankId + '|' + d]) return;
       add(a.material === 'other' ? (a.materialOther || 'other') : a.material, a.actualUnit || '', num(a.actualQty), 'card');
     });
     return Object.values(tot);
@@ -351,13 +448,12 @@
   const TIER_COL = { good: 'var(--accent)', warn: 'var(--warn)', crit: 'var(--crit)' };
   const tv = (tankId, key, v) => '<b style="color:' + (TIER_COL[evalTier(tankId, key, v)] || 'var(--ink)') + '">' + fmt(v) + '</b>';
 
-  function statusHTML(S, E, rep) {
-    const rows = weekRows(S, E);
+  function statusHTML(b, rep) {
+    const rows = rowsIn(b.S, b.E);
     const br = breaches(rows);
-    const cp = completeness(rows);
-    const exp = cp.reduce((s, x) => s + x.expected, 0);
-    const got = cp.reduce((s, x) => s + Math.min(x.full, x.expected), 0);
-    const overall = exp ? Math.round(got / exp * 100) : null;
+    const cp = completeness(b.S, b.E, b.days);
+    const share = completenessShare(cp);
+    const overall = share == null ? null : Math.round(share * 100);
 
     const brTable = br.length ? table(
       [t('lab.col.tank'), t('spec.param'), t('wk.col.outOf'), t('wk.col.worst'), t('wk.col.last'), t('ac.col.range')],
@@ -373,7 +469,8 @@
       cp.map(x => '<tr><td class="name">' + esc(tankName(x.tankId)) + '</td>' +
         '<td>' + esc(t('wk.every', { n: x.sc.every, p: x.sc.params.map(paramLabel).join(' · ') })) + '</td>' +
         '<td class="num">' + x.expected + '</td><td class="num">' + x.full + '</td><td class="num">' + x.partial + '</td>' +
-        '<td class="num"><b style="color:' + (x.pct >= 100 ? 'var(--accent)' : x.pct >= 50 ? 'var(--warn)' : 'var(--crit)') + '">' + x.pct + '%</b></td></tr>'))
+        '<td class="num">' + (x.pct == null ? '<span class="ac-none">' + esc(t('wk.notDue')) + '</span>'
+          : '<b style="color:' + (x.pct >= 100 ? 'var(--accent)' : x.pct >= 50 ? 'var(--warn)' : 'var(--crit)') + '">' + x.pct + '%</b>') + '</td></tr>'))
       : '';
 
     return '<section class="wk-sec">' +
@@ -391,9 +488,9 @@
     '</section>';
   }
 
-  function doneHTML(S, E, rep) {
-    const ev = events(S, E);
-    const fu = followUps(S, E);
+  function doneHTML(b, rep) {
+    const ev = events(b.S, b.E);
+    const fu = followUps(b.S, b.E);
     const maint = (typeof tanks !== 'undefined' ? tanks : []).filter(tk => tk.status === 'maintenance' || tk.status === 'out_of_service');
     const kinds = Object.keys(fu.byKind).map(k => t('tk.kind.' + k) + ' ' + fu.byKind[k]).join(' · ');
     return '<section class="wk-sec">' +
@@ -418,10 +515,10 @@
     '</section>';
   }
 
-  function changedHTML(S, E, rep) {
+  function changedHTML(b, rep) {
     const A = window.KGCActions;
-    const cards = cardResults(S, E);
-    const mv = issueMovement(S, E);
+    const cards = cardResults(b.S, b.E);
+    const mv = issueMovement(b.S, b.E);
     const cardRows = cards.map(function (c) {
       const before = (c.before && c.before.readings) || {};
       const after = A.mergedAfter(c);
@@ -461,19 +558,32 @@
     '</section>';
   }
 
-  function needsHTML(S, E, rep) {
-    const saved = values(rep.needs).sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  /** The needs list, most urgent first. */
+  function savedNeeds(rep) {
+    return values(rep.needs).sort((a, b) => prioRank(a.priority) - prioRank(b.priority) || (a.ts || 0) - (b.ts || 0));
+  }
+
+  function needsHTML(b, rep) {
+    const saved = savedNeeds(rep);
     const edit = canEdit();
-    const sg = suggestions().filter(s => !saved.some(n => n.what === s.what));
+    const sg = pendingSuggestions(rep).map(x => x.s);
+    const prioCell = n => edit
+      ? '<select class="wk-prio-sel p-' + esc(n.priority || 'none') + '" data-wk-prio="' + esc(n._k) + '">' +
+          '<option value=""' + (n.priority ? '' : ' selected') + '>—</option>' +
+          PRIORITIES.map(p => '<option value="' + p + '"' + (n.priority === p ? ' selected' : '') + '>' + esc(t('wk.prio.' + p)) + '</option>').join('') +
+        '</select>'
+      : (n.priority ? '<span class="wk-prio p-' + esc(n.priority) + '">' + esc(t('wk.prio.' + n.priority)) + '</span>' : '—');
     return '<section class="wk-sec">' +
       '<h3 class="wk-h"><span class="wk-n">4</span>' + esc(t('wk.q4')) + '</h3>' +
-      (saved.length ? table([t('wk.col.kind'), t('wk.col.what'), t('wk.col.why'), t('wk.col.owner'), t('wk.col.due')].concat(edit ? [''] : []),
-        saved.map(n => '<tr><td><span class="wk-kind k-' + esc(n.kind) + '">' + esc(t('wk.kind.' + n.kind)) + '</span></td>' +
-          '<td class="name">' + esc(n.what) + '</td><td>' + esc(n.why || '') + '</td><td>' + esc(n.owner || '—') + '</td>' +
+      (saved.length ? table([t('wk.col.priority'), t('wk.col.kind'), t('wk.col.what'), t('wk.col.why'), t('wk.col.owner'), t('wk.col.due')].concat(edit ? [''] : []),
+        saved.map(n => '<tr><td>' + prioCell(n) + '</td><td><span class="wk-kind k-' + esc(n.kind) + '">' + esc(t('wk.kind.' + n.kind)) + '</span></td>' +
+          '<td class="name">' + esc(needText(n, 'what')) + '</td><td>' + esc(needText(n, 'why')) + '</td><td>' + esc(n.owner || '—') + '</td>' +
           '<td class="num">' + esc(n.due || '—') + '</td>' +
           (edit ? '<td><button class="btn mini danger" data-wk-del="' + esc(n._k) + '">' + esc(t('lab.delete')) + '</button></td>' : '') + '</tr>'))
         : '<div class="lab-empty">' + esc(t('wk.noNeeds')) + '</div>') +
       (edit ? '<div class="lab-form wk-needform">' +
+        '<div><label>' + esc(t('wk.col.priority')) + '</label><select id="wk-n-prio">' +
+          PRIORITIES.map(p => '<option value="' + p + '"' + (p === 'medium' ? ' selected' : '') + '>' + esc(t('wk.prio.' + p)) + '</option>').join('') + '</select></div>' +
         '<div><label>' + esc(t('wk.col.kind')) + '</label><select id="wk-n-kind">' +
           NEED_KINDS.map(k => '<option value="' + k + '">' + esc(t('wk.kind.' + k)) + '</option>').join('') + '</select></div>' +
         '<div><label>' + esc(t('wk.col.what')) + '</label><input type="text" id="wk-n-what" maxlength="160"></div>' +
@@ -491,12 +601,13 @@
     '</section>';
   }
 
-  function consumptionHTML(S, E, rep) {
-    const cur = production(S, E);
-    const prev = production(addDays(S, -7), addDays(S, -1));
-    const mix = productMix(S, E);
-    const mats = materials(S, E);
-    const partial = cur.records < 7;
+  function consumptionHTML(b, rep) {
+    const pb = bounds(shift(period, -1));
+    const cur = production(b.S, b.E);
+    const prev = production(pb.S, pb.E);
+    const mix = productMix(b.S, b.E);
+    const mats = materials(b.S, b.E);
+    const partial = cur.records < b.days;
 
     let znLine = '';
     if (cur.zincPerT != null && prev.zincPerT != null) {
@@ -509,7 +620,7 @@
       '<h3 class="wk-h"><span class="wk-n">+</span>' + esc(t('wk.q5')) + '</h3>' +
       (cur.records
         ? '<div class="pt-stats">' +
-            stat(t('wk.s.coverage'), cur.records + ' / 7', partial) +
+            stat(t('wk.s.coverage'), cur.records + ' / ' + b.days, partial) +
             stat(t('wk.s.tonnes'), fmt(cur.tonnes, 1) + '<small>t</small>') +
             stat(t('wk.s.zincPerT') + (partial ? ' *' : ''), cur.zincPerT != null ? fmt(cur.zincPerT, 1) + '<small>kg/t</small>' : '—') +
             stat(t('wk.s.dross'), fmt(cur.dross, 0) + '<small>kg</small>') +
@@ -524,7 +635,7 @@
           '<td class="num">' + (cur.tonnes > 0 ? fmt(m.q / cur.tonnes, 3) + ' ' + esc(m.unit) + '/t' + (partial ? ' *' : '') : '—') + '</td>' +
           '<td>' + esc(Object.keys(m.srcs).map(s => t('wk.src.' + s)).join(' + ')) + '</td></tr>'))
         : '<div class="lab-empty">' + esc(t('wk.noMaterials')) + '</div>') +
-      (partial && cur.records ? '<p class="wk-note">' + esc(t('wk.n.partial', { n: cur.records })) + '</p>' : '') +
+      (partial && cur.records ? '<p class="wk-note">' + esc(t('wk.n.partial', { n: cur.records, d: b.days })) + '</p>' : '') +
       '<p class="wk-note">' + esc(t('wk.n.zinc')) + '</p>' +
       '<p class="wk-note">' + esc(t('wk.n.money')) + '</p>' +
       commentBox('consumption', rep) +
@@ -550,45 +661,82 @@
         setTimeout(function () { if (held && !typing(mount)) render(); }, 0);
       });
     }
-    if (!weekStart) weekStart = addDays(dayKey(), -6);
-    const S = weekStart, E = addDays(S, 6);
-    const rep = reports[S] || {};
+    if (!period) period = defaultPeriod('week');
+    const b = bounds(period);
+    const key = reportKey(period);
+    const rep = reports[key] || {};
+    const pick = period.kind === 'month'
+      ? '<input type="month" id="wk-start" value="' + b.S.slice(0, 7) + '">'
+      : '<input type="date" id="wk-start" value="' + b.S + '">';
 
     mount.innerHTML =
       '<div class="wk-bar no-print">' +
-        '<button class="btn mini ghost" id="wk-prev">' + esc(t('wk.b.prev')) + '</button>' +
-        '<label class="wk-from"><span>' + esc(t('wk.from')) + '</span><input type="date" id="wk-start" value="' + S + '"></label>' +
-        '<button class="btn mini ghost" id="wk-next"' + (E >= dayKey() ? ' disabled' : '') + '>' + esc(t('wk.b.next')) + '</button>' +
+        '<div class="wk-kinds" role="group">' + PERIOD_KINDS.map(k =>
+          '<button class="btn mini' + (period.kind === k ? '' : ' ghost') + '" data-wk-kind="' + k + '">' + esc(t('wk.pk.' + k)) + '</button>').join('') +
+        '</div>' +
+        '<button class="btn mini ghost" id="wk-prev">' + esc(t('wk.b.prev.' + period.kind)) + '</button>' +
+        '<label class="wk-from"><span>' + esc(t('wk.from')) + '</span>' + pick + '</label>' +
+        '<button class="btn mini ghost" id="wk-next"' + (b.E >= dayKey() ? ' disabled' : '') + '>' + esc(t('wk.b.next.' + period.kind)) + '</button>' +
         '<span style="flex:1"></span>' +
-        '<button class="btn" id="wk-print">' + esc(t('wk.b.print')) + '</button>' +
+        '<button class="btn ghost" id="wk-print">' + esc(t('wk.b.print')) + '</button>' +
+        '<button class="btn" id="wk-excel">' + esc(t('wk.b.excel')) + '</button>' +
       '</div>' +
+      (exported ? '<div class="wk-mail no-print">' +
+        '<p class="wk-sub">' + esc(t('wk.x.done', { f: exported.file })) + '</p>' +
+        '<textarea id="wk-mail-text" readonly rows="10">' + esc(exported.text) + '</textarea>' +
+        '<div class="tk-actions"><button class="btn mini" id="wk-mail-copy">' + esc(t('wk.x.copy')) + '</button>' +
+          '<button class="btn mini ghost" id="wk-mail-close">' + esc(t('wk.x.close')) + '</button>' +
+          '<span class="tk-msg" id="wk-mail-msg"></span></div>' +
+      '</div>' : '') +
       '<div class="wk-doc">' +
         '<header class="wk-head">' +
-          '<h2>' + esc(t('wk.docTitle')) + '</h2>' +
-          '<p class="wk-period">' + esc(t('wk.period', { a: S, b: E })) + '</p>' +
+          '<h2>' + esc(t('wk.docTitle.' + period.kind)) + '</h2>' +
+          '<p class="wk-period">' + esc(periodText(period)) + '</p>' +
           '<p class="wk-meta">' + esc(t('wk.generated', { d: dayKey() })) + ' · ' + esc(t('wk.preparedBy')) + ' ' +
             (canEdit() ? '<input type="text" id="wk-by" class="no-print-input" maxlength="80" value="' + esc(rep.preparedBy || '') + '">' : '') +
             '<span class="wk-print-text inline" data-wk-mirror="by">' + esc(rep.preparedBy || '') + '</span></p>' +
         '</header>' +
         commentBox('summary', rep) +
-        statusHTML(S, E, rep) +
-        doneHTML(S, E, rep) +
-        changedHTML(S, E, rep) +
-        needsHTML(S, E, rep) +
-        consumptionHTML(S, E, rep) +
+        statusHTML(b, rep) +
+        doneHTML(b, rep) +
+        changedHTML(b, rep) +
+        needsHTML(b, rep) +
+        consumptionHTML(b, rep) +
       '</div>';
 
-    wire(mount, S);
+    wire(mount, key);
   }
 
   /* ---------------- writes ---------------- */
 
-  function wire(mount, S) {
-    const go = d => { weekStart = d; if (document.activeElement) document.activeElement.blur(); render(); };
+  function wire(mount, key) {
+    const go = p => { period = p; if (document.activeElement) document.activeElement.blur(); render(); };
     const prev = mount.querySelector('#wk-prev'), next = mount.querySelector('#wk-next'), start = mount.querySelector('#wk-start');
-    if (prev) prev.addEventListener('click', () => go(addDays(S, -7)));
-    if (next) next.addEventListener('click', () => go(addDays(S, 7)));
-    if (start) start.addEventListener('change', () => { if (/^\d{4}-\d{2}-\d{2}$/.test(start.value)) go(start.value); });
+    mount.querySelectorAll('[data-wk-kind]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        const k = b.getAttribute('data-wk-kind');
+        if (k !== period.kind) go(defaultPeriod(k));
+      });
+    });
+    if (prev) prev.addEventListener('click', () => go(shift(period, -1)));
+    if (next) next.addEventListener('click', () => go(shift(period, 1)));
+    if (start) start.addEventListener('change', function () {
+      if (period.kind === 'month' && /^\d{4}-\d{2}$/.test(start.value)) go({ kind: 'month', start: start.value + '-01' });
+      else if (/^\d{4}-\d{2}-\d{2}$/.test(start.value)) go({ kind: period.kind, start: start.value });
+    });
+
+    const xl = mount.querySelector('#wk-excel');
+    if (xl) xl.addEventListener('click', openExport);
+    const copy = mount.querySelector('#wk-mail-copy');
+    if (copy) copy.addEventListener('click', function () {
+      const ta = mount.querySelector('#wk-mail-text');
+      copyText(ta ? ta.value : '').then(ok => {
+        const m = mount.querySelector('#wk-mail-msg');
+        if (m) { m.textContent = ok ? t('wk.x.copied') : t('wk.x.copyFail'); m.style.color = ok ? 'var(--accent)' : 'var(--crit)'; }
+      });
+    });
+    const shut = mount.querySelector('#wk-mail-close');
+    if (shut) shut.addEventListener('click', function () { exported = null; render(); });
 
     const pr = mount.querySelector('#wk-print');
     if (pr) pr.addEventListener('click', function () {
@@ -599,7 +747,7 @@
       setTimeout(done, 1000);
     });
 
-    const base = 'weekly_reports/' + S;
+    const base = 'weekly_reports/' + key;
     mount.querySelectorAll('[data-wk-c]').forEach(function (ta) {
       const sec = ta.getAttribute('data-wk-c');
       const mirror = mount.querySelector('[data-wk-mirror="' + sec + '"]');
@@ -632,15 +780,23 @@
         if (msg) { msg.textContent = t('wk.e.need'); msg.style.color = 'var(--crit)'; }
         return;
       }
-      addNeed({ kind: v('#wk-n-kind'), what: v('#wk-n-what'), why: v('#wk-n-why'),
+      addNeed({ kind: v('#wk-n-kind'), priority: v('#wk-n-prio') || null, what: v('#wk-n-what'), why: v('#wk-n-why'),
         owner: v('#wk-n-owner') || null, due: v('#wk-n-due') || null })
         .then(() => { if (document.activeElement) document.activeElement.blur(); render(); });
     });
-    const sg = suggestions().filter(s => !Object.values((reports[S] || {}).needs || {}).some(n => n && n.what === s.what));
+    const sg = pendingSuggestions(reports[key] || {});
     mount.querySelectorAll('[data-wk-sg]').forEach(function (b) {
       b.addEventListener('click', function () {
-        const s = sg[Number(b.getAttribute('data-wk-sg'))];
-        if (s) addNeed({ kind: s.kind, what: s.what, why: s.why, owner: null, due: s.due || null });
+        const x = sg[Number(b.getAttribute('data-wk-sg'))];
+        if (x) addNeed({ kind: x.s.kind, priority: 'medium', what: x.s.what, why: x.s.why,
+          whatEn: x.en.what, whyEn: x.en.why, owner: null, due: x.s.due || null });
+      });
+    });
+    mount.querySelectorAll('[data-wk-prio]').forEach(function (sel) {
+      sel.addEventListener('change', function () {
+        if (!canEdit()) return;
+        database.ref(base + '/needs/' + sel.getAttribute('data-wk-prio') + '/priority').set(sel.value || null);
+        sel.blur();
       });
     });
     mount.querySelectorAll('[data-wk-del]').forEach(function (b) {
@@ -649,6 +805,178 @@
         database.ref(base + '/needs/' + b.getAttribute('data-wk-del')).remove();
       });
     });
+  }
+
+  /* ---------------- export ---------------- */
+
+  /* Everything the Excel file shows, computed by the same functions that draw
+     the page — so the file and the screen cannot disagree. Text comes out in
+     whatever language t() is answering in; the export asks for English. */
+  function model(p) {
+    const b = bounds(p), pb = bounds(shift(p, -1));
+    const rep = reports[reportKey(p)] || {};
+    const A = window.KGCActions;
+    const rows = rowsIn(b.S, b.E), prows = rowsIn(pb.S, pb.E);
+    const br = breaches(rows), pbr = breaches(prows);
+    const cp = completeness(b.S, b.E, b.days), pcp = completeness(pb.S, pb.E, pb.days);
+    const cur = production(b.S, b.E), prev = production(pb.S, pb.E);
+    const fu = followUps(b.S, b.E);
+    const mv = issueMovement(b.S, b.E);
+    const sum = (list, f) => list.reduce((s, x) => s + x[f], 0);
+
+    const cardRows = [];
+    if (A) cardResults(b.S, b.E).forEach(function (c) {
+      const before = (c.before && c.before.readings) || {};
+      const after = A.mergedAfter(c);
+      const keys = Object.keys(before).concat(Object.keys(after).filter(k => before[k] == null));
+      const base = {
+        tank: tankName(c.tankId), material: c.action ? A.materialText(c.action) : '—',
+        evaluation: c.evaluation ? t('ac.res.' + c.evaluation.result) : t('wk.ev.noEval'),
+        result: c.evaluation ? c.evaluation.result : null,
+        evalNote: (c.evaluation && c.evaluation.note) || '', stage: t('ac.stage.' + A.stage(c))
+      };
+      (keys.length ? keys : [null]).forEach(function (k) {
+        cardRows.push(Object.assign({}, base, k == null ? { param: '—' } : {
+          param: paramLabel(k),
+          before: before[k] != null ? Number(before[k]) : null,
+          after: after[k] != null ? Number(after[k]) : null,
+          afterTier: after[k] != null ? evalTier(c.tankId, k, after[k]) : 'none'
+        }));
+      });
+    });
+
+    const move = [];
+    [['closed', mv.closed], ['opened', mv.opened], ['still', mv.still]].forEach(function (g) {
+      g[1].forEach(x => move.push({ move: g[0], tank: tankName(x.tankId), param: paramLabel(x.key),
+        from: x.from, to: x.to, toDate: x.toDate, range: x.range, tier: evalTier(x.tankId, x.key, x.to) }));
+    });
+
+    let znNote = null;
+    if (cur.zincPerT != null && prev.zincPerT != null) {
+      const d = cur.zincPerT - prev.zincPerT;
+      znNote = t(Math.abs(d) < 0.05 ? 'wk.zn.same' : d < 0 ? 'wk.zn.lower' : 'wk.zn.higher',
+        { a: fmt(cur.zincPerT, 1), b: fmt(prev.zincPerT, 1) });
+    }
+    const mix = productMix(b.S, b.E);
+    const mixKg = mix.reduce((s, m) => s + m.kg, 0);
+
+    return {
+      kind: p.kind, S: b.S, E: b.E, days: b.days, prevS: pb.S, prevE: pb.E, prevDays: pb.days, generated: dayKey(),
+      preparedBy: rep.preparedBy || '', comments: rep.comments || {},
+      kpi: {
+        breaches: { cur: br.length, prev: pbr.length },
+        crit: { cur: sum(br, 'crit'), prev: sum(pbr, 'crit') },
+        completeness: { cur: completenessShare(cp), prev: completenessShare(pcp) },
+        tonnes: { cur: cur.records ? cur.tonnes : null, prev: prev.records ? prev.tonnes : null },
+        zincPerT: { cur: cur.zincPerT, prev: prev.zincPerT },
+        dross: { cur: cur.records ? cur.dross : null, prev: prev.records ? prev.dross : null }
+      },
+      readings: rows.length,
+      breaches: br.map(x => ({ tank: tankName(x.tankId), param: paramLabel(x.key), unit: x.p.unit || '', n: x.n, bad: x.bad, crit: x.crit,
+        worst: x.worst, worstDate: x.worstDate, last: x.last, lastDate: x.lastDate, lastTier: x.lastTier,
+        range: T() ? T().rangeOf(x.p) : '' })),
+      completeness: cp.map(x => ({ tank: tankName(x.tankId),
+        schedule: t('wk.every', { n: x.sc.every, p: x.sc.params.map(paramLabel).join(' · ') }),
+        expected: x.expected, full: x.full, partial: x.partial, pct: x.pct == null ? null : x.pct / 100 })),
+      events: events(b.S, b.E).map(x => ({ date: x.date, tank: x.tankId != null ? tankName(x.tankId) : '—', type: x.type, detail: x.detail })),
+      followups: { n: fu.done.length, kinds: Object.keys(fu.byKind).map(k => t('tk.kind.' + k) + ' ' + fu.byKind[k]).join(' · ') },
+      postponed: fu.postponed.map(r => ({ title: r.title || '', reason: r.reason || '', until: r.until || '' })),
+      maint: (typeof tanks !== 'undefined' ? tanks : []).filter(tk => tk.status === 'maintenance' || tk.status === 'out_of_service')
+        .map(tk => ({ tank: tankName(tk.id), status: t('st.' + tk.status), note: tk.note || '' })),
+      cards: cardRows,
+      openCards: A ? A.list().filter(c => c.status !== 'closed').length : 0,
+      movement: move,
+      needs: savedNeeds(rep).map(n => ({ priority: n.priority || '', priorityText: n.priority ? t('wk.prio.' + n.priority) : '',
+        kind: t('wk.kind.' + n.kind), what: needText(n, 'what'), why: needText(n, 'why'), owner: n.owner || '', due: n.due || '' })),
+      production: { cur: cur, prev: prev, partial: cur.records < b.days },
+      znNote: znNote,
+      mix: mix.map(m => ({ product: m.product, tonnes: m.kg / 1000, share: mixKg ? m.kg / mixKg : null, n: m.n })),
+      materials: materials(b.S, b.E).map(m => ({ name: matLabel(m.mat), q: m.q, unit: m.unit,
+        perT: cur.tonnes > 0 ? m.q / cur.tonnes : null, source: Object.keys(m.srcs).map(s => t('wk.src.' + s)).join(' + ') })),
+      notes: { limits: t('wk.n.limits'), maint: t('wk.n.maint'), zinc: t('wk.n.zinc'), money: t('wk.n.money'),
+        partial: cur.records && cur.records < b.days ? t('wk.n.partial', { n: cur.records, d: b.days }) : '' }
+    };
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(() => true, () => fallback());
+    }
+    return Promise.resolve(fallback());
+    function fallback() {
+      const ta = document.getElementById('wk-mail-text');
+      if (!ta) return false;
+      ta.focus(); ta.select();
+      try { return document.execCommand('copy'); } catch (e) { return false; }
+    }
+  }
+
+  /** Ask which period to send, then build and download the file. */
+  function openExport() {
+    const choices = [{ id: 'screen', p: period }];
+    ['day', 'week', 'month'].forEach(function (k) {
+      const p = defaultPeriod(k);
+      if (!samePeriod(p, period)) choices.push({ id: 'last-' + k, p: p });
+    });
+    const wrap = document.createElement('div');
+    wrap.className = 'pt-overlay';
+    wrap.innerHTML =
+      '<div class="pt-modal">' +
+        '<div class="pt-modal-head"><h3>' + esc(t('wk.x.title')) + '</h3>' +
+        '<button class="pt-x" data-close aria-label="close">&times;</button></div>' +
+        '<div class="pt-modal-body">' +
+          '<p class="tk-hint">' + esc(t('wk.x.sub')) + '</p>' +
+          '<div class="wk-x-list">' + choices.map((c, i) =>
+            '<label class="wk-x-opt"><input type="radio" name="wk-x" value="' + i + '"' + (i ? '' : ' checked') + '>' +
+              '<span><b>' + esc(c.id === 'screen' ? t('wk.x.screen') : t('wk.x.last.' + c.p.kind)) + '</b>' +
+              '<small>' + esc(t('wk.pk.' + c.p.kind)) + ' · <bdi dir="ltr">' + esc(rangeText(c.p)) + '</bdi></small></span></label>').join('') +
+          '</div>' +
+          '<p class="tk-hint">' + esc(t('wk.x.commentsNote')) + '</p>' +
+        '</div>' +
+        '<div class="pt-modal-foot">' +
+          '<button class="btn" id="wk-x-go">' + esc(t('wk.x.go')) + '</button>' +
+          '<button class="btn ghost" data-close>' + esc(t('pt.cancel')) + '</button>' +
+          '<span class="tk-msg" id="wk-x-msg"></span>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.addEventListener('mousedown', e => { if (e.target === wrap) close(); });
+    wrap.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', close));
+    wrap.querySelector('#wk-x-go').addEventListener('click', function () {
+      const pick = wrap.querySelector('input[name="wk-x"]:checked');
+      const c = choices[Number(pick ? pick.value : 0)];
+      const msg = wrap.querySelector('#wk-x-msg');
+      this.disabled = true;
+      // the page moves to the exported period, so what was sent is what is on screen
+      period = c.p;
+      exportExcel().then(close, function (e) {
+        console.error('[weekly] export failed', e);
+        if (msg) { msg.textContent = t('wk.x.failed') + ' ' + (e.message || ''); msg.style.color = 'var(--crit)'; }
+        wrap.querySelector('#wk-x-go').disabled = false;
+      });
+    });
+  }
+
+  function loadLogo() {
+    return fetch('logo.png').then(r => r.ok ? r.arrayBuffer() : null).then(b => b ? new Uint8Array(b) : null).catch(() => null);
+  }
+
+  async function exportExcel() {
+    const X = window.KGCWeeklyXlsx;
+    if (!X) throw new Error('weekly_xlsx.js not loaded');
+    const m = I18N.withLang('en', () => model(period));
+    const logo = await loadLogo();
+    const out = X.build(m, logo);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(out.blob);
+    a.download = out.file;
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+    exported = { file: out.file, text: X.emailText(m) };
+    render();
+    copyText(exported.text);
+    return out;
   }
 
   /* ---------------- wiring ---------------- */
@@ -670,5 +998,9 @@
   if (window.I18N) I18N.onChange(render);
   document.addEventListener('DOMContentLoaded', render);
 
-  window.KGCWeekly = { render: render };
+  window.KGCWeekly = {
+    render: render, model: model, exportExcel: exportExcel,
+    period: () => period, setPeriod: p => { period = p; render(); },
+    defaultPeriod: defaultPeriod, bounds: bounds
+  };
 })();
