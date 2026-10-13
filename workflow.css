@@ -297,3 +297,12 @@ html:not(.authed) .wk-comment.empty { display: none; }
   width: 100%; box-sizing: border-box; margin-top: 6px; padding: 8px 10px; font-size: 12.5px; line-height: 1.6;
   border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface); color: var(--ink); resize: vertical;
 }
+
+/* bath status report dialog (tankreport.js) */
+.tr-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.tr-row { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 12px; font-size: 13px; color: var(--ink-2); }
+.tr-row label { display: inline-flex; align-items: center; gap: 6px; }
+.tr-row input, .tr-row select {
+  padding: 5px 8px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface); color: var(--ink);
+}
+.tr-old { background: none; border: none; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font: inherit; }

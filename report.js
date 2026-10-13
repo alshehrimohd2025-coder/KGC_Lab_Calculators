@@ -1,5 +1,6 @@
 /* ============================================================
-   "Export report" — the plant's own bath status report, filled in.
+   The lab's earlier bath status template, filled in — now offered as the
+   "earlier format" in the bath status report dialog (tankreport.js).
    ------------------------------------------------------------
    The workbook that comes out is the lab's real template
    (report_template.js) with two parts swapped: the worksheet and the
@@ -169,9 +170,10 @@
 
   function statusText(tank) {
     const SP = window.KGCSpecs;
-    const manual = String(tank.status || '');
-    if (manual === 'out') return te('rep.st.out');
-    if (manual === 'maint') return te('rep.st.maint');
+    // the dashboard stores out_of_service / maintenance (older cards: critical)
+    const manual = typeof normalizeStatus === 'function' ? normalizeStatus(tank.status) : String(tank.status || '');
+    if (manual === 'out_of_service') return te('rep.st.out');
+    if (manual === 'maintenance') return te('rep.st.maint');
     const st = SP && SP.hasSpec(tank.id) ? SP.tankStatus(tank) : null;
     if (!st || st.tier === 'none') return te('rep.st.noData');
     if (st.tier === 'crit') return te('rep.st.crit');
@@ -516,13 +518,8 @@
   database.ref('flux_treatments').on('value', s => { treatments = s.val() || {}; });
   database.ref('peroxide_treatments').on('value', s => { peroxTreatments = s.val() || {}; });
 
-  function wire() {
-    const b = document.getElementById('rep-export');
-    if (!b || b.dataset.wired) return;
-    b.dataset.wired = '1';
-    b.addEventListener('click', exportReport);
-  }
-  document.addEventListener('DOMContentLoaded', wire);
+  /* The dashboard button now opens the bath status report (tankreport.js),
+     which offers this template as the earlier format. */
   if (window.I18N) I18N.onChange(function () {
     const b = document.getElementById('rep-export');
     if (b) b.textContent = t('rep.button');
