@@ -122,6 +122,7 @@
     this.merges = [];
     this.breaks = [];
     this.lists = [];          // drop-down choices: { ref, items }
+    this.bars = [];           // in-cell data bars: { ref, color, max }
     this.pageStart = 0;
     this.r = 0;
   }
@@ -174,6 +175,9 @@
       '<cols><col min="1" max="' + NCOL + '" width="' + COL_W + '" customWidth="1"/></cols>' +
       '<sheetData>' + rowsXml + '</sheetData>' +
       (this.merges.length ? '<mergeCells count="' + this.merges.length + '">' + this.merges.map(m => '<mergeCell ref="' + m + '"/>').join('') + '</mergeCells>' : '') +
+      this.bars.map((d, i) => '<conditionalFormatting sqref="' + d.ref + '"><cfRule type="dataBar" priority="' + (i + 1) + '">' +
+        '<dataBar><cfvo type="num" val="0"/><cfvo type="num" val="' + (d.max == null ? 1 : d.max) + '"/><color rgb="FF' + (d.color || C.blue) + '"/></dataBar>' +
+        '</cfRule></conditionalFormatting>').join('') +
       (this.lists.length ? '<dataValidations count="' + this.lists.length + '">' + this.lists.map(d =>
         '<dataValidation type="list" allowBlank="1" showErrorMessage="0" sqref="' + d.ref + '"><formula1>' +
         xe('"' + d.items.join(',') + '"') + '</formula1></dataValidation>').join('') + '</dataValidations>' : '') +
