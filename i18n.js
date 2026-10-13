@@ -1473,6 +1473,11 @@
       'wk.soFar': 'حتى الآن',
       'wk.b.today': 'اليوم',
       'wk.x.today': 'اليوم الحالي (حتى الآن)',
+      'wk.paste.title': 'لصق عدة بنود دفعة واحدة',
+      'wk.paste.hint': 'الصق الأسطر كما هي من جدول أو من Excel أو من المحادثة، بترتيب الأعمدة: الأولوية، النوع، المطلوب، السبب، المسؤول، الموعد. سطر العناوين يُتجاهل. البنود تُضاف للفترة المعروضة الآن.',
+      'wk.paste.go': 'إضافة البنود',
+      'wk.paste.ok': 'تمت إضافة البنود للقائمة: {n} ✓',
+      'wk.paste.none': 'لم أجد بنوداً — تأكد أن كل بند في سطر وأن الأعمدة مفصولة (Tab أو |).',
     },
 
     en: {
@@ -2926,6 +2931,11 @@
       'wk.soFar': 'so far',
       'wk.b.today': 'Today',
       'wk.x.today': 'Today (so far)',
+      'wk.paste.title': 'Paste several needs at once',
+      'wk.paste.hint': 'Paste the rows as they are from a table, Excel or a chat, columns in this order: priority, type, needed, why, owner, needed by. A heading row is skipped. The needs go to the period on screen.',
+      'wk.paste.go': 'Add the needs',
+      'wk.paste.ok': '{n} needs added to the list ✓',
+      'wk.paste.none': 'No needs found — put each one on its own line, with the columns separated (Tab or |).',
     }
   };
 

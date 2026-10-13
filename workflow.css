@@ -290,3 +290,10 @@ html:not(.authed) .wk-comment.empty { display: none; }
 @media (min-width: 900px) { .wk-top .pt-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 /* a last reading taken before the period: still the tank's state, but old */
 .wk-old { color: var(--warn); font-weight: 700; }
+/* pasting several needs at once */
+.wk-paste { margin-top: 10px; font-size: 13px; }
+.wk-paste summary { cursor: pointer; color: var(--accent); font-weight: 700; }
+.wk-paste textarea {
+  width: 100%; box-sizing: border-box; margin-top: 6px; padding: 8px 10px; font-size: 12.5px; line-height: 1.6;
+  border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface); color: var(--ink); resize: vertical;
+}
