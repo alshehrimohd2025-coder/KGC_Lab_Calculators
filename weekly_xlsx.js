@@ -7,7 +7,7 @@
    then the four questions and consumption as tables, each with the
    engineer's comment under it.
 
-   The file is English only, by the lab's choice. Dates read
+   The file is English only, by the plant's choice. Dates read
    13-Oct-2026 whatever the reader's Excel locale. Numbers are real
    numbers, so the file can still be filtered or recalculated.
 
@@ -62,6 +62,8 @@
   const startsArabic = s => { const m = String(s || '').match(/[A-Za-z\u00C0-\u024F\u0600-\u06FF]/); return !!m && /[\u0600-\u06FF]/.test(m[0]); };
   const colLetter = c => { let s = ''; c += 1; while (c > 0) { const r = (c - 1) % 26; s = String.fromCharCode(65 + r) + s; c = Math.floor((c - 1) / 26); } return s; };
 
+  const preparer = m => m.preparedBy + (m.preparedTitle ? ', ' + m.preparedTitle : '');
+
   function periodLabel(m) {
     if (m.kind === 'day') return fmtDate(m.S);
     if (m.kind === 'month') return MONTHS_LONG[Number(m.S.slice(5, 7)) - 1] + ' ' + m.S.slice(0, 4);
@@ -70,9 +72,9 @@
   const prevWord = m => ({ day: 'previous day', week: 'previous week', month: 'previous month' })[m.kind];
 
   function fileName(m) {
-    if (m.kind === 'day') return 'KGC_Lab_Daily_Report_' + fmtDate(m.S) + '.xlsx';
-    if (m.kind === 'month') return 'KGC_Lab_Monthly_Report_' + MONTHS[Number(m.S.slice(5, 7)) - 1] + '-' + m.S.slice(0, 4) + '.xlsx';
-    return 'KGC_Lab_Weekly_Report_' + fmtDate(m.S) + '_to_' + fmtDate(m.E) + '.xlsx';
+    if (m.kind === 'day') return 'KGC_Galvanizing_Line_Daily_Report_' + fmtDate(m.S) + '.xlsx';
+    if (m.kind === 'month') return 'KGC_Galvanizing_Line_Monthly_Report_' + MONTHS[Number(m.S.slice(5, 7)) - 1] + '-' + m.S.slice(0, 4) + '.xlsx';
+    return 'KGC_Galvanizing_Line_Weekly_Report_' + fmtDate(m.S) + '_to_' + fmtDate(m.E) + '.xlsx';
   }
 
   /* ---------------- styles ---------------- */
@@ -194,7 +196,7 @@
       '<printOptions horizontalCentered="1"/>' +
       '<pageMargins left="0.35" right="0.35" top="0.45" bottom="0.55" header="0.25" footer="0.25"/>' +
       '<pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>' +
-      '<headerFooter><oddFooter>' + xe('&L&8&K6B7280KGC Galvanizing Lab · ' + this.footer + '&R&8&K6B7280Page &P of &N') + '</oddFooter></headerFooter>' +
+      '<headerFooter><oddFooter>' + xe('&L&8&K6B7280KGC Galvanizing Line · ' + this.footer + '&R&8&K6B7280Page &P of &N') + '</oddFooter></headerFooter>' +
       (this.breaks.length ? '<rowBreaks count="' + this.breaks.length + '" manualBreakCount="' + this.breaks.length + '">' +
         this.breaks.map(r => '<brk id="' + r + '" max="16383" man="1"/>').join('') + '</rowBreaks>' : '') +
       (drawing ? '<drawing r:id="rId1"/>' : '') +
@@ -324,7 +326,7 @@
       });
       sh.height(r, Math.max(17, lines * 12 + 5));
     });
-    if (rows.length > limit) note(sh, '+ ' + (rows.length - limit) + ' more row' + (rows.length - limit === 1 ? '' : 's') + ' not shown — the full list is on the lab site.');
+    if (rows.length > limit) note(sh, '+ ' + (rows.length - limit) + ' more row' + (rows.length - limit === 1 ? '' : 's') + ' not shown — the full list is on the site.');
   }
 
   const status = tier => {
@@ -335,16 +337,17 @@
   /* ---------------- the report ---------------- */
 
   function header(sh, m, logo) {
-    const r1 = sh.next(28), r2 = sh.next(20), r3 = sh.next(18);
+    const r1 = sh.next(28), r2 = sh.next(18), r3 = sh.next(15), r3b = sh.next(15);
     if (!logo) sh.span(r1, 0, 4, 'Khereiji Showrooms Company', ST.company);
-    sh.span(r1, 5, NCOL - 1, KIND[m.kind].toUpperCase() + ' LAB REPORT', ST.title);
-    sh.span(r2, 5, NCOL - 1, 'KGC Hot-Dip Galvanizing · Laboratory', ST.subtitle);
+    sh.span(r1, 5, NCOL - 1, KIND[m.kind].toUpperCase() + ' GALVANIZING LINE REPORT', ST.title);
+    sh.span(r2, 5, NCOL - 1, 'KGC Hot-Dip Galvanizing Plant', ST.subtitle);
     const per = m.kind === 'week'
       ? 'Week: ' + dow(m.S) + ' ' + fmtDate(m.S) + ' to ' + dow(m.E) + ' ' + fmtDate(m.E)
       : m.kind === 'day' ? 'Day: ' + dow(m.S) + ' ' + fmtDate(m.S)
       : 'Month: ' + periodLabel(m) + ' (' + fmtDate(m.S) + ' to ' + fmtDate(m.E) + ')';
-    sh.span(r3, 4, NCOL - 1, per + '   ·   Generated ' + fmtDate(m.generated) +
-      (m.preparedBy ? '   ·   Prepared by ' + m.preparedBy : ''), ST.meta);
+    sh.span(r3, 4, NCOL - 1, per, ST.meta);
+    sh.span(r3b, 4, NCOL - 1, 'Generated ' + fmtDate(m.generated) +
+      (m.preparedBy ? '   ·   Prepared by ' + preparer(m) : ''), ST.meta);
     const r4 = sh.next(6);
     sh.span(r4, 0, NCOL - 1, '', ST.rule);
   }
@@ -570,13 +573,13 @@
     sectionConsumption(sh, m);
     sh.next(10);
     const rf = sh.next();
-    const foot = 'Built from the KGC lab site records: readings log, treatment cards, addition and treatment logs, tasks, and the production report. ' +
+    const foot = 'Built from the KGC galvanizing line records on the site: tank readings, treatment cards, addition and treatment logs, tasks, and the production report. ' +
       'Readings are judged against the standard limits set on the site on ' + fmtDate(m.generated) + '. No financial figures are computed.';
     sh.span(rf, 0, NCOL - 1, foot, ST.footer);
     sh.height(rf, linesFor(foot, NCOL, 8) * 11 + 4);
 
     const enc = new TextEncoder();
-    const title = 'KGC Lab ' + KIND[m.kind] + ' Report — ' + periodLabel(m);
+    const title = 'KGC Galvanizing Line ' + KIND[m.kind] + ' Report — ' + periodLabel(m);
     const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
     const lastRow = sh.rows.length;
     const parts = [
@@ -600,16 +603,16 @@
         '</Relationships>'],
       ['docProps/core.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
         '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
-        '<dc:title>' + xe(title) + '</dc:title><dc:creator>KGC Galvanizing Lab</dc:creator>' +
+        '<dc:title>' + xe(title) + '</dc:title><dc:creator>' + xe(m.preparedBy || 'KGC Galvanizing Line') + '</dc:creator>' +
         '<dcterms:created xsi:type="dcterms:W3CDTF">' + now + '</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">' + now + '</dcterms:modified>' +
         '</cp:coreProperties>'],
       ['docProps/app.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-        '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>KGC Lab Site</Application></Properties>'],
+        '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>KGC Galvanizing Site</Application></Properties>'],
       ['xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
         '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
         '<bookViews><workbookView xWindow="0" yWindow="0" windowWidth="28800" windowHeight="16000"/></bookViews>' +
-        '<sheets><sheet name="Lab Report" sheetId="1" r:id="rId1"/></sheets>' +
-        '<definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">\'Lab Report\'!$A$1:$' + colLetter(NCOL - 1) + '$' + lastRow + '</definedName></definedNames>' +
+        '<sheets><sheet name="Line Report" sheetId="1" r:id="rId1"/></sheets>' +
+        '<definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">\'Line Report\'!$A$1:$' + colLetter(NCOL - 1) + '$' + lastRow + '</definedName></definedNames>' +
         '</workbook>'],
       ['xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
@@ -644,11 +647,11 @@
     const k = m.kpi, cur = m.production.cur, partial = m.production.partial && cur.records > 0;
     const high = m.needs.filter(n => n.priority === 'high').length;
     const lines = [
-      'Subject: KGC Lab ' + KIND[m.kind] + ' Report — ' + periodLabel(m),
+      'Subject: KGC Galvanizing Line ' + KIND[m.kind] + ' Report — ' + periodLabel(m),
       '',
       'Dear all,',
       '',
-      'Please find attached the KGC galvanizing lab ' + KIND[m.kind].toLowerCase() + ' report for ' + periodLabel(m) + '.',
+      'Please find attached the KGC galvanizing line ' + KIND[m.kind].toLowerCase() + ' report for ' + periodLabel(m) + '.',
       '',
       'Key points:',
       '• Out-of-standard parameters: ' + k.breaches.cur + ' (critical readings: ' + k.crit.cur + ')',
@@ -665,6 +668,7 @@
     if (summary) lines.push('', 'Summary: ' + summary);
     lines.push('', 'Best regards,');
     if (m.preparedBy) lines.push(m.preparedBy);
+    if (m.preparedTitle) lines.push(m.preparedTitle);
     return lines.join('\n');
   }
 

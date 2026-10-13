@@ -30,7 +30,7 @@
 
    Stored at weekly_reports/<key>, where the key is the week's first day
    (as it always was), day_<date> for a day, or month_<YYYY-MM> for a month:
-     { preparedBy, comments: { summary, status, done, changed, needs, consumption },
+     { preparedBy, preparedTitle, comments: { summary, status, done, changed, needs, consumption },
        needs: { <pushId>: { kind, priority, what, why, owner, due } } }
 
    Depends on globals from index.html: database, tanks, tankLabel(),
@@ -49,6 +49,8 @@
   const NEED_KINDS = ['decision', 'purchase', 'maintenance'];
   const PRIORITIES = ['high', 'medium', 'low'];
   const PERIOD_KINDS = ['day', 'week', 'month'];
+  // the preparer's title until one is typed for the report; clearing it leaves it blank
+  const DEFAULT_TITLE = 'Chemical Engineer';
 
   let readings = {}, renewals = {}, acidAdds = {}, fluxT = {}, peroxT = {}, saltAdds = {}, bath = {}, calib = {},
       taskLog = {}, taskState = {}, reports = {};
@@ -128,6 +130,8 @@
     const b = bounds(p);
     return p.kind === 'day' ? b.S : b.S + ' → ' + b.E;
   }
+
+  const titleOf = rep => rep.preparedTitle != null ? rep.preparedTitle : DEFAULT_TITLE;
 
   function periodText(p) {
     const b = bounds(p);
@@ -693,8 +697,9 @@
           '<h2>' + esc(t('wk.docTitle.' + period.kind)) + '</h2>' +
           '<p class="wk-period">' + esc(periodText(period)) + '</p>' +
           '<p class="wk-meta">' + esc(t('wk.generated', { d: dayKey() })) + ' · ' + esc(t('wk.preparedBy')) + ' ' +
-            (canEdit() ? '<input type="text" id="wk-by" class="no-print-input" maxlength="80" value="' + esc(rep.preparedBy || '') + '">' : '') +
-            '<span class="wk-print-text inline" data-wk-mirror="by">' + esc(rep.preparedBy || '') + '</span></p>' +
+            (canEdit() ? '<input type="text" id="wk-by" class="no-print-input" maxlength="80" value="' + esc(rep.preparedBy || '') + '">' +
+              '<input type="text" id="wk-title" class="no-print-input" maxlength="80" placeholder="' + esc(t('wk.jobTitle')) + '" value="' + esc(titleOf(rep)) + '">' : '') +
+            '<span class="wk-print-text inline" data-wk-mirror="by">' + esc(rep.preparedBy || '') + (titleOf(rep) ? ', ' + esc(titleOf(rep)) : '') + '</span></p>' +
         '</header>' +
         commentBox('summary', rep) +
         statusHTML(b, rep) +
@@ -766,6 +771,11 @@
       const mirror = mount.querySelector('[data-wk-mirror="by"]');
       by.addEventListener('input', () => { if (mirror) mirror.textContent = by.value; });
       by.addEventListener('change', () => { if (canEdit()) database.ref(base + '/preparedBy').set(by.value.trim() || null); });
+    }
+    const jt = mount.querySelector('#wk-title');
+    if (jt) {
+      // saved even when emptied, so a cleared title stays cleared instead of the default returning
+      jt.addEventListener('change', () => { if (canEdit()) database.ref(base + '/preparedTitle').set(jt.value.trim()); });
     }
 
     const addNeed = function (rec) {
@@ -862,7 +872,7 @@
 
     return {
       kind: p.kind, S: b.S, E: b.E, days: b.days, prevS: pb.S, prevE: pb.E, prevDays: pb.days, generated: dayKey(),
-      preparedBy: rep.preparedBy || '', comments: rep.comments || {},
+      preparedBy: rep.preparedBy || '', preparedTitle: titleOf(rep), comments: rep.comments || {},
       kpi: {
         breaches: { cur: br.length, prev: pbr.length },
         crit: { cur: sum(br, 'crit'), prev: sum(pbr, 'crit') },
