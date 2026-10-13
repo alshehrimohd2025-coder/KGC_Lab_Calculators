@@ -143,6 +143,7 @@
     this.rows = [];
     this.merges = [];
     this.breaks = [];
+    this.lists = [];          // drop-down choices: { ref, items }
     this.pageStart = 0;
     this.r = 0;
   }
@@ -195,6 +196,9 @@
       '<cols><col min="1" max="' + NCOL + '" width="' + COL_W + '" customWidth="1"/></cols>' +
       '<sheetData>' + rowsXml + '</sheetData>' +
       (this.merges.length ? '<mergeCells count="' + this.merges.length + '">' + this.merges.map(m => '<mergeCell ref="' + m + '"/>').join('') + '</mergeCells>' : '') +
+      (this.lists.length ? '<dataValidations count="' + this.lists.length + '">' + this.lists.map(d =>
+        '<dataValidation type="list" allowBlank="1" showErrorMessage="0" sqref="' + d.ref + '"><formula1>' +
+        xe('"' + d.items.join(',') + '"') + '</formula1></dataValidation>').join('') + '</dataValidations>' : '') +
       '<printOptions horizontalCentered="1"/>' +
       '<pageMargins left="0.35" right="0.35" top="0.45" bottom="0.55" header="0.25" footer="0.25"/>' +
       '<pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>' +
@@ -495,18 +499,32 @@
     comment(sh, m.comments.changed);
   }
 
+  /* The needs listed on the site, then empty rows to fill in Excel before
+     sending, with drop-down lists for the priority and the type. */
+  const BLANK_NEEDS = 3;
   function sectionNeeds(sh, m) {
     bar(sh, '3   WHAT DO WE NEED?');
-    if (m.needs.length) {
-      const P = { high: 'crit', medium: 'warn', low: 'good' };
-      table(sh, [
-        { label: 'Priority', span: 1, h: 'center' }, { label: 'Type', span: 1, h: 'center' }, { label: 'Needed', span: 3 },
-        { label: 'Why', span: 4 }, { label: 'Owner', span: 2 }, { label: 'Needed by', span: 1, h: 'center' }
-      ], m.needs.map(x => [
-        x.priority ? Object.assign(status(P[x.priority]), { v: x.priorityText }) : null,
-        { v: x.kind, h: 'center' }, { v: x.what, b: 1 }, x.why, x.owner, x.due
-      ]), { limit: 25 });
-    } else emptyLine(sh, 'No needs were listed for this period.');
+    const P = { high: 'crit', medium: 'warn', low: 'good' };
+    const cols = [
+      { label: 'Priority', span: 1, h: 'center' }, { label: 'Type', span: 1, h: 'center' }, { label: 'Needed', span: 3 },
+      { label: 'Why', span: 4 }, { label: 'Owner', span: 2 }, { label: 'Needed by', span: 1, h: 'center' }
+    ];
+    table(sh, cols, m.needs.map(x => [
+      x.priority ? Object.assign(status(P[x.priority]), { v: x.priorityText }) : null,
+      { v: x.kind, h: 'center' }, { v: x.what, b: 1 }, x.why, x.owner, x.due
+    ]), { limit: 25 });
+    const first = sh.rows.length;
+    for (let i = 0; i < BLANK_NEEDS; i++) {
+      const r = sh.next(24);
+      let c = 0;
+      cols.forEach(function (col) {
+        sh.span(r, c, c + col.span - 1, '', td({ h: col.h }, (m.needs.length + i) % 2 === 1));
+        c += col.span;
+      });
+    }
+    const rows = (first + 1) + ':' + (first + BLANK_NEEDS);
+    sh.lists.push({ ref: 'A' + rows.replace(':', ':A'), items: ['High', 'Medium', 'Low'] },
+                  { ref: 'B' + rows.replace(':', ':B'), items: ['Decision', 'Purchase', 'Maintenance'] });
     comment(sh, m.comments.needs);
   }
 

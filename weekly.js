@@ -646,6 +646,43 @@
     '</section>';
   }
 
+  /* Several needs pasted at once: rows copied from a table, Excel or a chat,
+     columns in the form's order — priority, type, needed, why, owner, needed
+     by. Tabs or "|" separate the columns; a heading row is skipped. Words
+     are read in English or Arabic. */
+  const PRIO_WORDS = { high: 'high', 'عالية': 'high', 'عالي': 'high', medium: 'medium', 'متوسطة': 'medium', 'متوسط': 'medium',
+    low: 'low', 'منخفضة': 'low', 'منخفض': 'low' };
+  const KIND_WORDS = { decision: 'decision', 'قرار': 'decision', purchase: 'purchase', 'شراء': 'purchase',
+    maintenance: 'maintenance', 'صيانة': 'maintenance' };
+  // kept across re-renders, so live updates from other devices do not wipe a paste
+  let pasteOpen = false, pasteNote = '', pasteText = '';
+  const MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+
+  /** 14-Oct-2026, 2026-10-14 or 14/10/2026 (day first) as YYYY-MM-DD; anything else is dropped. */
+  function pastedDate(s) {
+    s = String(s || '').trim();
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (m) return m[1] + '-' + pad(+m[2]) + '-' + pad(+m[3]);
+    m = s.match(/^(\d{1,2})[-\s]([A-Za-z]{3})[A-Za-z]*[-\s](\d{4})$/);
+    if (m && MON[m[2].toLowerCase()]) return m[3] + '-' + pad(MON[m[2].toLowerCase()]) + '-' + pad(+m[1]);
+    m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+    if (m) return m[3] + '-' + pad(+m[2]) + '-' + pad(+m[1]);
+    return null;
+  }
+
+  function parseNeeds(text) {
+    return String(text || '').split(/\r?\n/).map(function (line) {
+      let c = line.indexOf('\t') !== -1 ? line.split('\t') : line.split('|');
+      c = c.map(x => x.trim());
+      if (c.length && c[0] === '') c.shift();
+      if (c.length && c[c.length - 1] === '') c.pop();
+      return c;
+    }).filter(c => c.length >= 3 && !c.every(x => /^:?-*:?$/.test(x)) && !/^(priority|الأولوية)$/i.test(c[0]))
+      .map(c => ({ priority: PRIO_WORDS[c[0].toLowerCase()] || null, kind: KIND_WORDS[(c[1] || '').toLowerCase()] || 'decision',
+        what: c[2] || '', why: c[3] || '', owner: c[4] || null, due: pastedDate(c[5]) }))
+      .filter(n => n.what);
+  }
+
   /** The needs list, most urgent first. */
   function savedNeeds(rep) {
     return values(rep.needs).sort((a, b) => prioRank(a.priority) - prioRank(b.priority) || (a.ts || 0) - (b.ts || 0));
@@ -680,7 +717,13 @@
         '<div><label>' + esc(t('wk.col.due')) + '</label><input type="date" id="wk-n-due"></div>' +
         '<div><button class="btn" id="wk-n-add" style="width:100%;justify-content:center">' + esc(t('wk.b.addNeed')) + '</button></div>' +
         '<span class="tk-msg" id="wk-n-msg"></span>' +
-      '</div>' : '') +
+      '</div>' +
+      '<details class="wk-paste no-print"' + (pasteOpen ? ' open' : '') + '><summary>' + esc(t('wk.paste.title')) + '</summary>' +
+        '<p class="tk-hint">' + esc(t('wk.paste.hint')) + '</p>' +
+        '<textarea id="wk-n-paste" rows="5" dir="auto">' + esc(pasteText) + '</textarea>' +
+        '<div class="tk-actions"><button class="btn mini" id="wk-n-paste-go">' + esc(t('wk.paste.go')) + '</button>' +
+          '<span class="tk-msg" id="wk-n-paste-msg" style="color:var(--accent)">' + esc(pasteNote) + '</span></div>' +
+      '</details>' : '') +
       (edit && sg.length ? '<div class="wk-sg no-print"><p class="wk-sub">' + esc(t('wk.h.suggest')) + '</p>' +
         sg.map((s, i) => '<div class="tk-row"><span class="wk-kind k-' + esc(s.kind) + '">' + esc(t('wk.kind.' + s.kind)) + '</span> <b>' + esc(s.what) + '</b> — ' + esc(s.why) +
           ' <button class="btn mini ghost" data-wk-sg="' + i + '">' + esc(t('wk.b.useSuggest')) + '</button></div>').join('') + '</div>' : '') +
@@ -932,6 +975,29 @@
       addNeed({ kind: v('#wk-n-kind'), priority: v('#wk-n-prio') || null, what: v('#wk-n-what'), why: v('#wk-n-why'),
         owner: v('#wk-n-owner') || null, due: v('#wk-n-due') || null })
         .then(() => { if (document.activeElement) document.activeElement.blur(); render(); });
+    });
+    const paste = mount.querySelector('.wk-paste');
+    if (paste) paste.addEventListener('toggle', () => { pasteOpen = paste.open; if (!paste.open) pasteNote = ''; });
+    const pasteBox = mount.querySelector('#wk-n-paste');
+    if (pasteBox) pasteBox.addEventListener('input', () => { pasteText = pasteBox.value; pasteNote = ''; });
+    const pasteGo = mount.querySelector('#wk-n-paste-go');
+    if (pasteGo) pasteGo.addEventListener('click', function () {
+      const ta = mount.querySelector('#wk-n-paste');
+      const msg = mount.querySelector('#wk-n-paste-msg');
+      const list = parseNeeds(ta ? ta.value : '');
+      if (!list.length) {
+        if (msg) { msg.textContent = t('wk.paste.none'); msg.style.color = 'var(--crit)'; }
+        return;
+      }
+      pasteGo.disabled = true;
+      // one at a time, so they keep the pasted order
+      list.reduce((p, n, i) => p.then(() => addNeed(Object.assign(n, { ts: Date.now() + i }))), Promise.resolve())
+        .then(function () {
+          pasteText = '';
+          pasteNote = t('wk.paste.ok', { n: list.length });
+          if (document.activeElement) document.activeElement.blur();
+          render();
+        });
     });
     const sg = pendingSuggestions(reports[key] || {});
     mount.querySelectorAll('[data-wk-sg]').forEach(function (b) {

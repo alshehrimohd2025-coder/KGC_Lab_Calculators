@@ -1432,7 +1432,7 @@
       'wk.x.last.day': 'اليوم السابق',
       'wk.x.last.week': 'الأسبوع السابق (الأحد إلى السبت)',
       'wk.x.last.month': 'الشهر السابق كاملاً',
-      'wk.x.commentsNote': 'تعليقاتك والاحتياجات تدخل الملف من نفس الفترة، وتطلع باللغة اللي كتبتها فيها. في آخر الملف خانة «Engineer notes» فارغة تكتب فيها قبل الإرسال. الصفحة تنتقل للفترة اللي تختارها.',
+      'wk.x.commentsNote': 'تعليقاتك والاحتياجات تدخل الملف من نفس الفترة، وتطلع باللغة اللي كتبتها فيها. جدول الاحتياجات فيه أسطر فارغة، وفي آخر الملف خانة «Engineer notes»، تكتب فيها داخل Excel قبل الإرسال. الصفحة تنتقل للفترة اللي تختارها.',
       'wk.x.go': 'تنزيل الملف',
       'wk.x.failed': 'تعذّر إنشاء الملف:',
       'wk.x.done': 'تم تنزيل {f} — هذا نص مختصر ترسله مع الملف (انتسخ تلقائياً إن أمكن):',
@@ -1473,6 +1473,11 @@
       'wk.soFar': 'حتى الآن',
       'wk.b.today': 'اليوم',
       'wk.x.today': 'اليوم الحالي (حتى الآن)',
+      'wk.paste.title': 'لصق عدة بنود دفعة واحدة',
+      'wk.paste.hint': 'الصق الأسطر كما هي من جدول أو من Excel أو من المحادثة، بترتيب الأعمدة: الأولوية، النوع، المطلوب، السبب، المسؤول، الموعد. سطر العناوين يُتجاهل. البنود تُضاف للفترة المعروضة الآن.',
+      'wk.paste.go': 'إضافة البنود',
+      'wk.paste.ok': 'تمت إضافة البنود للقائمة: {n} ✓',
+      'wk.paste.none': 'لم أجد بنوداً — تأكد أن كل بند في سطر وأن الأعمدة مفصولة (Tab أو |).',
     },
 
     en: {
@@ -2885,7 +2890,7 @@
       'wk.x.last.day': 'Previous day',
       'wk.x.last.week': 'Previous week (Sunday to Saturday)',
       'wk.x.last.month': 'Previous full month',
-      'wk.x.commentsNote': 'Your comments and needs for the same period go into the file as you wrote them. The file ends with an empty "Engineer notes" box to write in before sending. The page moves to the period you choose.',
+      'wk.x.commentsNote': 'Your comments and needs for the same period go into the file as you wrote them. The needs table has empty rows and the file ends with an "Engineer notes" box, to fill in Excel before sending. The page moves to the period you choose.',
       'wk.x.go': 'Download file',
       'wk.x.failed': 'Could not create the file:',
       'wk.x.done': 'Downloaded {f} — a short text to send with it (copied automatically when the browser allows):',
@@ -2926,6 +2931,11 @@
       'wk.soFar': 'so far',
       'wk.b.today': 'Today',
       'wk.x.today': 'Today (so far)',
+      'wk.paste.title': 'Paste several needs at once',
+      'wk.paste.hint': 'Paste the rows as they are from a table, Excel or a chat, columns in this order: priority, type, needed, why, owner, needed by. A heading row is skipped. The needs go to the period on screen.',
+      'wk.paste.go': 'Add the needs',
+      'wk.paste.ok': '{n} needs added to the list ✓',
+      'wk.paste.none': 'No needs found — put each one on its own line, with the columns separated (Tab or |).',
     }
   };
 
