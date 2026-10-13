@@ -288,3 +288,5 @@ html:not(.authed) .wk-comment.empty { display: none; }
 .wk-line.ok b { color: var(--accent); }
 /* the six figures at the top sit in two even rows rather than five and one */
 @media (min-width: 900px) { .wk-top .pt-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* a last reading taken before the period: still the tank's state, but old */
+.wk-old { color: var(--warn); font-weight: 700; }

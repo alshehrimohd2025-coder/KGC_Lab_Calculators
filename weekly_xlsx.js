@@ -342,12 +342,13 @@
     if (!logo) sh.span(r1, 0, 4, 'Khereiji Showrooms Company', ST.company);
     sh.span(r1, 5, NCOL - 1, KIND[m.kind].toUpperCase() + ' GALVANIZING LINE REPORT', ST.title);
     sh.span(r2, 5, NCOL - 1, 'KGC Hot-Dip Galvanizing Plant', ST.subtitle);
-    const per = m.kind === 'week'
+    const per = (m.kind === 'week'
       ? 'Week: ' + dow(m.S) + ' ' + fmtDate(m.S) + ' to ' + dow(m.E) + ' ' + fmtDate(m.E)
       : m.kind === 'day' ? 'Day: ' + dow(m.S) + ' ' + fmtDate(m.S)
-      : 'Month: ' + periodLabel(m) + ' (' + fmtDate(m.S) + ' to ' + fmtDate(m.E) + ')';
+      : 'Month: ' + periodLabel(m) + ' (' + fmtDate(m.S) + ' to ' + fmtDate(m.E) + ')') +
+      (m.open ? ' — so far, up to ' + m.generatedAt : '');
     sh.span(r3, 4, NCOL - 1, per, ST.meta);
-    sh.span(r3b, 4, NCOL - 1, 'Generated ' + fmtDate(m.generated) +
+    sh.span(r3b, 4, NCOL - 1, 'Generated ' + fmtDate(m.generated) + ' ' + m.generatedAt +
       (m.preparedBy ? '   ·   Prepared by ' + preparer(m) : ''), ST.meta);
     const r4 = sh.next(6);
     sh.span(r4, 0, NCOL - 1, '', ST.rule);
@@ -411,21 +412,26 @@
 
   function sectionStatus(sh, m) {
     bar(sh, '1   TANKS OUT OF STANDARD');
-    subTitle(sh, 'Out-of-standard readings (' + m.readings + ' reading records in the period)');
+    subTitle(sh, 'Last reading of each tank up to ' + fmtDate(m.E) + ', and readings out of standard in the period (' + m.readings + ' reading records)');
     if (m.breaches.length) {
+      const old = x => ({ v: x.lastDate || 'date unknown', color: C.warnFg, b: 1, h: 'center' });
       table(sh, [
-        { label: 'Tank', span: 2 }, { label: 'Parameter', span: 1 }, { label: 'Out / readings', span: 1, h: 'center' },
-        { label: 'Critical', span: 1, h: 'center' }, { label: 'Worst', span: 1, h: 'right' }, { label: 'Worst date', span: 1, h: 'center' },
-        { label: 'Last', span: 1, h: 'right' }, { label: 'Last date', span: 1, h: 'center' }, { label: 'Last status', span: 1, h: 'center' },
-        { label: 'Standard range', span: 2, h: 'center' }
+        { label: 'Tank', span: 2 }, { label: 'Parameter', span: 1 }, { label: 'Last reading', span: 1, h: 'right' },
+        { label: 'Reading date', span: 1, h: 'center' }, { label: 'Status', span: 1, h: 'center' }, { label: 'Standard range', span: 2, h: 'center' },
+        { label: 'Out / readings in period', span: 1, h: 'center' }, { label: 'Critical in period', span: 1, h: 'center' },
+        { label: 'Worst in period', span: 1, h: 'right' }, { label: 'Worst date', span: 1, h: 'center' }
       ], m.breaches.map(x => [
-        { v: x.tank, b: 1 }, x.param, x.bad + ' / ' + x.n,
-        x.crit ? { v: x.crit, color: C.critFg, b: 1 } : 0,
-        x.worst, x.worstDate, x.last, x.lastDate, status(x.lastTier), x.range
-      ]), { limit: 20 });
-    } else emptyLine(sh, m.readings ? 'No reading outside the standard in this period.' : 'No readings were recorded in this period.');
-    pair(sh, 'Within standard', m.inStandard.join('  ·  '), 'good');
-    pair(sh, 'No reading in the period', m.noReading.join('  ·  '), 'warn');
+        { v: x.tank, b: 1 }, x.param, x.last, x.old ? old(x) : x.lastDate,
+        ['warn', 'crit'].indexOf(x.lastTier) !== -1 ? status(x.lastTier) : Object.assign(status('good'), { v: 'Back in' }),
+        x.range, x.n ? x.bad + ' / ' + x.n : '—',
+        x.crit ? { v: x.crit, color: C.critFg, b: 1 } : (x.n ? 0 : '—'),
+        x.worst, x.worstDate
+      ]), { limit: 25 });
+      if (m.breaches.some(x => x.old)) note(sh, 'A reading date in orange is before this period: the tank was not re-measured in the period, so its last reading still stands.');
+    } else emptyLine(sh, m.inStandard.length ? 'No tank is out of standard on its last reading, and no reading went out of standard in this period.'
+      : 'No readings were recorded for these tanks.');
+    pair(sh, 'Within standard', m.inStandard.map(x => x.tank + ' (' + (x.date ? fmtDate(x.date) : 'date unknown') + ')').join('  ·  '), 'good');
+    pair(sh, 'No reading yet', m.noReading.join('  ·  '), 'warn');
     if (m.excluded.length) note(sh, 'Not included in this report (chosen on the site): ' + m.excluded.join(', ') + '.');
 
     if (m.completeness) {
@@ -670,7 +676,8 @@
       '',
       'Dear all,',
       '',
-      'Please find attached the KGC galvanizing line ' + KIND[m.kind].toLowerCase() + ' report for ' + periodLabel(m) + '.',
+      'Please find attached the KGC galvanizing line ' + KIND[m.kind].toLowerCase() + ' report for ' + periodLabel(m) +
+        (m.open ? ' (so far, up to ' + m.generatedAt + ')' : '') + '.',
       '',
       'Key points:'
     ];
@@ -682,7 +689,7 @@
       if (isNum(k.drossExp.cur)) lines.push('• Expected dross: ' + fixed(k.drossExp.cur, 0) + ' kg (' + fixed(m.dross.basis.rate, 1) + ' kg/t from the last drossings)');
     } else lines.push('• No production data for this period yet');
     lines.push('• Tanks out of standard: ' + k.tanksOut.cur + ' of ' + k.tanksOut.of +
-      (m.breaches.length ? ' (' + m.breaches.filter((x, i, a) => a.findIndex(y => y.tank === x.tank) === i).map(x => x.tank).join(', ') + ')' : ''));
+      (m.outTanks.length ? ' (' + m.outTanks.join(', ') + ')' : ''));
     lines.push('• Needs listed: ' + m.needs.length + (high ? ' (high priority: ' + high + ')' : ''));
     const summary = String(m.comments.summary || '').trim();
     if (summary) lines.push('', 'Summary: ' + summary);
