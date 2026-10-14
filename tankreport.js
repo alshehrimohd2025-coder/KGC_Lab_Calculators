@@ -351,41 +351,43 @@
        line and its name; the readings across the middle on their colour;
        underneath, what the tank needs beside the days its bath has left
        (amber when a change is due within DUE_SOON days, red when overdue).
-       Cards are two columns wide on the figures' own columns, six to a row;
-       when the last row leaves room, a key card fills it so the panel closes
-       as one block, otherwise a short last row is centred and the key is a
-       note. Four tanks or fewer get wider cards on a single row. */
+       Cards are two columns wide on the figures' own columns, six to a row
+       (four tanks or fewer get wider cards on one row). When the last row
+       leaves four columns or more, a key card fills them so the panel closes
+       as one block; otherwise the key is a note under it. The number on a
+       card is the tank's place in the line, whichever tanks are chosen. */
     if (m.tanks.length) {
       const list = m.tanks, cnt = list.length;
       const W = cnt > 4 ? 2 : cnt === 4 ? 3 : 4;             // columns a card
       const PER = Math.floor(NCOL / W);                       // cards a row
       const rows = Math.ceil(cnt / PER);
       const free = (rows * PER - cnt) * W;                    // columns left on the last row
-      const keyed = cnt > 4 && free >= 4;
+      const keyed = free >= 4;
       const H = { label: 24, value: 28, sub: 20, gap: 8 };
-      const legend = 'Each card, top to bottom: the tank and its place in the line; its readings (green in range, amber moderately out, ' +
-        'red far out — past a critical limit, or more than a range width outside it); what it needs, beside the days its bath has left ' +
-        'at its average life of the last 12 months.';
+      const legend = 'Each card: the tank and its place in the line; its readings (green in range, amber moderately out, red far out, ' +
+        'grey no reading); what it needs; and the days its bath has left at its 12-month average life (amber: due within ' + DUE_SOON +
+        ' days, red: overdue).';
       sh.keep(20 + rows * (H.label + H.value + H.sub) + (rows - 1) * H.gap + (keyed ? 0 : X.linesFor(legend, NCOL, 8.5) * 11.5 + 2));
       subTitle(sh, 'The line at a glance, in process order');
 
       const side = { l: THIN, r: THIN };
-      const NONE = { fill: C.note, color: C.muted };
+      // a grey that still shows against the card's own band, and in print
+      const NONE = { fill: 'E5E7EB', color: '4B5563' };
       const two = n => (n < 10 ? '0' : '') + n;
       for (let r = 0; r < rows; r++) {
         if (r) sh.next(H.gap);
         const part = list.slice(r * PER, r * PER + PER);
         const last = r === rows - 1;
-        const off = last && !keyed ? Math.floor((NCOL - part.length * W) / 2) : Math.floor((NCOL - PER * W) / 2);
+        const off = 0;     // on the figures' columns; a short row stays there too
         const rl = sh.next(H.label), rv = sh.next(H.value), rs = sh.next(H.sub);
         part.forEach(function (x, i) {
-          const c1 = off + i * W, c2 = c1 + W - 1, mid = c1 + Math.floor(W / 2) - 1;
+          const c1 = off + i * W, c2 = c1 + W - 1, mid = c1 + Math.ceil(W / 2) - 1;
           const lv = LEVEL[x.level];
           const tt = lv ? TIER[lv[0]] : NONE;
           const nd = NEED[x.action.kind];
           const lt = lifeTier(x.life);
           const due = lt === 'crit' || lt === 'warn';
-          sh.span(rl, c1, c2, two(r * PER + i + 1) + ' · ' + x.name.toUpperCase(), { font: { b: 1, sz: 7.5, color: C.navy },
+          sh.span(rl, c1, c2, two(x.id) + ' · ' + x.name.toUpperCase(), { font: { b: 1, sz: 7.5, color: C.navy },
             fill: C.band, border: Object.assign({ t: ['medium', C.navy] }, side), align: { h: 'center', wrap: 1 } });
           sh.span(rv, c1, c2, lv ? lv[1] : 'No reading', { font: { b: 1, sz: 14, color: tt.color }, fill: tt.fill,
             border: side, align: { h: 'center' } });
@@ -398,25 +400,24 @@
         });
         if (!(last && keyed)) continue;
 
-        /* the key, in the room the last row leaves: a thin rule instead of
-           the navy one, so it does not read as one more tank */
-        const k1 = off + part.length * W, kw = NCOL - k1;
-        const box = { l: THIN, r: THIN };
-        sh.span(rl, k1, NCOL - 1, 'HOW TO READ THE CARDS', { font: { b: 1, sz: 7.5, color: C.muted }, fill: C.band,
-          border: Object.assign({ t: THIN }, box), align: { h: 'center' } });
-        const chips = [['good', 'In range'], ['warn', 'Moderately out'], ['crit', 'Far out'], [null, 'No reading']];
-        const base = Math.floor(kw / chips.length);
-        let extra = kw - base * chips.length, c = k1;
-        // the widest word takes the spare columns first
-        [1, 0, 2, 3].forEach(function (j) { chips[j].w = base + (extra > 0 ? 1 : 0); if (extra > 0) extra--; });
-        chips.forEach(function (ch, i) {
+        /* the key, in the room the last row leaves: white, with a thin rule
+           instead of the navy one and swatches one column wide, so it never
+           reads as one more tank */
+        const k1 = off + part.length * W, k2 = NCOL - 1;
+        const cs = k1 + Math.floor((k2 - k1 + 1 - 4) / 2);
+        const plain = { fill: C.white };
+        sh.span(rl, k1, k2, 'HOW TO READ THE CARDS', Object.assign({ font: { b: 1, sz: 7.5, color: C.muted },
+          border: { t: THIN, l: THIN, r: THIN }, align: { h: 'center' } }, plain));
+        if (cs > k1) sh.span(rv, k1, cs - 1, '', Object.assign({ border: { l: THIN } }, plain));
+        [['good', 'In range'], ['warn', 'Moderately out'], ['crit', 'Far out'], [null, 'No reading']].forEach(function (ch, i) {
           const ct = ch[0] ? TIER[ch[0]] : NONE;
-          sh.span(rv, c, c + ch.w - 1, ch[1], { font: { b: 1, sz: 8, color: ct.color }, fill: ct.fill,
-            border: { l: i ? ['thin', C.white] : THIN, r: i === chips.length - 1 ? THIN : null }, align: { h: 'center', wrap: 1 } });
-          c += ch.w;
+          sh.span(rv, cs + i, cs + i, ch[1], { font: { b: 1, sz: 7.5, color: ct.color }, fill: ct.fill,
+            border: { l: i || cs > k1 ? ['thin', C.white] : THIN, r: i === 3 && cs + 3 === k2 ? THIN : ['thin', C.white] },
+            align: { h: 'center', wrap: 1 } });
         });
-        sh.span(rs, k1, NCOL - 1, 'Underneath: what the tank needs · days its bath has left. Far out: past a critical limit, or a range width outside.',
-          { font: { sz: 7, color: C.muted }, fill: C.band, border: Object.assign({ b: THIN }, box), align: { h: 'center', wrap: 1 } });
+        if (cs + 4 <= k2) sh.span(rv, cs + 4, k2, '', Object.assign({ border: { r: THIN } }, plain));
+        sh.span(rs, k1, k2, 'Below: what it needs · days of bath left (amber: due within ' + DUE_SOON + ' d · red: overdue)',
+          Object.assign({ font: { sz: 7, color: C.muted }, border: { l: THIN, r: THIN, b: THIN }, align: { h: 'center', wrap: 1 } }, plain));
       }
       if (!keyed) note(sh, legend);
     }
@@ -428,10 +429,12 @@
       const by = k => m.tanks.filter(x => x.action.kind === k);
       const first = x => x.stale && x.latest ? ' (last reading ' + fmtDate(x.latest) + ': re-measure first)' : '';
       const items = [];
-      if (by('change').length) items.push(['Bath change needed', by('change').map(x => x.name + ': ' + x.action.what + first(x)).join('   ·   '), 'crit']);
-      if (by('improve').length) items.push(['Improvement needed', by('improve').map(x => x.name + ': ' + x.action.what +
-        ' — ' + x.out.join(', ') + first(x)).join('   ·   '), 'warn']);
-      if (by('plan').length) items.push(['Plan a bath change', by('plan').map(x => x.name + ': ' + x.action.what).join('   ·   '), 'warn']);
+      // one tank to a line, so nothing is left hanging at a line's end
+      const lines = list => list.map(t => '• ' + t).join('\n');
+      if (by('change').length) items.push(['Bath change needed', lines(by('change').map(x => x.name + ': ' + x.action.what + first(x))), 'crit']);
+      if (by('improve').length) items.push(['Improvement needed', lines(by('improve').map(x => x.name + ': ' + x.action.what +
+        ' — ' + x.out.join(', ') + first(x))), 'warn']);
+      if (by('plan').length) items.push(['Plan a bath change', lines(by('plan').map(x => x.name + ': ' + x.action.what)), 'warn']);
       if (by('measure').length) items.push(['Measure', by('measure').map(x => x.name).join(',  ') + ' — no reading on the site', 'warn']);
       bar(sh, 'NEEDS ATTENTION');
       if (items.length) items.forEach(it => pair(sh, it[0], it[1], it[2]));
@@ -441,12 +444,17 @@
     const old = (date, age) => date && age != null && age <= STALE_DAYS ? date
       : { v: date || 'No reading', color: C.warnFg, b: 1, h: 'center' };
 
+    /* A table that fits on a page is never split across two: its bar, header,
+       rows and note move to the next page together. */
+    const keepWhole = (cols, rows, notes, extra) => sh.keep(Math.min(X.PAGE_H, 6 + 21 + (extra || 0) +
+      X.tableHeight(cols, rows, { limit: 20 }) + notes.reduce((h, t) => h + Math.max(13, X.linesFor(t, NCOL, 8.5) * 11.5 + 2), 0)));
+
     if (m.parts.status) {
-      bar(sh, ++n + '   TANK STATUS AND WHAT EACH NEEDS');
-      table(sh, [
+      const cols = [
         { label: 'Tank', span: 2 }, { label: 'Status', span: 2, h: 'center' }, { label: 'Readings out of range', span: 3 },
         { label: 'Last reading', span: 1, h: 'center' }, { label: 'Needs', span: 1, h: 'center' }, { label: 'What to do', span: 3 }
-      ], m.tanks.map(x => [
+      ];
+      const rows = m.tanks.map(x => [
         { v: x.name + (x.serviceKey !== 'in_service' ? ' (' + x.service + ')' : ''), b: 1 },
         levelCell(x.level),
         x.out.length ? { v: x.out.join('\n'), color: x.level === 'far' ? C.critFg : C.warnFg }
@@ -455,24 +463,26 @@
         needCell(x.action),
         x.action.what ? { v: x.action.what + (x.stale && x.latest && x.action.kind !== 'none' ? ' (re-measure first)' : ''),
           color: x.action.kind === 'change' ? C.critFg : C.ink } : { v: '', blank: 1 }
-      ]), { limit: 20 });
-      note(sh, 'Readings are the ones on the tank dashboard, judged against the standard limits on the site. ' +
+      ]);
+      const statusNote = 'Readings are the ones on the tank dashboard, judged against the standard limits on the site. ' +
         'Moderately out: outside a limit by less than the width of the range; far out: past a critical limit, or further than that. ' +
-        'A last reading in orange is more than ' + STALE_DAYS + ' days old: the bath may have moved since.');
+        'A last reading in orange is more than ' + STALE_DAYS + ' days old: the bath may have moved since.';
+      keepWhole(cols, rows, [statusNote]);
+      bar(sh, ++n + '   TANK STATUS AND WHAT EACH NEEDS');
+      table(sh, cols, rows, { limit: 20 });
+      note(sh, statusNote);
       pair(sh, 'Tank notes', m.tanks.filter(x => x.note).map(x => x.name + ': ' + x.note).join('  ·  '), 'none');
     }
 
     if (m.parts.life) {
-      bar(sh, ++n + '   BATH CHANGES AND REMAINING LIFE');
-      subTitle(sh, 'Average life from the bath changes of the last 12 months');
-      const head = sh.rows.length;
-      table(sh, [
+      const cols = [
         { label: 'Tank', span: 2 }, { label: 'Last change', span: 1, h: 'center' }, { label: 'Change', span: 1, h: 'center' },
         { label: 'Days since', span: 1, h: 'center' }, { label: 'Changes in 12 months', span: 1, h: 'center' },
         { label: 'Average life (days)', span: 1, h: 'center' }, { label: 'Life used', span: 1, h: 'center' },
         { label: 'Days remaining', span: 1, h: 'center' }, { label: 'Next change due', span: 1, h: 'center' },
         { label: 'Last adjustment', span: 2 }
-      ], m.tanks.map(function (x) {
+      ];
+      const rows = m.tanks.map(function (x) {
         const L = x.life;
         const tier = !L || L.used == null ? null : L.used >= 1 ? 'crit' : L.remaining <= DUE_SOON ? 'warn' : 'good';
         const left = !L || L.remaining == null ? null : L.remaining < 0
@@ -491,13 +501,19 @@
           L && L.due ? L.due : null,
           x.adjust ? fmtDate(x.adjust.date) + ' · ' + x.adjust.type : null
         ];
-      }), { limit: 20 });
-      // a bar in "life used": empty at a fresh bath, full at its average life
-      sh.bars.push({ ref: 'H' + (head + 2) + ':H' + (head + 1 + Math.min(m.tanks.length, 20)), color: '8EA9DB', max: 1 });
-      note(sh, 'Average life: the average number of days between the bath changes recorded in the last 12 months (a renewal; for the flux tank, a clean-out) — two changes in the year are needed. ' +
+      });
+      const lifeNote = 'Average life: the average number of days between the bath changes recorded in the last 12 months (a renewal; for the flux tank, a clean-out) — two changes in the year are needed. ' +
         'Days remaining = average life − days since the last change; life used = days since ÷ average life. ' +
         'It is how long the bath has lasted lately, not a measurement: a heavier month uses a bath faster. ' +
-        'A dash: nothing recorded on the site. The last adjustment is the latest addition or treatment; its details are under recent changes.');
+        'A dash: nothing recorded on the site. The last adjustment is the latest addition or treatment; its details are under recent changes.';
+      keepWhole(cols, rows, [lifeNote], 20 + 18);
+      bar(sh, ++n + '   BATH CHANGES AND REMAINING LIFE');
+      subTitle(sh, 'Average life from the bath changes of the last 12 months');
+      const head = sh.rows.length;
+      table(sh, cols, rows, { limit: 20 });
+      // a bar in "life used": empty at a fresh bath, full at its average life
+      sh.bars.push({ ref: 'H' + (head + 2) + ':H' + (head + 1 + Math.min(m.tanks.length, 20)), color: '8EA9DB', max: 1 });
+      note(sh, lifeNote);
     }
 
     if (m.parts.readings) {
@@ -538,9 +554,10 @@
       } else emptyLine(sh, 'No renewals, additions or treatments were recorded in the last ' + m.days + ' days.');
     }
 
-    if (m.parts.notes) X.notesBox(sh);
-    X.closing(sh, 'Built from the KGC galvanizing line records on the site: the tank dashboard readings, the renewal, addition and treatment logs, and the before/after cards. ' +
-      'Readings are judged against the standard limits set on the site on ' + fmtDate(m.generated) + '.');
+    const closingText = 'Built from the KGC galvanizing line records on the site: the tank dashboard readings, the renewal, addition and treatment logs, and the before/after cards. ' +
+      'Readings are judged against the standard limits set on the site on ' + fmtDate(m.generated) + '.';
+    if (m.parts.notes) X.notesBox(sh, 10 + X.linesFor(closingText, NCOL, 8) * 11 + 4);
+    X.closing(sh, closingText);
 
     const title = 'KGC Tank Status and Bath Life — ' + fmtDate(m.generated);
     return { blob: X.pack(sh, styles, { title: title, creator: m.preparedBy, sheetName: 'Tank Status', logo: logo }),
