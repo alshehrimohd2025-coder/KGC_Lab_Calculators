@@ -346,29 +346,79 @@
       : L.remaining < 0 ? Math.abs(L.remaining) + ' d overdue' : L.remaining + ' d left';
     const lifeTier = L => !L || L.remaining == null ? null : L.remaining < 0 ? 'crit' : L.remaining <= DUE_SOON ? 'warn' : 'good';
 
-    /* The line at a glance: one tile per tank in process order, coloured by
-       its readings, with the days its bath has left underneath. */
+    /* The line at a glance: the tanks as cards cut like the key figures
+       above, in process order. A navy rule over each card's place in the
+       line and its name; the readings across the middle on their colour;
+       underneath, what the tank needs beside the days its bath has left
+       (amber when a change is due within DUE_SOON days, red when overdue).
+       Cards are two columns wide on the figures' own columns, six to a row;
+       when the last row leaves room, a key card fills it so the panel closes
+       as one block, otherwise a short last row is centred and the key is a
+       note. Four tanks or fewer get wider cards on a single row. */
     if (m.tanks.length) {
+      const list = m.tanks, cnt = list.length;
+      const W = cnt > 4 ? 2 : cnt === 4 ? 3 : 4;             // columns a card
+      const PER = Math.floor(NCOL / W);                       // cards a row
+      const rows = Math.ceil(cnt / PER);
+      const free = (rows * PER - cnt) * W;                    // columns left on the last row
+      const keyed = cnt > 4 && free >= 4;
+      const H = { label: 24, value: 28, sub: 20, gap: 8 };
+      const legend = 'Each card, top to bottom: the tank and its place in the line; its readings (green in range, amber moderately out, ' +
+        'red far out — past a critical limit, or more than a range width outside it); what it needs, beside the days its bath has left ' +
+        'at its average life of the last 12 months.';
+      sh.keep(20 + rows * (H.label + H.value + H.sub) + (rows - 1) * H.gap + (keyed ? 0 : X.linesFor(legend, NCOL, 8.5) * 11.5 + 2));
       subTitle(sh, 'The line at a glance, in process order');
-      const list = m.tanks.slice(0, NCOL);
-      const off = Math.floor((NCOL - list.length) / 2);
-      const gap = ['medium', C.white];
-      const r1 = sh.next(30), r2 = sh.next(20), r2b = sh.next(20), r3 = sh.next(18);
-      list.forEach(function (x, i) {
-        const c = off + i;
-        const tt = !LEVEL[x.level] ? { fill: C.note, color: C.muted } : TIER[LEVEL[x.level][0]];
-        const nt = TIER[NEED[x.action.kind][0]];
-        const lt = lifeTier(x.life);
-        sh.span(r1, c, c, x.name, { font: { b: 1, sz: 8, color: C.white }, fill: C.navy,
-          border: { l: gap, r: gap }, align: { h: 'center', wrap: 1 } });
-        sh.span(r2, c, c, LEVEL[x.level] ? LEVEL[x.level][2] : 'No reading', { font: { b: 1, sz: 9, color: tt.color }, fill: tt.fill,
-          border: { l: gap, r: gap }, align: { h: 'center' } });
-        sh.span(r2b, c, c, NEED[x.action.kind][1], { font: { b: x.action.kind !== 'none' ? 1 : 0, sz: 8.5, color: nt.color }, fill: C.white,
-          border: { l: gap, r: gap, t: THIN }, align: { h: 'center' } });
-        sh.span(r3, c, c, lifeText(x.life), { font: { b: lt && lt !== 'good' ? 1 : 0, sz: 8, color: lt === 'crit' ? C.critFg : lt === 'warn' ? C.warnFg : C.muted },
-          fill: C.band, border: { l: gap, r: gap, b: THIN }, align: { h: 'center' } });
-      });
-      note(sh, 'Each tile, top to bottom: the tank; its readings (green in range, amber moderately out, red far out — past a critical limit or more than a range width outside it); what it needs; and the days its bath has left at its average life of the last 12 months.');
+
+      const side = { l: THIN, r: THIN };
+      const NONE = { fill: C.note, color: C.muted };
+      const two = n => (n < 10 ? '0' : '') + n;
+      for (let r = 0; r < rows; r++) {
+        if (r) sh.next(H.gap);
+        const part = list.slice(r * PER, r * PER + PER);
+        const last = r === rows - 1;
+        const off = last && !keyed ? Math.floor((NCOL - part.length * W) / 2) : Math.floor((NCOL - PER * W) / 2);
+        const rl = sh.next(H.label), rv = sh.next(H.value), rs = sh.next(H.sub);
+        part.forEach(function (x, i) {
+          const c1 = off + i * W, c2 = c1 + W - 1, mid = c1 + Math.floor(W / 2) - 1;
+          const lv = LEVEL[x.level];
+          const tt = lv ? TIER[lv[0]] : NONE;
+          const nd = NEED[x.action.kind];
+          const lt = lifeTier(x.life);
+          const due = lt === 'crit' || lt === 'warn';
+          sh.span(rl, c1, c2, two(r * PER + i + 1) + ' · ' + x.name.toUpperCase(), { font: { b: 1, sz: 7.5, color: C.navy },
+            fill: C.band, border: Object.assign({ t: ['medium', C.navy] }, side), align: { h: 'center', wrap: 1 } });
+          sh.span(rv, c1, c2, lv ? lv[1] : 'No reading', { font: { b: 1, sz: 14, color: tt.color }, fill: tt.fill,
+            border: side, align: { h: 'center' } });
+          sh.span(rs, c1, mid, nd[1], { font: { b: x.action.kind !== 'none' ? 1 : 0, sz: 8.5,
+            color: x.action.kind === 'none' ? C.muted : TIER[nd[0]].color }, fill: C.band,
+            border: { l: THIN, b: THIN }, align: { h: 'center' } });
+          sh.span(rs, mid + 1, c2, lifeText(x.life), { font: { b: due ? 1 : 0, sz: 8.5,
+            color: due ? TIER[lt].color : lt === 'good' ? C.okFg : C.muted }, fill: due ? TIER[lt].fill : C.band,
+            border: { l: THIN, r: THIN, b: THIN }, align: { h: 'center' } });
+        });
+        if (!(last && keyed)) continue;
+
+        /* the key, in the room the last row leaves: a thin rule instead of
+           the navy one, so it does not read as one more tank */
+        const k1 = off + part.length * W, kw = NCOL - k1;
+        const box = { l: THIN, r: THIN };
+        sh.span(rl, k1, NCOL - 1, 'HOW TO READ THE CARDS', { font: { b: 1, sz: 7.5, color: C.muted }, fill: C.band,
+          border: Object.assign({ t: THIN }, box), align: { h: 'center' } });
+        const chips = [['good', 'In range'], ['warn', 'Moderately out'], ['crit', 'Far out'], [null, 'No reading']];
+        const base = Math.floor(kw / chips.length);
+        let extra = kw - base * chips.length, c = k1;
+        // the widest word takes the spare columns first
+        [1, 0, 2, 3].forEach(function (j) { chips[j].w = base + (extra > 0 ? 1 : 0); if (extra > 0) extra--; });
+        chips.forEach(function (ch, i) {
+          const ct = ch[0] ? TIER[ch[0]] : NONE;
+          sh.span(rv, c, c + ch.w - 1, ch[1], { font: { b: 1, sz: 8, color: ct.color }, fill: ct.fill,
+            border: { l: i ? ['thin', C.white] : THIN, r: i === chips.length - 1 ? THIN : null }, align: { h: 'center', wrap: 1 } });
+          c += ch.w;
+        });
+        sh.span(rs, k1, NCOL - 1, 'Underneath: what the tank needs · days its bath has left. Far out: past a critical limit, or a range width outside.',
+          { font: { sz: 7, color: C.muted }, fill: C.band, border: Object.assign({ b: THIN }, box), align: { h: 'center', wrap: 1 } });
+      }
+      if (!keyed) note(sh, legend);
     }
 
     let n = 0;
