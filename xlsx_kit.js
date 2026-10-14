@@ -317,6 +317,23 @@
     if (rows.length > limit) note(sh, '+ ' + (rows.length - limit) + ' more row' + (rows.length - limit === 1 ? '' : 's') + ' not shown — the full list is on the site.');
   }
 
+  /** The height table() will give these rows, so a caller can keep a short table whole. */
+  function tableHeight(cols, rows, opts) {
+    opts = opts || {};
+    let h = Math.max(18, cols.reduce((m, c) => Math.max(m, linesFor(c.label, c.span, 9)), 1) * 12 + 5);
+    rows.slice(0, opts.limit || MAX_ROWS).forEach(function (row) {
+      let lines = 1;
+      cols.forEach(function (col, j) {
+        let cell = row[j];
+        if (cell == null || typeof cell !== 'object' || cell.date) cell = { v: cell };
+        const v = cell.v == null || cell.v === '' ? (cell.blank ? '' : '—') : cell.v;
+        if (!isNum(v) && !isIso(v) && !(v && v.date)) lines = Math.max(lines, linesFor(v, col.span, 9));
+      });
+      h += Math.max(17, lines * 12 + 5);
+    });
+    return h;
+  }
+
   const status = tier => {
     const t = TIER[tier] || TIER.none;
     return { v: t.word, fill: t.fill, color: t.color, b: 1, h: 'center' };
@@ -340,8 +357,9 @@
      does not hold. Excel does not grow a merged cell to fit, so it starts
      tall; a longer note needs the row dragged taller. */
   const NOTES_H = 120;
-  function notesBox(sh) {
-    sh.keep(6 + 21 + NOTES_H);
+  function notesBox(sh, after) {
+    // `after`: the height of what must stay on the same page below the box
+    sh.keep(6 + 21 + NOTES_H + (after || 0));
     bar(sh, 'ENGINEER NOTES');
     const r = sh.next(NOTES_H);
     sh.span(r, 0, NCOL - 1, '', { font: { sz: 10, color: C.ink }, border: { all: THIN },
@@ -493,10 +511,10 @@
   }
 
   window.KGCXlsx = {
-    NCOL: NCOL, C: C, THIN: THIN, ST: ST, TIER: TIER, MONTHS: MONTHS, MONTHS_LONG: MONTHS_LONG,
+    NCOL: NCOL, PAGE_H: PAGE_H, C: C, THIN: THIN, ST: ST, TIER: TIER, MONTHS: MONTHS, MONTHS_LONG: MONTHS_LONG,
     isNum: isNum, fmtDate: fmtDate, dow: dow, fixed: fixed, signed: signed, startsArabic: startsArabic,
     Styles: Styles, Sheet: Sheet, td: td, linesFor: linesFor,
-    bar: bar, subTitle: subTitle, note: note, emptyLine: emptyLine, comment: comment, table: table,
+    bar: bar, subTitle: subTitle, note: note, emptyLine: emptyLine, comment: comment, table: table, tableHeight: tableHeight,
     status: status, pair: pair, notesBox: notesBox, header: header, cardRow: cardRow, closing: closing,
     pack: pack, pngSize: pngSize, loadLogo: loadLogo, download: download
   };
