@@ -365,7 +365,7 @@
     sh.span(r4, 0, NCOL - 1, '', ST.rule);
   }
 
-  /** Up to six key figures across the page. Each: { label, v, fmt, hot, sub }. */
+  /** Up to six key figures across the page. Each: { label, v, fmt, hot, color, sub }. */
   function cardRow(sh, list) {
     sh.next(8);
     const rl = sh.next(26), rv = sh.next(30), rp = sh.next(18);
@@ -375,7 +375,7 @@
       const side = { l: THIN, r: THIN };
       sh.span(rl, c1, c2, card.label, { font: { b: 1, sz: 7.5, color: C.muted }, fill: C.band,
         border: Object.assign({ t: ['medium', C.navy] }, side), align: { h: 'center', wrap: 1 } });
-      sh.span(rv, c1, c2, isNum(card.v) ? card.v : (card.v == null ? '—' : card.v), { font: { b: 1, sz: 18, color: card.hot ? C.critFg : C.navy },
+      sh.span(rv, c1, c2, isNum(card.v) ? card.v : (card.v == null ? '—' : card.v), { font: { b: 1, sz: 18, color: card.color || (card.hot ? C.critFg : C.navy) },
         fill: C.band, border: side, fmt: card.fmt, align: { h: 'center' } });
       sh.span(rp, c1, c2, card.sub || '', { font: { sz: 8, color: C.muted }, fill: C.band,
         border: Object.assign({ b: THIN }, side), align: { h: 'center' } });

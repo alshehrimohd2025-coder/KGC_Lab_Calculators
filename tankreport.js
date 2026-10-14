@@ -24,8 +24,14 @@
 
    A dialog chooses the tanks and the parts before the download; the choice
    is kept at tank_report_settings:
-     { tanksOff: { <tankId>: true }, parts: { <part>: true|false }, days,
-       preparedBy, preparedTitle }
+     { tanksOff: { <tankId>: true }, parts: { <part>: true|false },
+       params: { <key>: true|false }, days, preparedBy, preparedTitle }
+   Zinc, temperature, salt and specific gravity are out unless chosen.
+
+   Readings come in three levels — in range, moderately out, far out (past
+   a critical limit, or more than a range width outside) — and each tank is
+   told what it needs: a bath change, an improvement (an addition or a
+   treatment), a change to plan, a measurement, or nothing.
    The lab's earlier template (report.js) stays one click away in it.
 
    Readings are the ones on the tank cards, so the file says what the
@@ -48,6 +54,14 @@
   const PRESETS = { all: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], acid: [3, 4, 5, 6, 7, 8], flux: [10], rinse: [1, 2, 9] };
   // the parts, and whether each is in unless the dialog says otherwise
   const PARTS = { attention: true, status: true, life: true, readings: false, events: true, notes: true };
+  /* The parameters the report speaks about, in this order. Zinc, temperature,
+     salt and specific gravity are left out unless chosen, at the plant's
+     request: the report is read for the baths' chemistry and life. */
+  const PARAMS = ['conc', 'acidPercent', 'ph', 'fe', 'baume', 'ec', 'zn', 'temp', 'salt', 'sg'];
+  const PARAM_OFF = { zn: true, temp: true, salt: true, sg: true };
+  const RINSES = [2, 9], ACIDS = [3, 4, 5, 6, 8];
+  // more than a whole range width outside a limit (or past a critical one) is far out
+  const FAR = 1;
   const WINDOWS = [7, 30, 90];
   const STALE_DAYS = 7;         // a reading older than this is flagged
   const DUE_SOON = 14;          // a bath change due within this many days counts as due
@@ -88,6 +102,59 @@
   }
   const included = (s, id) => !(s.tanksOff && s.tanksOff[id]);
   const partOn = (s, k) => s.parts && s.parts[k] != null ? !!s.parts[k] : PARTS[k];
+  const paramOn = (s, k) => s.params && s.params[k] != null ? !!s.params[k] : !PARAM_OFF[k];
+
+  /** How far outside its range a value sits, as a share of the range width. */
+  function beyond(p, v) {
+    const width = (p.min != null && p.max != null) ? (p.max - p.min) : (p.max != null ? p.max : (p.min || 1));
+    if (p.max != null && v > p.max) return (v - p.max) / (width || 1);
+    if (p.min != null && v < p.min) return (p.min - v) / (width || 1);
+    return 0;
+  }
+
+  /* Three levels, as the plant reads them: in range, moderately out, far out
+     (past a critical limit, or more than a range width outside). */
+  function severity(p, v, tier) {
+    if (tier === 'good') return 'in';
+    if (tier !== 'warn' && tier !== 'crit') return 'none';
+    return tier === 'crit' || beyond(p, v) > FAR ? 'far' : 'mild';
+  }
+
+  /** What one reading out of range asks for, when it can be corrected in place. */
+  function fixFor(tankId, x) {
+    const k = x.key, hi = x.high;
+    if (k === 'acidPercent') return hi ? t('tr.fix.dilute') : t('tr.fix.hcl');
+    if (k === 'conc') return hi ? t('tr.fix.dilute') : t('tr.fix.degreaser');
+    if (k === 'ph' && tankId === 10) return hi ? t('tr.fix.phDown') : t('tr.fix.ammonia');
+    if (k === 'fe' && tankId === 10) return t('tr.fix.fluxFe');
+    if ((k === 'baume' || k === 'salt' || k === 'sg') && tankId === 10) return hi ? t('tr.fix.dilute') : t('tr.fix.salt');
+    if (k === 'temp') return hi ? t('tr.fix.cool') : t('tr.fix.heat');
+    return t('tr.fix.correct', { p: x.label });
+  }
+
+  /* Who needs a bath change and who needs an improvement, from the readings
+     in the report and the bath's life:
+       change   a rinse out of range (drain and refill), acid or stripping
+                metal above its limit, a degreasing bath far out, or a
+                bath past its average life
+       improve  readings out that an addition or treatment corrects
+       plan     a change due within DUE_SOON days
+       measure  no reading at all */
+  function actionFor(tk, params, life) {
+    const outs = params.filter(x => x.sev === 'mild' || x.sev === 'far');
+    const hi = k => outs.find(x => x.key === k && x.high);
+    const lo = k => outs.find(x => x.key === k && !x.high);
+    const rem = life && life.remaining != null ? life.remaining : null;
+    if (RINSES.indexOf(tk.id) !== -1 && outs.length) return { kind: 'change', what: t('tr.do.rinse') };
+    if (ACIDS.indexOf(tk.id) !== -1 && hi('fe')) return { kind: 'change', what: t('tr.do.acid') };
+    if (tk.id === 7 && (hi('zn') || hi('fe'))) return { kind: 'change', what: t('tr.do.strip') };
+    if (tk.id === 1 && lo('conc') && lo('conc').sev === 'far') return { kind: 'change', what: t('tr.do.degrease') };
+    if (rem != null && rem < 0) return { kind: 'change', what: t('tr.do.overdue', { n: Math.abs(rem) }) };
+    if (outs.length) return { kind: 'improve', what: outs.map(x => fixFor(tk.id, x)).filter((v, i, a) => a.indexOf(v) === i).join('; ') };
+    if (rem != null && rem <= DUE_SOON) return { kind: 'plan', what: t('tr.do.plan', { d: window.KGCXlsx ? window.KGCXlsx.fmtDate(life.due) : life.due }) };
+    if (!params.some(x => x.v != null)) return { kind: 'measure', what: t('tr.do.measure') };
+    return { kind: 'none', what: '' };
+  }
   const windowOf = s => WINDOWS.indexOf(Number(s.days)) !== -1 ? Number(s.days) : 30;
 
   /* ---------------- bath changes ---------------- */
@@ -178,34 +245,39 @@
     const recent = allEvents.filter(e => e.date >= addDays(today, -(days - 1)) && list.some(tk => tk.id === e.tankId));
 
     const tanksOut = list.map(function (tk) {
-      const params = measurable(tk.id).map(function (p) {
+      const params = measurable(tk.id).filter(p => paramOn(s, p.key)).map(function (p) {
         const v = tk[p.key];
         const has = reading(v);
         const date = has ? (tk.measured && tk.measured[p.key]) || null : null;
+        const tier = has && SP ? SP.evaluate(Number(v), p).tier : 'none';
         return {
-          label: paramLabel(p.key),
+          key: p.key, label: paramLabel(p.key),
+          sev: has ? severity(p, Number(v), tier) : 'none',
+          high: has && p.max != null && Number(v) > p.max,
           param: paramLabel(p.key) + (p.unit ? ' (' + p.unit + ')' : ''),
           unit: p.unit || '',
           v: has ? Number(v) : null, date: date,
           age: date ? daysBetween(date, today) : null,
-          tier: has && SP ? SP.evaluate(Number(v), p).tier : 'none',
+          tier: tier,
           range: T() ? T().rangeOf(p) : ''
         };
       });
       const measured = params.filter(x => x.v != null);
-      const level = params.some(x => x.tier === 'crit') ? 'crit' : params.some(x => x.tier === 'warn') ? 'warn'
-        : measured.length ? 'good' : 'none';
+      const level = params.some(x => x.sev === 'far') ? 'far' : params.some(x => x.sev === 'mild') ? 'mild'
+        : measured.length ? 'in' : 'none';
       const latest = measured.map(x => x.date || '').sort().pop() || null;
       const adj = allEvents.find(e => e.tankId === tk.id && e.kind === 'adjust') || null;
       const service = typeof normalizeStatus === 'function' ? normalizeStatus(tk.status) : 'in_service';
+      const life = lifeOf(tk.id, today);
       return {
         id: tk.id, name: tankName(tk.id), service: t('st.' + service), serviceKey: service,
         note: tk.note || '', params: params, level: level,
-        out: params.filter(x => x.tier === 'warn' || x.tier === 'crit')
+        out: params.filter(x => x.sev === 'mild' || x.sev === 'far')
           .map(x => x.label + ' ' + fmt(x.v) + (x.unit ? ' ' + x.unit : '') + ' (' + x.range + ')'),
         latest: latest, age: latest ? daysBetween(latest, today) : null,
         stale: !measured.length || !latest || daysBetween(latest, today) > STALE_DAYS,
-        life: lifeOf(tk.id, today),
+        life: life,
+        action: actionFor(tk, params, life),
         adjust: adj ? { date: adj.date, type: adj.type } : null
       };
     });
@@ -217,13 +289,16 @@
       parts: Object.keys(PARTS).reduce((o, k) => { o[k] = partOn(s, k); return o; }, {}),
       days: days, tanks: tanksOut,
       excluded: reportTanks().filter(tk => !included(s, tk.id)).map(tk => tankName(tk.id)),
+      params: PARAMS.filter(k => !paramOn(s, k)).map(paramLabel),
       kpi: {
         total: tanksOut.length,
-        good: tanksOut.filter(x => x.level === 'good').length,
-        out: tanksOut.filter(x => x.level === 'warn' || x.level === 'crit').length,
-        crit: tanksOut.filter(x => x.level === 'crit').length,
+        in: tanksOut.filter(x => x.level === 'in').length,
+        mild: tanksOut.filter(x => x.level === 'mild').length,
+        far: tanksOut.filter(x => x.level === 'far').length,
         stale: tanksOut.filter(x => x.stale).length,
-        due: withLife.filter(x => x.life.remaining >= 0 && x.life.remaining <= DUE_SOON).length,
+        change: tanksOut.filter(x => x.action.kind === 'change').length,
+        improve: tanksOut.filter(x => x.action.kind === 'improve').length,
+        plan: tanksOut.filter(x => x.action.kind === 'plan').length,
         overdue: withLife.filter(x => x.life.remaining < 0).length
       },
       events: recent.map(e => ({ date: e.date, tank: tankName(e.tankId), type: e.type, detail: e.detail, by: e.by }))
@@ -248,15 +323,24 @@
     ] }, X.pngSize(logo));
 
     const k = m.kpi;
+    const lit = (v, c) => v > 0 ? c : null;
     X.cardRow(sh, [
-      { label: 'TANKS IN REPORT', v: k.total, fmt: '0', sub: m.excluded.length ? 'Not included: ' + m.excluded.length : 'All tanks with a standard' },
-      { label: 'WITHIN STANDARD', v: k.good, fmt: '0', sub: 'Every reading in range' },
-      { label: 'OUT OF STANDARD', v: k.out, fmt: '0', hot: k.out > 0, sub: 'Critical: ' + k.crit },
-      { label: 'NOT MEASURED IN ' + STALE_DAYS + ' DAYS', v: k.stale, fmt: '0', hot: k.stale > 0, sub: 'Last reading older, or none' },
-      { label: 'BATH CHANGE DUE IN ' + DUE_SOON + ' DAYS', v: k.due, fmt: '0', sub: 'From the last 12 months' },
-      { label: 'BATH CHANGE OVERDUE', v: k.overdue, fmt: '0', hot: k.overdue > 0, sub: 'Past its average life' }
+      { label: 'IN RANGE', v: k.in, fmt: '0', color: lit(k.in, C.okFg), sub: 'of ' + k.total + ' tanks in the report' },
+      { label: 'MODERATELY OUT', v: k.mild, fmt: '0', color: lit(k.mild, C.warnFg), sub: 'Out by less than a range width' },
+      { label: 'FAR OUT', v: k.far, fmt: '0', color: lit(k.far, C.critFg), sub: 'Critical, or beyond a range width' },
+      { label: 'NEED A BATH CHANGE', v: k.change, fmt: '0', color: lit(k.change, C.critFg), sub: 'Plus ' + k.plan + ' to plan within ' + DUE_SOON + ' days' },
+      { label: 'NEED IMPROVEMENT', v: k.improve, fmt: '0', color: lit(k.improve, C.warnFg), sub: 'By an addition or a treatment' },
+      { label: 'NOT MEASURED IN ' + STALE_DAYS + ' DAYS', v: k.stale, fmt: '0', color: lit(k.stale, C.warnFg), sub: 'Last reading older, or none' }
     ]);
     if (m.excluded.length) note(sh, 'Not included in this report (chosen on the site): ' + m.excluded.join(', ') + '.');
+    if (m.params.length) note(sh, 'Parameters not shown (chosen on the site): ' + m.params.join(', ') + '.');
+
+    /* the three levels and the four needs, in one place for every table */
+    const LEVEL = { in: ['good', 'In range', 'In range'], mild: ['warn', 'Moderately out', 'Moderate'], far: ['crit', 'Far out', 'Far out'] };
+    const levelCell = (lv, short) => !LEVEL[lv] ? { v: 'No reading', color: C.muted, h: 'center' }
+      : Object.assign(status(LEVEL[lv][0]), { v: LEVEL[lv][short ? 2 : 1] });
+    const NEED = { change: ['crit', 'Change'], improve: ['warn', 'Improve'], plan: ['warn', 'Plan change'], measure: ['warn', 'Measure'], none: ['good', 'No action'] };
+    const needCell = a => Object.assign(status(NEED[a.kind][0]), { v: NEED[a.kind][1] });
 
     const lifeText = L => !L || L.remaining == null ? '—'
       : L.remaining < 0 ? Math.abs(L.remaining) + ' d overdue' : L.remaining + ' d left';
@@ -269,66 +353,61 @@
       const list = m.tanks.slice(0, NCOL);
       const off = Math.floor((NCOL - list.length) / 2);
       const gap = ['medium', C.white];
-      const r1 = sh.next(30), r2 = sh.next(20), r3 = sh.next(18);
+      const r1 = sh.next(30), r2 = sh.next(20), r2b = sh.next(20), r3 = sh.next(18);
       list.forEach(function (x, i) {
         const c = off + i;
-        const tt = x.level === 'none' ? { fill: C.note, color: C.muted, word: 'No reading' } : TIER[x.level];
+        const tt = !LEVEL[x.level] ? { fill: C.note, color: C.muted } : TIER[LEVEL[x.level][0]];
+        const nt = TIER[NEED[x.action.kind][0]];
         const lt = lifeTier(x.life);
         sh.span(r1, c, c, x.name, { font: { b: 1, sz: 8, color: C.white }, fill: C.navy,
           border: { l: gap, r: gap }, align: { h: 'center', wrap: 1 } });
-        sh.span(r2, c, c, tt.word, { font: { b: 1, sz: 9, color: tt.color }, fill: tt.fill,
+        sh.span(r2, c, c, LEVEL[x.level] ? LEVEL[x.level][2] : 'No reading', { font: { b: 1, sz: 9, color: tt.color }, fill: tt.fill,
           border: { l: gap, r: gap }, align: { h: 'center' } });
+        sh.span(r2b, c, c, NEED[x.action.kind][1], { font: { b: x.action.kind !== 'none' ? 1 : 0, sz: 8.5, color: nt.color }, fill: C.white,
+          border: { l: gap, r: gap, t: THIN }, align: { h: 'center' } });
         sh.span(r3, c, c, lifeText(x.life), { font: { b: lt && lt !== 'good' ? 1 : 0, sz: 8, color: lt === 'crit' ? C.critFg : lt === 'warn' ? C.warnFg : C.muted },
           fill: C.band, border: { l: gap, r: gap, b: THIN }, align: { h: 'center' } });
       });
-      note(sh, 'Top: the tank. Middle: its readings against the standard. Bottom: days its bath has left at its average life of the last 12 months.');
+      note(sh, 'Each tile, top to bottom: the tank; its readings (green in range, amber moderately out, red far out — past a critical limit or more than a range width outside it); what it needs; and the days its bath has left at its average life of the last 12 months.');
     }
 
     let n = 0;
 
     /* What a manager should read first, worst first; an empty list says so. */
     if (m.parts.attention) {
-      const crit = m.tanks.filter(x => x.level === 'crit');
-      const out = m.tanks.filter(x => x.level === 'warn');
-      const over = m.tanks.filter(x => lifeTier(x.life) === 'crit');
-      const soon = m.tanks.filter(x => lifeTier(x.life) === 'warn');
-      const stale = m.tanks.filter(x => x.stale);
+      const by = k => m.tanks.filter(x => x.action.kind === k);
+      const first = x => x.stale && x.latest ? ' (last reading ' + fmtDate(x.latest) + ': re-measure first)' : '';
       const items = [];
-      if (crit.length) items.push(['Critical', crit.map(x => x.name + ': ' + x.out.join(', ')).join('   ·   '), 'crit']);
-      if (over.length) items.push(['Bath change overdue', over.map(x => x.name + ': ' + Math.abs(x.life.remaining) +
-        ' days past its average life of ' + Math.round(x.life.avg) + ' days').join('   ·   '), 'crit']);
-      if (out.length) items.push(['Out of standard', out.map(x => x.name + ': ' + x.out.join(', ')).join('   ·   '), 'warn']);
-      if (soon.length) items.push(['Bath change due', soon.map(x => x.name + ': in ' + x.life.remaining + ' days (' +
-        fmtDate(x.life.due) + ')').join('   ·   '), 'warn']);
-      if (stale.length) items.push(['Not measured in ' + STALE_DAYS + ' days', stale.map(x => x.name +
-        (x.age != null ? ' (' + x.age + ' d)' : ' (no reading)')).join(',  '), 'warn']);
+      if (by('change').length) items.push(['Bath change needed', by('change').map(x => x.name + ': ' + x.action.what + first(x)).join('   ·   '), 'crit']);
+      if (by('improve').length) items.push(['Improvement needed', by('improve').map(x => x.name + ': ' + x.action.what +
+        ' — ' + x.out.join(', ') + first(x)).join('   ·   '), 'warn']);
+      if (by('plan').length) items.push(['Plan a bath change', by('plan').map(x => x.name + ': ' + x.action.what).join('   ·   '), 'warn']);
+      if (by('measure').length) items.push(['Measure', by('measure').map(x => x.name).join(',  ') + ' — no reading on the site', 'warn']);
       bar(sh, 'NEEDS ATTENTION');
       if (items.length) items.forEach(it => pair(sh, it[0], it[1], it[2]));
-      else pair(sh, 'All clear', 'Every tank in this report is within standard, measured in the last ' + STALE_DAYS +
-        ' days, and no bath change is due in the next ' + DUE_SOON + ' days.', 'good');
+      else pair(sh, 'All clear', 'Every tank in this report is in range, measured, and no bath change is due in the next ' + DUE_SOON + ' days.', 'good');
     }
 
     const old = (date, age) => date && age != null && age <= STALE_DAYS ? date
       : { v: date || 'No reading', color: C.warnFg, b: 1, h: 'center' };
-    const service = x => x.serviceKey === 'in_service' ? { v: x.service, h: 'center' }
-      : Object.assign(status(x.serviceKey === 'out_of_service' ? 'crit' : 'warn'), { v: x.service });
 
     if (m.parts.status) {
-      bar(sh, ++n + '   TANK STATUS');
+      bar(sh, ++n + '   TANK STATUS AND WHAT EACH NEEDS');
       table(sh, [
-        { label: 'Tank', span: 2 }, { label: 'Status', span: 1, h: 'center' }, { label: 'Readings out of standard', span: 5 },
-        { label: 'Last reading', span: 1, h: 'center' }, { label: 'Age (days)', span: 1, h: 'center' },
-        { label: 'Tank in service', span: 2, h: 'center' }
+        { label: 'Tank', span: 2 }, { label: 'Status', span: 2, h: 'center' }, { label: 'Readings out of range', span: 3 },
+        { label: 'Last reading', span: 1, h: 'center' }, { label: 'Needs', span: 1, h: 'center' }, { label: 'What to do', span: 3 }
       ], m.tanks.map(x => [
-        { v: x.name, b: 1 },
-        x.level === 'none' ? { v: 'No reading', color: C.muted, h: 'center' } : status(x.level),
-        x.out.length ? { v: x.out.join('\n'), color: x.level === 'crit' ? C.critFg : C.warnFg }
+        { v: x.name + (x.serviceKey !== 'in_service' ? ' (' + x.service + ')' : ''), b: 1 },
+        levelCell(x.level),
+        x.out.length ? { v: x.out.join('\n'), color: x.level === 'far' ? C.critFg : C.warnFg }
           : { v: x.level === 'none' ? '—' : 'All readings in range', color: C.muted },
         old(x.latest, x.age),
-        x.age == null ? null : Object.assign({ v: x.age, h: 'center' }, x.age > STALE_DAYS ? { color: C.warnFg, b: 1 } : {}),
-        service(x)
+        needCell(x.action),
+        x.action.what ? { v: x.action.what + (x.stale && x.latest && x.action.kind !== 'none' ? ' (re-measure first)' : ''),
+          color: x.action.kind === 'change' ? C.critFg : C.ink } : { v: '', blank: 1 }
       ]), { limit: 20 });
       note(sh, 'Readings are the ones on the tank dashboard, judged against the standard limits on the site. ' +
+        'Moderately out: outside a limit by less than the width of the range; far out: past a critical limit, or further than that. ' +
         'A last reading in orange is more than ' + STALE_DAYS + ' days old: the bath may have moved since.');
       pair(sh, 'Tank notes', m.tanks.filter(x => x.note).map(x => x.name + ': ' + x.note).join('  ·  '), 'none');
     }
@@ -386,7 +465,7 @@
             p.v,
             p.v == null ? null : p.date ? Object.assign({ v: p.date }, stale ? { color: C.warnFg, b: 1 } : {}) : { v: 'date unknown', color: C.warnFg, h: 'center' },
             p.age == null ? null : Object.assign({ v: p.age, h: 'center' }, stale ? { color: C.warnFg, b: 1 } : {}),
-            p.v == null ? { v: 'Not measured', color: C.muted, h: 'center' } : p.tier === 'none' ? null : status(p.tier),
+            p.v == null ? { v: 'Not measured', color: C.muted, h: 'center' } : p.sev === 'none' ? null : levelCell(p.sev),
             p.range
           ]);
         });
@@ -394,7 +473,7 @@
       table(sh, [
         { label: 'Tank', span: 2 }, { label: 'Parameter', span: 3 }, { label: 'Reading', span: 1, h: 'right' },
         { label: 'Reading date', span: 1, h: 'center' }, { label: 'Age (days)', span: 1, h: 'center' },
-        { label: 'Status', span: 1, h: 'center' }, { label: 'Standard range', span: 3, h: 'center' }
+        { label: 'Status', span: 2, h: 'center' }, { label: 'Standard range', span: 2, h: 'center' }
       ], rows, { limit: 80 });
       note(sh, 'Parameters never measured on a tank are left out.');
     }
@@ -437,6 +516,10 @@
           '<div class="wk-chips">' + list.map(tk =>
             '<label class="wk-chk"><input type="checkbox" data-tr-tank="' + tk.id + '"' + (included(s, tk.id) ? ' checked' : '') + '> ' +
               esc(tankName(tk.id)) + '</label>').join('') + '</div>' +
+          '<p class="wk-sub">' + esc(t('tr.x.params')) + '</p>' +
+          '<div class="wk-chips">' + PARAMS.filter(k => list.some(tk => measurable(tk.id).some(p => p.key === k))).map(k =>
+            '<label class="wk-chk"><input type="checkbox" data-tr-param="' + k + '"' + (paramOn(s, k) ? ' checked' : '') + '> ' +
+              esc(paramLabel(k)) + '</label>').join('') + '</div>' +
           '<p class="wk-sub">' + esc(t('tr.x.parts')) + '</p>' +
           '<div class="wk-chips col">' + Object.keys(PARTS).map(k =>
             '<label class="wk-chk"><input type="checkbox" data-tr-part="' + k + '"' + (partOn(s, k) ? ' checked' : '') + '> ' +
@@ -470,10 +553,11 @@
     if (old) old.addEventListener('click', function () { close(); window.KGCReport.export(); });
     wrap.querySelector('#tr-go').addEventListener('click', function () {
       const msg = wrap.querySelector('#tr-msg');
-      const next = { tanksOff: {}, parts: {}, days: Number(wrap.querySelector('#tr-days').value),
+      const next = { tanksOff: {}, parts: {}, params: {}, days: Number(wrap.querySelector('#tr-days').value),
         preparedBy: wrap.querySelector('#tr-by').value.trim(), preparedTitle: wrap.querySelector('#tr-title').value.trim() };
       wrap.querySelectorAll('[data-tr-tank]').forEach(el => { if (!el.checked) next.tanksOff[el.getAttribute('data-tr-tank')] = true; });
       wrap.querySelectorAll('[data-tr-part]').forEach(el => { next.parts[el.getAttribute('data-tr-part')] = el.checked; });
+      wrap.querySelectorAll('[data-tr-param]').forEach(el => { next.params[el.getAttribute('data-tr-param')] = el.checked; });
       if (Object.keys(next.tanksOff).length === list.length) {
         msg.textContent = t('tr.x.noTanks'); msg.style.color = 'var(--crit)';
         return;
