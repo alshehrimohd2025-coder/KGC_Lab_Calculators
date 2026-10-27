@@ -12,10 +12,54 @@ const tank = { id: 1, name: 'Degreasing Tank', fields: ['conc', 'sg', 'temp', 't
   measured: { conc: '2026-10-20', sg: '2026-10-21' }, note: 'keep' };
 
 test('supplier example and non-zero initial reading use delivered volume, not final reading', () => {
-  assert.deepEqual(core.calculate([segment('0', '40')], '1'), { volume: 40, normality: 1, percent: 6.04 });
+  const { preparation, ...result } = core.calculate([segment('0', '40')], '1');
+  assert.deepEqual(result, { volume: 40, normality: 1, percent: 6.04 });
+  assert.equal(preparation.correctionFactor, 1);
   assert.equal(core.calculate([segment(5, 45)], 1).percent, 6.04);
   // 50 mL water is already part of the method: no ×3 dilution correction.
   assert.notEqual(core.calculate([segment(0, 40)], 1).percent, 18.12);
+});
+
+test('9 mL bath + 41 mL water, titrating all 50 mL corrects only for the original 9 mL sample', () => {
+  const options = { sampleVolume: 9, dilutionMode: 'water', dilutionVolume: 41, portion: 'whole' };
+  const result = core.calculate([segment(0, 10)], 1, options);
+  assert.equal(result.preparation.finalVolume, 50);
+  assert.equal(result.preparation.effectiveSample, 9);
+  assert.equal(result.preparation.aliquotFactor, 1);
+  assert.ok(Math.abs(result.percent - 10 * 0.151 * 25 / 9) < 1e-8);
+  const direct = core.calculate([segment(0, 10)], 1, { ...options, dilutionVolume: 0 });
+  assert.equal(result.percent, direct.percent, 'water does not add analyte when all solution is titrated');
+});
+
+test('10 mL bath + 100 mL water, titrating 10 mL, uses 110 mL final volume and a factor of 27.5', () => {
+  const options = { sampleVolume: 10, dilutionMode: 'water', dilutionVolume: 100, portion: 'aliquot', aliquotVolume: 10 };
+  const result = core.calculate([segment(0, 2)], 0.98, options);
+  assert.equal(result.preparation.finalVolume, 110);
+  assert.equal(result.preparation.aliquotFactor, 11);
+  assert.equal(result.preparation.sampleFactor, 2.5);
+  assert.ok(Math.abs(result.preparation.correctionFactor - 27.5) < 1e-12);
+  assert.equal(result.percent, 8.1389);
+  const madeUpTo100 = core.calculate([segment(0, 2)], 0.98, { ...options, dilutionMode: 'final' });
+  assert.equal(madeUpTo100.preparation.correctionFactor, 25);
+  assert.equal(madeUpTo100.percent, 7.399);
+});
+
+test('titrating one fifth of a homogeneous dilution consumes one fifth the NaOH but returns the same bath concentration', () => {
+  const options = { sampleVolume: 9, dilutionMode: 'final', dilutionVolume: 50 };
+  const whole = core.calculate([segment(0, 20)], 1, { ...options, portion: 'whole' });
+  const aliquot = core.calculate([segment(0, 4)], 1, { ...options, portion: 'aliquot', aliquotVolume: 10 });
+  assert.equal(whole.percent, aliquot.percent);
+});
+
+test('invalid geometry cannot produce a concentration', () => {
+  for (const value of ['', 0, -1, Infinity]) assert.equal(core.prepare({ sampleVolume: value }).error, 'sample');
+  for (const options of [
+    { dilutionVolume: '' }, { dilutionMode: 'water', dilutionVolume: -1 },
+    { sampleVolume: 25, dilutionVolume: 24 }, { dilutionMode: 'other' }
+  ]) assert.equal(core.calculate([segment(0, 10)], 1, options).error, 'dilution');
+  for (const aliquotVolume of ['', 0, -1, 76]) assert.equal(core.prepare({ portion: 'aliquot', aliquotVolume }).error, 'aliquot');
+  assert.equal(core.prepare({ portion: 'other' }).error, 'aliquot');
+  assert.equal(core.prepare({ sampleVolume: 25, dilutionMode: 'water', dilutionVolume: 0 }).effectiveSample, 25);
 });
 
 test('refills add each delivered volume and standardized normality scales equivalents', () => {
@@ -68,7 +112,7 @@ function loadUI(options = {}) {
     get innerHTML() { return html; },
     set innerHTML(next) {
       html = next; elements = {};
-      for (const m of next.matchAll(/<(?:input|button|output|p|div|dd|strong|span)\b([^>]*)>/g)) {
+      for (const m of next.matchAll(/<(?:input|select|button|output|p|div|dd|strong|span|label)\b([^>]*)>/g)) {
         const a = attrs(m[1]);
         if (!a.id && !('data-remove' in a)) continue;
         const handlers = {};
@@ -76,7 +120,7 @@ function loadUI(options = {}) {
           dataset: { segment: a['data-segment'], field: a['data-field'], remove: a['data-remove'] }, textContent: '',
           classList: { toggle() {} }, addEventListener(event, fn) { handlers[event] = fn; }, focus() {},
           input(value) { this.value = String(value); return handlers.input.call(this); },
-          change(value) { this.checked = value; return handlers.change.call(this); },
+          change(value) { this.checked = value; this.value = String(value); return handlers.change.call(this); },
           click() { return handlers.click.call(this); }
         };
         elements[a.id || 'remove-' + a['data-remove']] = el;
@@ -101,18 +145,56 @@ function loadUI(options = {}) {
   if (!options.noTank) subscription({ val: () => ({ 4: structuredClone(tank) }) });
   return { context, el: id => elements[id], writes, mount, languageListeners,
     failRead: () => cancelRead(), finishRead: () => resolveRead({ val: () => ({ 4: structuredClone(tank) }) }),
-    ready() { elements['dg-final-0'].input(40); elements['dg-verified'].change(true); }
+    ready() { elements['dg-final-0'].input(40); elements['dg-verified'].change(true); elements['dg-indicator'].change('phenolphthalein'); }
   };
 }
 
 test('preview never writes and unstandardized NaOH cannot be saved even by direct event invocation', async () => {
   const ui = loadUI();
   ui.el('dg-final-0').input(40);
+  ui.el('dg-indicator').change('phenolphthalein');
   assert.equal(ui.el('dg-percent').textContent, '6.040');
   assert.equal(ui.el('dg-save').disabled, true);
   await ui.el('dg-save').click();
   assert.equal(ui.writes.length, 0);
   assert.equal(ui.el('dg-confidence').textContent, 'dg.estimate');
+});
+
+test('unknown or different indicator blocks concentration and save even after normality confirmation', async () => {
+  const ui = loadUI();
+  ui.el('dg-final-0').input(40); ui.el('dg-verified').change(true);
+  assert.equal(ui.el('dg-percent').textContent, '—');
+  assert.equal(ui.el('dg-confidence').textContent, 'dg.indicatorBlocked');
+  await ui.el('dg-save').click(); assert.equal(ui.writes.length, 0);
+  ui.el('dg-indicator').change('phenolphthalein'); assert.equal(ui.el('dg-percent').textContent, '6.040');
+  ui.el('dg-indicator').change('unknown');
+  await ui.el('dg-save').click(); assert.equal(ui.writes.length, 0);
+});
+
+test('UI supports water vs final volume and titrating either all solution or an aliquot', async () => {
+  const ui = loadUI(); ui.ready();
+  ui.el('dg-nine').click();
+  assert.equal(ui.el('dg-sample').value, '9');
+  assert.equal(ui.el('dg-dilution-volume').value, '50');
+  assert.equal(ui.el('dg-percent').textContent, '16.778');
+  ui.el('dg-dilution-mode').change('water');
+  assert.equal(ui.el('dg-dilution-volume').value, '41');
+  assert.equal(ui.el('dg-percent').textContent, '16.778');
+  ui.el('dg-sample').input(10); ui.el('dg-dilution-volume').input(100);
+  ui.el('dg-portion').change('aliquot'); ui.el('dg-aliquot').input(10);
+  ui.el('dg-final-0').input(2); ui.el('dg-normality').input(0.98);
+  assert.equal(ui.el('dg-final-volume').textContent, '110 mL');
+  assert.equal(ui.el('dg-aliquot-factor').textContent, '11 ×');
+  assert.equal(ui.el('dg-correction-factor').textContent, '27.5 ×');
+  assert.equal(ui.el('dg-percent').textContent, '8.139');
+  ui.el('dg-verified').change(true); await ui.el('dg-save').click();
+  assert.equal(ui.writes[0]['tanks_data/4/conc'], 8.1389);
+  ui.el('dg-aliquot').input(111);
+  assert.equal(ui.el('dg-percent').textContent, '—');
+  await ui.el('dg-save').click(); assert.equal(ui.writes.length, 1);
+  ui.el('dg-supplier').click();
+  assert.equal(ui.el('dg-sample').value, '25');
+  assert.equal(ui.el('dg-dilution-volume').value, '75');
 });
 
 test('editor save uses one atomic field-level update and reports success only after acknowledgment', async () => {

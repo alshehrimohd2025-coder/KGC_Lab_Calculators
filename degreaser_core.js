@@ -1,5 +1,5 @@
 /* ATC-AD20 supplier method, 16 August 2026, page 2.
-   Fixed 25 mL bath aliquot; 50 mL distilled water is NOT a dilution factor.
+   Reference method: 25 mL bath sample, 50 mL distilled water, titrate all.
    Supplier: product % = mL of 1.0 N NaOH consumed * 0.151.
    For standardized NaOH, scale equivalents by actual N / 1.0 N.
    The sheet calls the result product %, without defining w/w or v/v. */
@@ -15,7 +15,29 @@
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
   }
-  function calculate(segments, normality) {
+  function prepare(options) {
+    const o = Object.assign({ sampleVolume: 25, dilutionMode: 'final', dilutionVolume: 75,
+      portion: 'whole', aliquotVolume: 75 }, options);
+    const sampleVolume = number(o.sampleVolume), dilutionVolume = number(o.dilutionVolume);
+    if (sampleVolume == null || sampleVolume <= 0) return { error: 'sample' };
+    if (dilutionVolume == null || !['water', 'final'].includes(o.dilutionMode)) return { error: 'dilution' };
+    if (o.dilutionMode === 'water' && dilutionVolume < 0) return { error: 'dilution' };
+    const finalVolume = o.dilutionMode === 'water' ? sampleVolume + dilutionVolume : dilutionVolume;
+    if (!Number.isFinite(finalVolume) || finalVolume < sampleVolume) return { error: 'dilution' };
+    if (!['whole', 'aliquot'].includes(o.portion)) return { error: 'aliquot' };
+    const aliquotVolume = o.portion === 'whole' ? finalVolume : number(o.aliquotVolume);
+    if (aliquotVolume == null || aliquotVolume <= 0 || aliquotVolume > finalVolume) return { error: 'aliquot' };
+    // Only this equivalent amount of the original bath reaches the endpoint.
+    const effectiveSample = sampleVolume * (aliquotVolume / finalVolume);
+    const correctionFactor = 25 / effectiveSample;
+    if (!Number.isFinite(correctionFactor)) return { error: 'range' };
+    return { sampleVolume, finalVolume, aliquotVolume, effectiveSample,
+      waterVolume: finalVolume - sampleVolume, dilutionFactor: finalVolume / sampleVolume,
+      aliquotFactor: finalVolume / aliquotVolume, sampleFactor: 25 / sampleVolume, correctionFactor };
+  }
+  function calculate(segments, normality, preparation) {
+    const prep = prepare(preparation);
+    if (prep.error) return prep;
     const n = number(normality);
     if (n == null || n <= 0) return { error: 'normality' };
     if (!Array.isArray(segments) || !segments.length) return { error: 'reading' };
@@ -27,9 +49,9 @@
       if (final < initial) return { error: 'order' };
       volume += final - initial;
     }
-    const percent = volume * FACTOR * n;
+    const percent = volume * FACTOR * n * prep.correctionFactor;
     if (!Number.isFinite(percent) || percent > 100) return { error: 'range' };
-    return { volume, normality: n, percent: Math.round(percent * 1e8) / 1e8 };
+    return { volume, normality: n, percent: Math.round(percent * 1e8) / 1e8, preparation: prep };
   }
   function dayKey(now) {
     const parts = new Intl.DateTimeFormat('en-GB', {
@@ -57,5 +79,5 @@
       [log + 'conc']: percent
     };
   }
-  return { FACTOR, calculate, dayKey, readingUpdates };
+  return { FACTOR, prepare, calculate, dayKey, readingUpdates };
 });
