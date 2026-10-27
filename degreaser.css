@@ -52,10 +52,35 @@
 .dg-protocol ol { margin: 14px 0; padding-inline-start: 22px; }
 .dg-protocol li { padding: 3px 0; }
 .dg-protocol a { color: var(--accent); }
+.dg-tool-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 16px; padding: 5px; background: var(--recess); border: 1px solid var(--line); border-radius: var(--r-md); width: fit-content; max-width: 100%; }
+.dg-tool-tabs button { border: 1px solid transparent; background: transparent; color: var(--ink-3); border-radius: var(--r-sm); padding: 11px 18px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.dg-tool-tabs [aria-selected="true"] { background: var(--surface); color: var(--accent); border-color: var(--line); box-shadow: var(--e1); }
+.dg-tool-tabs button:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 2px; }
+.dg-tool-panel[hidden], .dm-bar[hidden], .dm-card [hidden] { display: none; }
+.dm-source { padding: 16px 24px; border-bottom: 1px solid var(--line); background: var(--recess); }
+.dm-source > p:first-child { color: var(--ink); font-size: 14px; font-weight: 600; line-height: 1.8; margin: 0; }
+.dm-source .dg-help { margin-bottom: 0; }
+.dm-field { margin-top: 18px; }
+.dm-presets { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin: 14px 0 22px; }
+.dm-presets .btn { min-width: 0; flex-direction: column; gap: 5px; padding: 10px 6px; background: var(--recess); color: var(--ink-2); border: 1px solid var(--line); box-shadow: none; font-size: 11px; }
+.dm-presets strong { color: var(--accent); font-family: var(--mono); font-size: 15px; }
+.dm-amounts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 25px 0 20px; }
+.dm-amounts > div { padding: 14px 0; min-width: 0; }
+.dm-amounts span { display: block; font-size: 12px; color: var(--ink-3); line-height: 1.8; }
+.dm-amounts strong { display: block; color: var(--accent); font-family: var(--mono); font-size: clamp(20px,2.6vw,30px); margin-top: 8px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.dm-amounts > div:last-child strong { color: var(--ink-2); }
+.dm-bar { display: flex; height: 12px; background: var(--line-strong); border-radius: 999px; overflow: hidden; direction: ltr; }
+.dm-bar > span { display: block; height: 100%; background: var(--accent); }
+.dm-range { color: var(--accent); font-size: 12px; line-height: 1.8; margin: 16px 0 0; }
+.dm-range.dm-outside { color: var(--warn); }
+.dm-planning { padding-top: 14px; border-top: 1px solid var(--line); }
 @media (max-width: 680px) {
   .dg-workspace { grid-template-columns: minmax(0, 1fr); }
   .dg-output { border-inline-start: 0; border-top: 1px solid var(--line); }
   .dg-heading, .dg-inputs, .dg-output { padding: 18px; }
   .dg-current, .dg-protocol { padding: 14px 18px; }
   .dg-pair { gap: 8px; }
+  .dm-source { padding: 14px 18px; }
+  .dg-tool-tabs { width: auto; }
+  .dg-tool-tabs button { flex: 1; padding: 10px 8px; }
 }
