@@ -35,7 +35,8 @@
   const DEFAULT_SPECS = {
     // 1 — Acidic Degreasing (ATC-AD20)
     1: [
-      { key: 'conc', min: 8,    max: 15,  unit: '% v/v' },
+      // Supplier's titration reports product %, without specifying w/w or v/v.
+      { key: 'conc', min: 8,    max: 15,  unit: '%' },
       { key: 'sg',   min: 1.05, max: 1.10 },
       { key: 'temp', min: 20,   max: 40,  optimum: 35, unit: '°C' }
     ],
