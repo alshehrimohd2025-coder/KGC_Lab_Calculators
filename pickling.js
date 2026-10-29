@@ -859,7 +859,9 @@
   function render() {
     const mount = document.getElementById('page-pickling');
     if (!mount) return;
-    mount.innerHTML = statusHTML() + routingHTML() + dailyHTML() + additionsHTML() + calcsHTML();
+    const content = document.getElementById('pickling-main');
+    if (!content) return;
+    content.innerHTML = statusHTML() + routingHTML() + dailyHTML() + additionsHTML() + calcsHTML();
     wire();
     renderRoute(); renderTopUp(); renderRefresh(); renderFill();
   }
