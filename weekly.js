@@ -87,6 +87,13 @@
   const canEdit = () => (typeof IS_EDITOR !== 'undefined' && IS_EDITOR) &&
                         (typeof IS_AUTHED !== 'undefined' && IS_AUTHED);
   const num = v => { const n = Number(v); return isFinite(n) ? n : 0; };
+  const finiteMeasurement = v => {
+    if (v == null || typeof v === 'boolean' || (typeof v === 'string' && !v.trim())) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const uncertainBaumePair = r => finiteMeasurement(r.beBefore) === 0 && finiteMeasurement(r.beAfter) === 0;
+  const baumeCaveat = note => (note ? note + ' · ' : '') + t('wk.baume.zeroPair');
   const fmt = (v, d) => (v == null || !isFinite(v)) ? '—'
     : Number(v).toLocaleString(undefined, { maximumFractionDigits: d == null ? 2 : d, minimumFractionDigits: 0 });
   const tankById = id => (typeof tanks !== 'undefined' ? tanks.find(x => x.id === Number(id)) : null);
@@ -343,6 +350,32 @@
     });
   }
 
+  /* Specialist logs are independent treatment records, not action cards.
+     Keep each record and its actual date even when two have the same day. */
+  function specialistResults(S, E) {
+    if (!included(10)) return [];
+    const result = [];
+    const append = (records, material, fields) => values(records).forEach(r => {
+      if (!inRange(r.date, S, E)) return;
+      fields.forEach(f => {
+        let before = finiteMeasurement(r[f.before]), after = finiteMeasurement(r[f.after]);
+        if (before == null && after == null) return;
+        const unknown = f.key === 'baume' && uncertainBaumePair(r);
+        if (unknown) { before = null; after = null; }
+        result.push({ date: r.date, tank: t('wk.flux.solution'), material: matLabel(material),
+          parameter: paramLabel(f.key), before: before, after: after, unit: f.unit,
+          source: matLabel(material) + ' — ' + t('wk.src.log'), note: unknown ? baumeCaveat(r.note) : (r.note || '') });
+      });
+    });
+    append(fluxT, 'ammonia', [
+      { key: 'ph', before: 'phBefore', after: 'phAfter', unit: '' },
+      { key: 'baume', before: 'beBefore', after: 'beAfter', unit: '°Bé' }
+    ]);
+    append(peroxT, 'peroxide', [{ key: 'fe', before: 'feBefore', after: 'feAfter', unit: 'g/L' }]);
+    append(saltAdds, 'flux_salt', [{ key: 'baume', before: 'beBefore', after: 'beAfter', unit: '°Bé' }]);
+    return result.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
   /* ---------------- 3. needs ---------------- */
 
   /* What each bath out of standard needs, from its last reading — the
@@ -503,9 +536,10 @@
     const out = [];
     const add = (mat, unit, q, src, r, tankId, date) => {
       if (!(q > 0)) return;
-      const measuredNumber = v => v != null && v !== '' && isFinite(Number(v)) ? Number(v) : null;
+      const unknown = src === 'log' && tankId === 10 && ['ammonia', 'peroxide', 'flux_salt'].includes(mat) && uncertainBaumePair(r);
       out.push({ mat, unit, q, src, tankId, date: date || r.date,
-        note: r.note || '', before: measuredNumber(r.beBefore), after: measuredNumber(r.beAfter) });
+        note: unknown ? baumeCaveat(r.note) : (r.note || ''),
+        before: unknown ? null : finiteMeasurement(r.beBefore), after: unknown ? null : finiteMeasurement(r.beAfter) });
     };
     const logged = {};
     const mark = (mat, tankId, date) => { logged[mat + '|' + tankId + '|' + date] = 1; };
@@ -587,6 +621,10 @@
     const k2 = 'ac.mat.' + m;
     return t(k2) !== k2 ? t(k2) : m;
   }
+
+  // Specialist logs concern flux solution but do not record its physical vessel.
+  const materialTank = r => r.src === 'log' && r.tankId === 10 && ['ammonia', 'peroxide', 'flux_salt'].includes(r.mat)
+    ? t('wk.flux.solution') : tankName(r.tankId);
 
   /* ---------------- rendering ---------------- */
 
@@ -698,10 +736,16 @@
   function changes(b) {
     const A = window.KGCActions;
     const all = opt('unchanged');
-    const out = { cards: [], quiet: 0, mv: issueMovement(b.S, b.E) };
+    const out = { cards: [], quiet: 0, treatments: specialistResults(b.S, b.E), mv: issueMovement(b.S, b.E) };
     if (A) cardResults(b.S, b.E).forEach(function (c) {
       const before = (c.before && c.before.readings) || {};
-      const after = A.mergedAfter(c);
+      // Do not bring future follow-up readings into a historical report.
+      const after = {};
+      A.aftersOf(c).filter(x => String(x.at || '').slice(0, 10) <= b.E && !!x.at)
+        .forEach(x => Object.keys(x.readings || {}).forEach(k => {
+          const v = x.readings[k];
+          if (v != null && !(typeof v === 'string' && !v.trim()) && isFinite(Number(v))) after[k] = Number(v);
+        }));
       const keys = all ? Object.keys(before).concat(Object.keys(after).filter(k => before[k] == null))
         : Object.keys(before).filter(k => after[k] != null && Number(after[k]) !== Number(before[k]));
       if (keys.length || all) out.cards.push({ c: c, keys: keys, before: before, after: after });
@@ -725,6 +769,9 @@
         '<td>' + diff + '</td><td>' + esc(ev) + (c.evaluation && c.evaluation.note ? '<br><small>' + esc(c.evaluation.note) + '</small>' : '') + '</td>' +
         '<td>' + esc(t('ac.stage.' + A.stage(c))) + '</td></tr>';
     });
+    const logRows = ch.treatments.map(x => '<tr><td>' + esc(x.date) + '</td><td class="name">' + esc(x.tank) + '</td><td>' +
+      esc(x.material) + '</td><td>' + esc(x.parameter) + ' <span dir="ltr">' + esc(fmt(x.before)) + ' → ' + esc(fmt(x.after)) +
+      (x.unit ? ' ' + esc(x.unit) : '') + '</span></td><td>' + esc(x.source) + (x.note ? '<br><small>' + esc(x.note) + '</small>' : '') + '</td></tr>');
     const mvList = (arr, cls) => arr.map(x => '<li class="' + cls + '"><b>' + esc(tankName(x.tankId)) + '</b> · ' + esc(paramLabel(x.key)) + ' ' +
       '<span dir="ltr">' + (x.from != null ? tv(x.tankId, x.key, x.from) + ' → ' : '') + tv(x.tankId, x.key, x.to) + '</span>' +
       ' <small dir="ltr">(' + esc(x.range) + ')</small> <small>' + esc(x.toDate) + '</small></li>').join('');
@@ -734,7 +781,9 @@
       '<h3 class="wk-h"><span class="wk-n">2</span>' + esc(t('wk.q3')) + '</h3>' +
       '<p class="wk-sub">' + esc(t('wk.h.cards')) + '</p>' +
       (cardRows.length ? table([t('lab.col.tank'), t('ac.f.material'), t('wk.col.beforeAfter'), t('ac.st.eval'), t('ac.col.status')], cardRows)
-        : '<div class="lab-empty">' + esc(t(ch.quiet ? 'wk.noCardChange' : 'wk.noCards')) + '</div>') +
+        : (!logRows.length ? '<div class="lab-empty">' + esc(t(ch.quiet ? 'wk.noCardChange' : 'wk.noCards')) + '</div>' : '')) +
+      (logRows.length ? '<p class="wk-sub">' + esc(t('wk.h.treatmentResults')) + '</p>' +
+        table([t('wk.mat.date'), t('lab.col.tank'), t('ac.f.material'), t('wk.col.beforeAfter'), t('wk.mat.note')], logRows) : '') +
       (ch.quiet && cardRows.length ? '<p class="wk-note">' + esc(t('wk.n.quietCards', { n: ch.quiet })) + '</p>' : '') +
       '<p class="wk-sub">' + esc(t('wk.h.movement')) + '</p>' +
       ((mv.closed.length + mv.opened.length + still.length)
@@ -881,7 +930,7 @@
         : '<div class="lab-empty">' + esc(t('wk.noMaterials')) + '</div>') +
       (entries.length ? '<h4 class="wk-sub">' + esc(t('wk.mat.details')) + '</h4>' +
         table([t('wk.mat.date'), t('lab.col.tank'), t('ac.f.material'), t('wk.col.qty'), t('wk.mat.before'), t('wk.mat.after'), t('wk.mat.note')], entries.map(r =>
-          '<tr><td class="wk-date">' + esc(r.date) + '</td><td>' + esc(tankName(r.tankId)) + '</td><td>' + esc(matLabel(r.mat)) + '</td><td class="num">' + fmt(r.q) + ' ' + esc(r.unit) +
+          '<tr><td class="wk-date">' + esc(r.date) + '</td><td>' + esc(materialTank(r)) + '</td><td>' + esc(matLabel(r.mat)) + '</td><td class="num">' + fmt(r.q) + ' ' + esc(r.unit) +
           '</td><td class="num">' + fmt(r.before) + '</td><td class="num">' + fmt(r.after) + '</td><td class="wk-prose">' + esc(r.note) + '</td></tr>')) +
         '<p class="wk-note">' + esc(t('wk.mat.help')) + '</p>' : '') +
       '<p class="wk-note">' + esc(t('wk.n.money')) + '</p>' +
@@ -1264,6 +1313,7 @@
         expected: x.expected, full: x.full, partial: x.partial, pct: x.pct == null ? null : x.pct / 100 })),
       completenessShare: cp ? completenessShare(cp) : null,
       cards: cardRows,
+      treatments: ch.treatments,
       operations: operatingEvents(b.S, b.E),
       currentOutages: currentOutages(b.E),
       quietCards: ch.quiet,
@@ -1277,7 +1327,7 @@
       mix: mix.map(m => ({ product: m.product, tonnes: m.kg / 1000, share: mixKg ? m.kg / mixKg : null, n: m.n })),
       materials: materials(b.S, b.E).map(m => ({ name: matLabel(m.mat), q: m.q, unit: m.unit,
         perT: cur.tonnes > 0 ? m.q / cur.tonnes : null, source: Object.keys(m.srcs).map(s => t('wk.src.' + s)).join(' + ') })),
-      materialEntries: materialEntries(b.S, b.E).map(r => Object.assign({}, r, { name: matLabel(r.mat), tank: tankName(r.tankId), source: t('wk.src.' + r.src) })),
+      materialEntries: materialEntries(b.S, b.E).map(r => Object.assign({}, r, { name: matLabel(r.mat), tank: materialTank(r), source: t('wk.src.' + r.src) })),
       notes: { limits: t('wk.n.limits'), full: t('wk.n.full'), zinc: t('wk.n.zinc'), money: t('wk.n.money'),
         partial: cur.records && cur.records < b.days ? t('wk.n.partial', { n: cur.records, d: b.days }) : '' }
     };
@@ -1331,6 +1381,7 @@
         '</div>' +
       '</div>';
     document.body.appendChild(wrap);
+    if (window.KGCWeeklyExportOptions) window.KGCWeeklyExportOptions.mount(wrap);
     const close = () => wrap.remove();
     wrap.addEventListener('mousedown', e => { if (e.target === wrap) close(); });
     wrap.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', close));
@@ -1408,3 +1459,4 @@
     defaultPeriod: defaultPeriod, bounds: bounds
   };
 })();
+
