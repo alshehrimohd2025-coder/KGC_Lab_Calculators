@@ -69,6 +69,10 @@
   let period = null;            // { kind: 'day' | 'week' | 'month', start: 'YYYY-MM-DD' }
   let exported = null;          // { file, text } — the email text shown after a download
   let held = false;
+  let events = {}, eventDraft = null;
+  const EVENT_KINDS = ['breakdown', 'bypass', 'maintenance', 'change'];
+  const pendingSources = new Set(), failedSources = new Set();
+  const dataReady = () => !pendingSources.size && !failedSources.size;
 
   /* ---------------- helpers ---------------- */
 
@@ -110,6 +114,11 @@
       return { kind: 'month', start: dayKey(d) };
     }
     return { kind: 'week', start: lastWeekStart(today) };
+  }
+
+  function currentWeek() {
+    const today = dayKey();
+    return { kind: 'week', start: addDays(today, -parse(today).getDay()) };
   }
 
   function bounds(p) {
@@ -490,31 +499,86 @@
   /* Materials put into the baths. The logs on the flux and pickling pages are
      the plant's own record, so they come first; a before/after card adds its
      quantity only when no log entry already covers the same tank and day. */
-  function materials(S, E) {
-    const tot = {};
-    const add = (mat, unit, q, src) => {
+  function materialEntries(S, E) {
+    const out = [];
+    const add = (mat, unit, q, src, r, tankId, date) => {
       if (!(q > 0)) return;
-      const k = mat + '|' + unit;
-      tot[k] = tot[k] || { mat: mat, unit: unit, q: 0, srcs: {} };
-      tot[k].q += q; tot[k].srcs[src] = 1;
+      const measuredNumber = v => v != null && v !== '' && isFinite(Number(v)) ? Number(v) : null;
+      out.push({ mat, unit, q, src, tankId, date: date || r.date,
+        note: r.note || '', before: measuredNumber(r.beBefore), after: measuredNumber(r.beAfter) });
     };
     const logged = {};
     const mark = (mat, tankId, date) => { logged[mat + '|' + tankId + '|' + date] = 1; };
-    values(acidAdds).forEach(r => { if (inRange(r.date, S, E)) { add('hcl', 't', num(r.tons), 'log'); mark('hcl', r.tankId, r.date); } });
+    values(acidAdds).forEach(r => { if (inRange(r.date, S, E)) { add('hcl', 't', num(r.tons), 'log', r, r.tankId); mark('hcl', r.tankId, r.date); } });
     values(renewals).forEach(r => {
-      if (inRange(r.date, S, E) && r.type === 'addition') { add('hcl', r.unit || 'L', num(r.qty), 'log'); mark('hcl', r.tankId, r.date); }
+      if (inRange(r.date, S, E) && r.type === 'addition') { add('hcl', r.unit || 'L', num(r.qty), 'log', r, r.tankId); mark('hcl', r.tankId, r.date); }
     });
-    values(fluxT).forEach(r => { if (inRange(r.date, S, E)) { add('ammonia', 'L', num(r.liters), 'log'); mark('ammonia', 10, r.date); } });
-    values(peroxT).forEach(r => { if (inRange(r.date, S, E)) { add('peroxide', 'L', num(r.liters), 'log'); mark('peroxide', 10, r.date); } });
-    values(saltAdds).forEach(r => { if (inRange(r.date, S, E)) { add('flux_salt', 'kg', num(r.kg), 'log'); mark('flux_salt', 10, r.date); } });
+    values(fluxT).forEach(r => { if (inRange(r.date, S, E)) { add('ammonia', 'L', num(r.liters), 'log', r, 10); mark('ammonia', 10, r.date); } });
+    values(peroxT).forEach(r => { if (inRange(r.date, S, E)) { add('peroxide', 'L', num(r.liters), 'log', r, 10); mark('peroxide', 10, r.date); } });
+    values(saltAdds).forEach(r => { if (inRange(r.date, S, E)) { add('flux_salt', 'kg', num(r.kg), 'log', r, 10); mark('flux_salt', 10, r.date); } });
     const A = window.KGCActions;
     if (A) A.list().forEach(function (c) {
       const a = c.action;
       const d = a ? String(a.at || '').slice(0, 10) : '';
       if (!a || !inRange(d, S, E) || logged[a.material + '|' + c.tankId + '|' + d]) return;
-      add(a.material === 'other' ? (a.materialOther || 'other') : a.material, a.actualUnit || '', num(a.actualQty), 'card');
+      add(a.material === 'other' ? (a.materialOther || 'other') : a.material, a.actualUnit || '', num(a.actualQty), 'card', a, c.tankId, d);
+    });
+    return out.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  function materials(S, E) {
+    const tot = {};
+    materialEntries(S, E).forEach(r => {
+      const k = r.mat + '|' + r.unit;
+      tot[k] = tot[k] || { mat: r.mat, unit: r.unit, q: 0, srcs: {} };
+      tot[k].q += r.q; tot[k].srcs[r.src] = 1;
     });
     return Object.values(tot);
+  }
+
+  // An unresolved event carries forward; closing it does not erase it from
+  // earlier reports. Current undated tank status is never backdated.
+  function operatingEvents(S, E) {
+    return values(events).filter(e => e.start && e.start <= E && (!e.end || e.end >= S))
+      .sort((a, b) => a.start.localeCompare(b.start)).map(e => Object.assign({}, e, {
+        tank: e.tankId ? tankName(e.tankId) : t('wk.op.line'),
+        kindText: t('wk.op.kind.' + e.kind),
+        state: t(e.end && e.end <= E ? 'wk.op.closed' : 'wk.op.open'),
+        impactType: t(e.impactBasis === 'observed' ? 'wk.op.observed' : 'wk.op.expected')
+      }));
+  }
+
+  function currentOutages(E) {
+    return E >= dayKey() && typeof tanks !== 'undefined'
+      ? tanks.filter(tk => ['out_of_service', 'maintenance'].includes(tk.status))
+        .map(tk => ({ tank: tankName(tk.id), status: t('st.' + tk.status), note: tk.note || '' })) : [];
+  }
+
+  function operationsHTML(b) {
+    const list = operatingEvents(b.S, b.E), current = currentOutages(b.E), edit = canEdit();
+    const d = eventDraft || {};
+    const input = (key, type, max) => '<label><span>' + esc(t('wk.op.' + key)) + '</span><input data-wk-event="' + key + '" type="' + type + '"' +
+      (max ? ' maxlength="' + max + '"' : '') + ' value="' + esc(d[key] || '') + '"></label>';
+    const area = key => '<label class="wk-wide"><span>' + esc(t('wk.op.' + key)) + '</span><textarea data-wk-event="' + key + '" rows="2" maxlength="1000">' + esc(d[key] || '') + '</textarea></label>';
+    const select = (key, items) => '<label><span>' + esc(t('wk.op.' + key)) + '</span><select data-wk-event="' + key + '">' +
+      items.map(x => '<option value="' + esc(x[0]) + '"' + (String(d[key] || '') === String(x[0]) ? ' selected' : '') + '>' + esc(x[1]) + '</option>').join('') + '</select></label>';
+    return '<section class="wk-sec">' +
+      '<h3 class="wk-h">' + esc(t('wk.op.heading')) + '</h3><p class="wk-sub">' + esc(t('wk.op.help')) + '</p>' +
+      (list.length ? table([t('wk.op.dates'), t('wk.op.tankId'), t('wk.op.title'), t('wk.op.action'), t('wk.op.impact'), t('wk.op.status')].concat(edit ? [''] : []),
+        list.map(e => '<tr><td class="wk-date">' + esc(e.start) + '<br>' + esc(e.end && e.end <= b.E ? e.end : t('wk.op.open')) + '</td><td>' + esc(e.tank) +
+          '</td><td class="wk-prose"><b>' + esc(e.title) + '</b><br>' + esc(e.kindText) + '</td><td class="wk-prose">' + esc(e.action) +
+          '</td><td class="wk-prose">' + (e.impact ? '<b>' + esc(e.impactType) + '</b><br>' + esc(e.impact) : '—') +
+          '</td><td>' + esc(e.state) + '</td>' + (edit ? '<td><button class="btn mini ghost no-print" data-wk-event-edit="' + esc(e._k) + '">' + esc(t('wk.op.edit')) + '</button></td>' : '') + '</tr>'))
+        : '<div class="lab-empty">' + esc(t('wk.op.empty')) + '</div>') +
+      (current.length ? '<p class="wk-sub">' + esc(t('wk.op.current')) + '</p><ul class="wk-ul">' + current.map(x => '<li>' + esc(x.tank + ' — ' + x.status + (x.note ? ': ' + x.note : '')) + '</li>').join('') +
+        '</ul><p class="wk-note">' + esc(t('wk.op.undated')) + '</p>' : '') +
+      (edit ? '<details class="wk-event-form no-print"' + (eventDraft ? ' open' : '') + '><summary>' + esc(t(d._k ? 'wk.op.edit' : 'wk.op.add')) + '</summary>' +
+        '<div class="wk-event-grid">' + input('start', 'date') + input('end', 'date') +
+        select('tankId', [['', t('wk.op.line')]].concat((typeof tanks !== 'undefined' ? tanks : []).map(tk => [tk.id, tankName(tk.id)]))) +
+        select('kind', EVENT_KINDS.map(k => [k, t('wk.op.kind.' + k)])) + input('title', 'text', 200) +
+        select('impactBasis', [['expected', t('wk.op.expected')], ['observed', t('wk.op.observed')]]) + area('action') + area('impact') + '</div>' +
+        '<p class="tk-hint">' + esc(t('wk.op.evidence')) + '</p><div class="tk-actions"><button class="btn mini" id="wk-event-save">' + esc(t('wk.op.save')) +
+        '</button><button class="btn mini ghost" id="wk-event-cancel">' + esc(t('wk.op.cancel')) + '</button><span id="wk-event-msg" role="status"></span></div></details>' : '') + '</section>';
   }
 
   function matLabel(m) {
@@ -781,6 +845,7 @@
   function materialsHTML(F, rep) {
     const b = F.b, cur = F.cur, prev = F.prev;
     const mats = materials(b.S, b.E);
+    const entries = materialEntries(b.S, b.E);
     const partial = cur.records > 0 && cur.records < b.days;
     let prodPart = '';
     if (opt('production')) {
@@ -814,6 +879,11 @@
           '<td class="num">' + (cur.tonnes > 0 ? fmt(m.q / cur.tonnes, 3) + ' ' + esc(m.unit) + '/t' + (partial ? ' *' : '') : '—') + '</td>' +
           '<td>' + esc(Object.keys(m.srcs).map(s => t('wk.src.' + s)).join(' + ')) + '</td></tr>'))
         : '<div class="lab-empty">' + esc(t('wk.noMaterials')) + '</div>') +
+      (entries.length ? '<h4 class="wk-sub">' + esc(t('wk.mat.details')) + '</h4>' +
+        table([t('wk.mat.date'), t('lab.col.tank'), t('ac.f.material'), t('wk.col.qty'), t('wk.mat.before'), t('wk.mat.after'), t('wk.mat.note')], entries.map(r =>
+          '<tr><td class="wk-date">' + esc(r.date) + '</td><td>' + esc(tankName(r.tankId)) + '</td><td>' + esc(matLabel(r.mat)) + '</td><td class="num">' + fmt(r.q) + ' ' + esc(r.unit) +
+          '</td><td class="num">' + fmt(r.before) + '</td><td class="num">' + fmt(r.after) + '</td><td class="wk-prose">' + esc(r.note) + '</td></tr>')) +
+        '<p class="wk-note">' + esc(t('wk.mat.help')) + '</p>' : '') +
       '<p class="wk-note">' + esc(t('wk.n.money')) + '</p>' +
       commentBox('consumption', rep) +
     '</section>';
@@ -862,7 +932,7 @@
         setTimeout(function () { if (held && !typing(mount)) render(); }, 0);
       });
     }
-    if (!period) period = defaultPeriod('week');
+    if (!period) period = currentWeek();
     const F = figures(period);
     const b = F.b;
     const key = reportKey(period);
@@ -882,9 +952,11 @@
         '<button class="btn mini ghost" id="wk-today"' + (samePeriod(period, { kind: 'day', start: dayKey() }) ? ' disabled' : '') + '>' +
           esc(t('wk.b.today')) + '</button>' +
         '<span style="flex:1"></span>' +
-        '<button class="btn ghost" id="wk-print">' + esc(t('wk.b.print')) + '</button>' +
-        '<button class="btn" id="wk-excel">' + esc(t('wk.b.excel')) + '</button>' +
+        '<button class="btn mini ghost" id="wk-current">' + esc(t('wk.currentWeek')) + '</button>' +
+        '<button class="btn ghost" id="wk-print"' + (dataReady() ? '' : ' disabled') + '>' + esc(t('wk.b.print')) + '</button>' +
+        '<button class="btn" id="wk-excel"' + (dataReady() ? '' : ' disabled') + '>' + esc(t('wk.b.excel')) + '</button>' +
       '</div>' +
+      (!dataReady() ? '<p class="wk-note" role="status">' + esc(t(failedSources.size ? 'wk.data.failed' : 'wk.data.loading')) + '</p>' : '') +
       settingsHTML() +
       (exported ? '<div class="wk-mail no-print">' +
         '<p class="wk-sub">' + esc(t('wk.x.done', { f: exported.file })) + '</p>' +
@@ -905,6 +977,7 @@
         commentBox('summary', rep) +
         topHTML(F) +
         statusHTML(F, rep) +
+        operationsHTML(b) +
         changedHTML(b, rep) +
         needsHTML(b, rep) +
         materialsHTML(F, rep) +
@@ -927,13 +1000,15 @@
     mount.querySelectorAll('[data-wk-kind]').forEach(function (b) {
       b.addEventListener('click', function () {
         const k = b.getAttribute('data-wk-kind');
-        if (k !== period.kind) go(defaultPeriod(k));
+        if (k !== period.kind) go(k === 'week' ? currentWeek() : defaultPeriod(k));
       });
     });
     if (prev) prev.addEventListener('click', () => go(shift(period, -1)));
     if (next) next.addEventListener('click', () => go(shift(period, 1)));
     const today = mount.querySelector('#wk-today');
     if (today) today.addEventListener('click', () => go({ kind: 'day', start: dayKey() }));
+    const current = mount.querySelector('#wk-current');
+    if (current) current.addEventListener('click', () => go(currentWeek()));
     if (start) start.addEventListener('change', function () {
       if (period.kind === 'month' && /^\d{4}-\d{2}$/.test(start.value)) go({ kind: 'month', start: start.value + '-01' });
       else if (/^\d{4}-\d{2}-\d{2}$/.test(start.value)) go({ kind: period.kind, start: start.value });
@@ -979,6 +1054,43 @@
     });
 
     const base = 'weekly_reports/' + key;
+    mount.querySelectorAll('[data-wk-event]').forEach(el => {
+      el.addEventListener('input', () => {
+        eventDraft = eventDraft || {};
+        eventDraft[el.getAttribute('data-wk-event')] = el.value;
+      });
+    });
+    mount.querySelectorAll('[data-wk-event-edit]').forEach(el => el.addEventListener('click', () => {
+      const id = el.getAttribute('data-wk-event-edit');
+      eventDraft = Object.assign({ _k: id }, events[id]);
+      if (document.activeElement) document.activeElement.blur();
+      render();
+    }));
+    const cancelEvent = mount.querySelector('#wk-event-cancel');
+    if (cancelEvent) cancelEvent.addEventListener('click', () => { eventDraft = null; if (document.activeElement) document.activeElement.blur(); render(); });
+    const saveEvent = mount.querySelector('#wk-event-save');
+    if (saveEvent) saveEvent.addEventListener('click', async function () {
+      if (!canEdit()) return;
+      const rec = {};
+      mount.querySelectorAll('[data-wk-event]').forEach(el => { rec[el.getAttribute('data-wk-event')] = el.value.trim(); });
+      const msg = mount.querySelector('#wk-event-msg');
+      const validDay = s => /^\d{4}-\d{2}-\d{2}$/.test(s) && dayKey(parse(s)) === s;
+      if (!validDay(rec.start) || rec.start > dayKey() || (rec.end && (!validDay(rec.end) || rec.end < rec.start || rec.end > dayKey())) || !rec.title || !rec.action) {
+        msg.textContent = t('wk.op.invalid'); return;
+      }
+      rec.tankId = rec.tankId ? Number(rec.tankId) : null;
+      rec.end = rec.end || null;
+      rec.updatedAt = Date.now();
+      const id = eventDraft && eventDraft._k;
+      this.disabled = true;
+      try {
+        if (id) await database.ref('operational_events/' + id).update(rec);
+        else await database.ref('operational_events').push(Object.assign({ createdAt: Date.now() }, rec));
+        eventDraft = null;
+        if (document.activeElement) document.activeElement.blur();
+        render();
+      } catch (e) { msg.textContent = t('wk.op.failed'); this.disabled = false; }
+    });
     mount.querySelectorAll('[data-wk-c]').forEach(function (ta) {
       const sec = ta.getAttribute('data-wk-c');
       const mirror = mount.querySelector('[data-wk-mirror="' + sec + '"]');
@@ -1152,6 +1264,8 @@
         expected: x.expected, full: x.full, partial: x.partial, pct: x.pct == null ? null : x.pct / 100 })),
       completenessShare: cp ? completenessShare(cp) : null,
       cards: cardRows,
+      operations: operatingEvents(b.S, b.E),
+      currentOutages: currentOutages(b.E),
       quietCards: ch.quiet,
       openCards: A ? A.list().filter(c => c.status !== 'closed' && included(c.tankId)).length : 0,
       movement: move,
@@ -1163,6 +1277,7 @@
       mix: mix.map(m => ({ product: m.product, tonnes: m.kg / 1000, share: mixKg ? m.kg / mixKg : null, n: m.n })),
       materials: materials(b.S, b.E).map(m => ({ name: matLabel(m.mat), q: m.q, unit: m.unit,
         perT: cur.tonnes > 0 ? m.q / cur.tonnes : null, source: Object.keys(m.srcs).map(s => t('wk.src.' + s)).join(' + ') })),
+      materialEntries: materialEntries(b.S, b.E).map(r => Object.assign({}, r, { name: matLabel(r.mat), tank: tankName(r.tankId), source: t('wk.src.' + r.src) })),
       notes: { limits: t('wk.n.limits'), full: t('wk.n.full'), zinc: t('wk.n.zinc'), money: t('wk.n.money'),
         partial: cur.records && cur.records < b.days ? t('wk.n.partial', { n: cur.records, d: b.days }) : '' }
     };
@@ -1184,6 +1299,7 @@
   /** Ask which period to send, then build and download the file. */
   function openExport() {
     const choices = [{ id: 'screen', p: period }];
+    if (!samePeriod(period, currentWeek())) choices.push({ id: 'current', p: currentWeek() });
     // today so far, for a report sent before the day is over
     const today = { kind: 'day', start: dayKey() };
     if (!samePeriod(today, period)) choices.push({ id: 'today', p: today });
@@ -1201,7 +1317,7 @@
           '<p class="tk-hint">' + esc(t('wk.x.sub')) + '</p>' +
           '<div class="wk-x-list">' + choices.map((c, i) =>
             '<label class="wk-x-opt"><input type="radio" name="wk-x" value="' + i + '"' + (i ? '' : ' checked') + '>' +
-              '<span><b>' + esc(c.id === 'screen' ? t('wk.x.screen') : c.id === 'today' ? t('wk.x.today') : t('wk.x.last.' + c.p.kind)) + '</b>' +
+              '<span><b>' + esc(c.id === 'screen' ? t('wk.x.screen') : c.id === 'current' ? t('wk.currentWeek') : c.id === 'today' ? t('wk.x.today') : t('wk.x.last.' + c.p.kind)) + '</b>' +
               '<small>' + esc(t('wk.pk.' + c.p.kind)) + ' · <bdi dir="ltr">' + esc(rangeText(c.p)) + '</bdi></small></span></label>').join('') +
           '</div>' +
           '<label class="wk-chk wk-x-acid"><input type="checkbox" id="wk-x-acid"' + (acidIn() ? ' checked' : '') + '> ' +
@@ -1244,6 +1360,7 @@
   }
 
   async function exportExcel() {
+    if (!dataReady()) throw new Error(t(failedSources.size ? 'wk.data.failed' : 'wk.data.loading'));
     const X = window.KGCWeeklyXlsx;
     if (!X) throw new Error('weekly_xlsx.js not loaded');
     const m = I18N.withLang('en', () => model(period));
@@ -1262,18 +1379,26 @@
 
   /* ---------------- wiring ---------------- */
 
-  const later = () => setTimeout(render, 0);
-  database.ref('weekly_reports').on('value', s => { reports = s.val() || {}; render(); });
-  database.ref('readings_log').on('value', s => { readings = s.val() || {}; render(); });
-  database.ref('renewals').on('value', s => { renewals = s.val() || {}; render(); });
-  database.ref('acid_additions').on('value', s => { acidAdds = s.val() || {}; render(); });
-  database.ref('flux_treatments').on('value', s => { fluxT = s.val() || {}; render(); });
-  database.ref('peroxide_treatments').on('value', s => { peroxT = s.val() || {}; render(); });
-  database.ref('flux_salt_additions').on('value', s => { saltAdds = s.val() || {}; render(); });
-  database.ref('report_settings').on('value', s => { settings = s.val() || {}; render(); });
+  function watch(path, assign) {
+    pendingSources.add(path);
+    database.ref(path).on('value', s => {
+      if (assign) assign(s.val() || {});
+      pendingSources.delete(path); failedSources.delete(path);
+      setTimeout(render, 0);
+    }, () => { failedSources.add(path); render(); });
+  }
+  watch('weekly_reports', v => { reports = v; });
+  watch('operational_events', v => { events = v; });
+  watch('readings_log', v => { readings = v; });
+  watch('renewals', v => { renewals = v; });
+  watch('acid_additions', v => { acidAdds = v; });
+  watch('flux_treatments', v => { fluxT = v; });
+  watch('peroxide_treatments', v => { peroxT = v; });
+  watch('flux_salt_additions', v => { saltAdds = v; });
+  watch('report_settings', v => { settings = v; });
   // the needs suggestions read calibration and stock through their own pages
   ['actions', 'lab_schedule', 'tanks_data', 'tank_specs', 'zinc_daily', 'production/batches', 'inventory', 'calibration']
-    .forEach(p => database.ref(p).on('value', later));
+    .forEach(p => watch(p));
   if (window.I18N) I18N.onChange(render);
   document.addEventListener('DOMContentLoaded', render);
 

@@ -174,6 +174,27 @@
     comment(sh, m.comments.changed);
   }
 
+  function sectionOperations(sh, m) {
+    bar(sh, 'OPERATING EVENTS AND BREAKDOWNS');
+    const events = m.operations || [];
+    note(sh, 'Open events carry forward from earlier periods until their end date is recorded. Expected effects are not measured results.');
+    if (events.length) events.forEach(e => {
+      subTitle(sh, e.title);
+      table(sh, [
+        { label: 'Start', span: 2 }, { label: 'End', span: 2 }, { label: 'Affected tank', span: 3 },
+        { label: 'Type', span: 3 }, { label: 'Status at period end', span: 2 }
+      ], [[e.start, e.end && e.end <= m.E ? e.end : null, e.tank, e.kindText, e.state]]);
+      pair(sh, 'Action / follow-up', e.action);
+      pair(sh, 'Impact / evidence', e.impact ? e.impactType + ': ' + e.impact : 'Not recorded', 'warn');
+    });
+    else emptyLine(sh, 'No operating events recorded for this period.');
+    if ((m.currentOutages || []).length) {
+      subTitle(sh, 'Current service status — start date not recorded');
+      m.currentOutages.forEach(x => pair(sh, x.tank, x.status + (x.note ? ' — ' + x.note : ''), 'warn'));
+      note(sh, 'These statuses describe the tanks now. Add a dated event to document when an outage began.');
+    }
+  }
+
   /* The needs listed on the site, then empty rows to fill in Excel before
      sending, with drop-down lists for the priority and the type. */
   const BLANK_NEEDS = 3;
@@ -246,6 +267,19 @@
         m.materials.map(x => [{ v: x.name, b: 1 }, { v: x.q, fmt: '#,##0.0' }, { v: x.unit, h: 'center' },
           isNum(x.perT) ? { v: x.perT, fmt: '0.000' } : null, x.source]));
     } else emptyLine(sh, 'No additions were recorded in this period.');
+    const entries = m.materialEntries || [];
+    if (entries.length) {
+      subTitle(sh, 'Additions by execution date — all records in this period');
+      table(sh, [
+        { label: 'Date', span: 1 }, { label: 'Tank', span: 2 }, { label: 'Material', span: 2 },
+        { label: 'Quantity', span: 1 }, { label: 'Unit', span: 1 },
+        { label: 'Before °Bé', span: 1 }, { label: 'After °Bé', span: 1 }, { label: 'Notes / source', span: 3 }
+      ], entries.map(r => [r.date, r.tank, r.name, { v: r.q, fmt: '#,##0.0' }, r.unit,
+        isNum(r.before) ? r.before : null, isNum(r.after) ? r.after : null,
+        (r.note ? r.note + '\n' : '') + r.source]), { limit: entries.length });
+      note(sh, 'Additions awaiting a follow-up reading are included. The execution date controls the period, not the entry date. ' +
+        'A specialist log takes priority over a treatment card for the same material, tank and day to avoid duplicate totals.');
+    }
     note(sh, m.notes.partial ? '* ' + m.notes.partial.replace(/^\*\s*/, '') : '');
     if (full) note(sh, m.notes.zinc);
     note(sh, m.notes.money);
@@ -265,6 +299,7 @@
       comment(sh, m.comments.summary, null);
     }
     sectionStatus(sh, m);
+    sectionOperations(sh, m);
     sectionChanged(sh, m);
     sectionNeeds(sh, m);
     sectionConsumption(sh, m);
@@ -301,6 +336,8 @@
     lines.push('• Tanks out of standard: ' + k.tanksOut.cur + ' of ' + k.tanksOut.of +
       (m.outTanks.length ? ' (' + m.outTanks.join(', ') + ')' : ''));
     lines.push('• Needs listed: ' + m.needs.length + (high ? ' (high priority: ' + high + ')' : ''));
+    (m.materials || []).forEach(x => lines.push('• Added: ' + x.name + ' — ' + fixed(x.q, 1) + ' ' + x.unit));
+    (m.operations || []).forEach(e => lines.push('• ' + e.tank + ': ' + e.title + ' (' + e.state + ', since ' + fmtDate(e.start) + ')'));
     const summary = String(m.comments.summary || '').trim();
     if (summary) lines.push('', 'Summary: ' + summary);
     lines.push('', 'Best regards,');
