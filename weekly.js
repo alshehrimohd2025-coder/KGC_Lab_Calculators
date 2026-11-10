@@ -793,7 +793,7 @@
       if (e.impact || /breakdown|failure|عطل|مشكلة|broken|pump|مضخ/i.test([e.title, e.kindText, e.action].join(' ')))
         r.issues.push([e.kindText, e.title, e.action, e.impact].filter(Boolean).map(esc).join(' — '));
     });
-    const hasFluxIssue = fluxEvents.some(e => e.impact || /breakdown|failure|عطل|مشكلة|broken|pump|مضخ/i.test([e.title, e.kindText, e.action].join(' '));
+    const hasFluxIssue = fluxEvents.some(e => e.impact || /breakdown|failure|عطل|مشكلة|broken|pump|مضخ/i.test([e.title, e.kindText, e.action].join(' ')));
     const fluxDates = Object.keys(fluxRowsByDate).sort();
     const zincForPeriod = production(b.S, b.E);
     const fluxSummary = '<div class="wk-flux-summary"><p class="wk-sub">' + esc(t('wk.flux.summary')) + '</p>' +
