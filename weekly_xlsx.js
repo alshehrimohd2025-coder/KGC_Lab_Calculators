@@ -149,6 +149,43 @@
       ], treatments.map(x => [x.date, x.tank, x.material, x.parameter, x.before, x.after, x.unit, x.source, x.note]),
       { limit: treatments.length });
     }
+    const fluxMaterials = (m.materialEntries || []).filter(x => Number(x.tankId) === 10);
+    const fluxEvents = (m.operations || []).filter(e =>
+      Number(e.tankId) === 10 || /flux|rinse|pump|broken|failure|breakdown|فلكس|شطف|مضخ|عطل/i.test([e.title, e.action, e.impact].join(' ')));
+    const fluxByDate = {};
+    const fluxDay = d => fluxByDate[d] || (fluxByDate[d] = { actions: [], additions: [], readings: [], issues: [], notes: [] });
+    treatments.forEach(x => fluxDay(x.date).readings.push(x.parameter + ': ' +
+      (isNum(x.before) ? fixed(x.before, 2) : '—') + ' → ' + (isNum(x.after) ? fixed(x.after, 2) : '—') + (x.unit ? ' ' + x.unit : '')));
+    fluxMaterials.forEach(x => {
+      const r = fluxDay(x.date);
+      r.additions.push(x.name + ': ' + fixed(x.q, 1) + ' ' + (x.unit || ''));
+      if (x.note) r.notes.push(x.note);
+    });
+    fluxEvents.forEach(e => {
+      const r = fluxDay(e.start);
+      r.actions.push([e.title, e.kindText, e.action].filter(Boolean).join(' — '));
+      if (e.impact || /pump|broken|failure|breakdown|مضخ|عطل|مشكلة/i.test([e.title, e.kindText, e.action].join(' ')))
+        r.issues.push([e.kindText, e.title, e.action, e.impact].filter(Boolean).join(' — '));
+    });
+    const fluxDates = Object.keys(fluxByDate).sort();
+    subTitle(sh, 'Flux treatment — simple timeline');
+    const zkg = m.kpi.zincKg.cur, zpt = m.kpi.zincPerT.cur;
+    note(sh, 'Zinc consumed this period: ' + (isNum(zkg) ? fixed(zkg, 0) + ' kg' : 'not recorded') +
+      (isNum(zpt) ? ' (' + fixed(zpt, 1) + ' kg/t)' : '') +
+      '. This is the total for the period; it does not establish a treatment effect by itself.');
+    if (fluxDates.length) {
+      table(sh, [
+        { label: 'Date', span: 1, h: 'center' }, { label: 'Step / action', span: 3 },
+        { label: 'Additions', span: 2 }, { label: 'Before → after', span: 3 },
+        { label: 'Recorded issue / note', span: 3 }
+      ], fluxDates.map(d => {
+        const r = fluxByDate[d];
+        return [d, r.actions.join(' · ') || '—', r.additions.join(' · ') || '—',
+          r.readings.join(' · ') || '—', (r.issues.concat(r.notes)).join(' · ') || '—'];
+      }));
+    } else emptyLine(sh, 'No flux treatment record was logged in this period.');
+    if (!fluxEvents.some(e => e.impact || /pump|broken|failure|breakdown|مضخ|عطل|مشكلة/i.test([e.title, e.kindText, e.action].join(' '))))
+      note(sh, 'No flux issue was logged in this period.');
     if (m.cards.length) subTitle(sh, 'Treatment-card results' + (all ? '' : ' — values that changed'));
     if (m.cards.length) {
       table(sh, [

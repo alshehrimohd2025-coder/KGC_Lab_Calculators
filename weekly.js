@@ -772,6 +772,43 @@
     const logRows = ch.treatments.map(x => '<tr><td>' + esc(x.date) + '</td><td class="name">' + esc(x.tank) + '</td><td>' +
       esc(x.material) + '</td><td>' + esc(x.parameter) + ' <span dir="ltr">' + esc(fmt(x.before)) + ' → ' + esc(fmt(x.after)) +
       (x.unit ? ' ' + esc(x.unit) : '') + '</span></td><td>' + esc(x.source) + (x.note ? '<br><small>' + esc(x.note) + '</small>' : '') + '</td></tr>');
+    const fluxRowsByDate = {};
+    const fluxRow = d => fluxRowsByDate[d] || (fluxRowsByDate[d] = { actions: [], additions: [], readings: [], issues: [], notes: [] });
+    ch.treatments.forEach(x => {
+      const r = fluxRow(x.date);
+      r.readings.push(esc(x.parameter) + ' ' + '<span dir="ltr">' + esc(fmt(x.before)) + ' → ' + esc(fmt(x.after)) +
+        (x.unit ? ' ' + esc(x.unit) : '') + '</span>');
+      if (x.note) r.notes.push(x.note);
+    });
+    materialEntries(b.S, b.E).filter(x => Number(x.tankId) === 10).forEach(x => {
+      const r = fluxRow(x.date);
+      r.additions.push(esc(matLabel(x.mat)) + ': ' + esc(fmt(x.q)) + ' ' + esc(x.unit));
+      if (x.note) r.notes.push(x.note);
+    });
+    const fluxEvents = operatingEvents(b.S, b.E).filter(e =>
+      Number(e.tankId) === 10 || /flux|فلكس|rinse|شطف|pump|مضخ/i.test([e.title, e.action, e.impact].join(' ')));
+    fluxEvents.forEach(e => {
+      const r = fluxRow(e.start);
+      r.actions.push([e.title, e.kindText, e.action].filter(Boolean).map(esc).join(' — '));
+      if (e.impact || /breakdown|failure|عطل|مشكلة|broken|pump|مضخ/i.test([e.title, e.kindText, e.action].join(' ')))
+        r.issues.push([e.kindText, e.title, e.action, e.impact].filter(Boolean).map(esc).join(' — '));
+    });
+    const hasFluxIssue = fluxEvents.some(e => e.impact || /breakdown|failure|عطل|مشكلة|broken|pump|مضخ/i.test([e.title, e.kindText, e.action].join(' '));
+    const fluxDates = Object.keys(fluxRowsByDate).sort();
+    const zincForPeriod = production(b.S, b.E);
+    const fluxSummary = '<div class="wk-flux-summary"><p class="wk-sub">' + esc(t('wk.flux.summary')) + '</p>' +
+      '<p class="wk-line"><b>' + esc(t('wk.flux.zinc')) + ':</b> ' +
+        (zincForPeriod.zincKg > 0 ? esc(fmt(zincForPeriod.zincKg, 0)) + ' kg' : '—') +
+        (zincForPeriod.zincPerT != null ? ' · ' + esc(fmt(zincForPeriod.zincPerT, 1)) + ' kg/t' : '') + '</p>' +
+      (fluxDates.length ? table([t('wk.mat.date'), t('wk.flux.intervention'), t('wk.flux.additions'), t('wk.flux.measurements'), t('wk.flux.problems')],
+        fluxDates.map(d => {
+          const r = fluxRowsByDate[d];
+          return '<tr><td>' + esc(d) + '</td><td>' + (r.actions.join('<br>') || '—') + '</td><td>' +
+            (r.additions.join('<br>') || '—') + '</td><td>' + (r.readings.join('<br>') || '—') + '</td><td>' +
+            (r.issues.join('<br>') || '—') + (r.notes.length ? '<br><small>' + esc(Array.from(new Set(r.notes)).join(' · ')) + '</small>' : '') + '</td></tr>';
+        })) : '<div class="lab-empty">' + esc(t('wk.flux.noData')) + '</div>') +
+      (!hasFluxIssue ? '<p class="wk-note">' + esc(t('wk.flux.noIssue')) + '</p>' : '') +
+      '<p class="wk-note">' + esc(t('wk.flux.consumptionNote')) + '</p></div>';
     const mvList = (arr, cls) => arr.map(x => '<li class="' + cls + '"><b>' + esc(tankName(x.tankId)) + '</b> · ' + esc(paramLabel(x.key)) + ' ' +
       '<span dir="ltr">' + (x.from != null ? tv(x.tankId, x.key, x.from) + ' → ' : '') + tv(x.tankId, x.key, x.to) + '</span>' +
       ' <small dir="ltr">(' + esc(x.range) + ')</small> <small>' + esc(x.toDate) + '</small></li>').join('');
@@ -784,6 +821,7 @@
         : (!logRows.length ? '<div class="lab-empty">' + esc(t(ch.quiet ? 'wk.noCardChange' : 'wk.noCards')) + '</div>' : '')) +
       (logRows.length ? '<p class="wk-sub">' + esc(t('wk.h.treatmentResults')) + '</p>' +
         table([t('wk.mat.date'), t('lab.col.tank'), t('ac.f.material'), t('wk.col.beforeAfter'), t('wk.mat.note')], logRows) : '') +
+      fluxSummary +
       (ch.quiet && cardRows.length ? '<p class="wk-note">' + esc(t('wk.n.quietCards', { n: ch.quiet })) + '</p>' : '') +
       '<p class="wk-sub">' + esc(t('wk.h.movement')) + '</p>' +
       ((mv.closed.length + mv.opened.length + still.length)
