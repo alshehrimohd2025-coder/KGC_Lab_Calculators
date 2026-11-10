@@ -54,12 +54,13 @@
       : '';
   }
 
-  /** Stock levels come from the live inventory rather than numbers typed here. */
+  /** Stock levels and units come from the shared inventory. */
   function stock(key) {
     try {
       const inv = window.KGCLab && window.KGCLab._inventory && window.KGCLab._inventory();
-      const v = inv && inv[key] && Number(inv[key].qty);
-      return isFinite(v) && v > 0 ? v : null;
+      const v = inv && inv[key];
+      const qty = v && Number(v.qty);
+      return isFinite(qty) ? { qty: qty, unit: String(v.unit || 'L') } : null;
     } catch (e) { return null; }
   }
 
@@ -87,10 +88,22 @@
 
     const msgs = [];
     const perox = stock('peroxide'), amm = stock('ammonia');
-    if (perox && isFinite(h2o2L) && h2o2L > perox) msgs.push(t('fxc.overStock', { what: t('lab.item.peroxide'), need: fmt(h2o2L, 0), have: fmt(perox, 0), unit: 'L' }));
-    if (amm && isFinite(nh3L) && nh3L > amm) msgs.push(t('fxc.overStock', { what: t('lab.item.ammonia'), need: fmt(nh3L, 0), have: fmt(amm, 0), unit: 'L' }));
+    let overStock = false;
+    function compareStock(item, name, required) {
+      if (!item || !isFinite(required)) return;
+      if (item.unit.trim().toLowerCase() !== 'l') {
+        msgs.push(t('fxc.stockUnitMismatch', { what: name, haveUnit: item.unit, needUnit: 'L' }));
+        return;
+      }
+      if (required > item.qty) {
+        overStock = true;
+        msgs.push(t('fxc.overStock', { what: name, need: fmt(required, 0), have: fmt(item.qty, 0), unit: 'L' }));
+      }
+    }
+    compareStock(perox, t('lab.item.peroxide'), h2o2L);
+    compareStock(amm, t('lab.item.ammonia'), nh3L);
 
-    if (msgs.length) flag('f-stock', 'crit', '!', '<b>' + t('fxc.stockWarn') + '</b> ' + msgs.join(' — ') + '.');
+    if (msgs.length) flag('f-stock', overStock ? 'crit' : 'warn', '!', '<b>' + t('fxc.stockWarn') + '</b> ' + msgs.join(' — ') + '.');
     else if (isFinite(nh3L) && (perox || amm)) flag('f-stock', 'ok', '✓', t('fxc.stockOk'));
     else flag('f-stock', '', '', '');
 

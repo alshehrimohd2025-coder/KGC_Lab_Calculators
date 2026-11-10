@@ -54,11 +54,17 @@
      chemistry: iron cannot climb that fast in a working bath. */
   const MAX_DAILY_FE_JUMP = 15;               // g/L per day
 
+  const WAREHOUSE_VERSION = '2026-11-09';
+  const WAREHOUSE_AS_OF = '2026-11-09';
   const DEFAULT_INVENTORY = [
-    { key: 'flux_salt', qty: 2500, min: 1000, unit: 'kg' },
-    { key: 'ammonia',   qty: 1100, min: 300,  unit: 'L' },
-    { key: 'peroxide',  qty: 1470, min: 650,  unit: 'L' },
-    { key: 'hcl',       qty: 0,    min: 0,    unit: 'L' }
+    { key: 'flux_salt',   qty: 2375, min: 1000, unit: 'kg', received: 2375, used: 0 },
+    { key: 'hcl',         qty: 11500,min: 0,    unit: 'kg', received: 11500,used: 0 },
+    { key: 'peroxide',    qty: 1250, min: 650,  unit: 'kg', received: 2100, used: 850 },
+    { key: 'degreaser',   qty: 1500, min: 0,    unit: 'kg', received: 3500, used: 2000 },
+    { key: 'ammonia',     qty: 800,  min: 300,  unit: 'kg', received: 3800, used: 3000 },
+    { key: 'lead',        qty: 1484, min: 0,    unit: 'kg', received: 2000, used: 516 },
+    { key: 'fuim',        qty: 0,    min: 0,    unit: 'kg', received: 1200, used: 1200 },
+    { key: 'soda_flakes', qty: 250,  min: 0,    unit: 'kg', received: 250,  used: 0 }
   ];
 
   let readings = {};   // key -> {tankId, date, ts, ph, fe, baume, acidPercent}
@@ -450,11 +456,101 @@
     });
   }
 
+  function effectiveInventoryItem(def) {
+    return inventory._warehouseSnapshot === WAREHOUSE_VERSION && inventory[def.key]
+      ? Object.assign({}, def, inventory[def.key]) : def;
+  }
+
+  /* Copy the supplied store sheet into the shared inventory once, and only
+     from the authenticated editor session. Viewers see the same snapshot as
+     a fallback, but can never write it to Firebase. */
+  function seedWarehouseSnapshot() {
+    if (!IS_EDITOR || !IS_AUTHED) return Promise.resolve(false);
+    const ref = database.ref('inventory');
+    return ref.child('_warehouseSnapshot').once('value').then(function (s) {
+      if (s.val() === WAREHOUSE_VERSION) return false;
+      const updates = {};
+      DEFAULT_INVENTORY.forEach(function (d) {
+        updates[d.key] = {
+          qty: d.qty, min: d.min, unit: d.unit,
+          received: d.received, used: d.used, sourceAsOf: WAREHOUSE_AS_OF
+        };
+      });
+      updates._warehouseSnapshot = WAREHOUSE_VERSION;
+      return ref.update(updates).then(function () { return true; });
+    }).catch(function (e) {
+      console.error('[lab] warehouse snapshot sync failed', e);
+      return false;
+    });
+  }
+
+  function ensureManagerInventory() {
+    if (IS_EDITOR) return;
+    const page = document.getElementById('page-tanks');
+    const nav = document.querySelector('.experience-manager-nav');
+    if (!page || !nav) return;
+    let link = nav.querySelector('a[href="#manager-inventory"]');
+    if (!link) {
+      link = document.createElement('a');
+      link.href = '#manager-inventory';
+      const overviewLink = nav.querySelector('a[href="#executive-overview"]');
+      if (overviewLink) overviewLink.insertAdjacentElement('afterend', link);
+      else nav.appendChild(link);
+    }
+    link.textContent = t('lab.inv.title');
+
+    let section = document.getElementById('manager-inventory');
+    if (!section) {
+      section = document.createElement('section');
+      section.className = 'lab-section';
+      section.id = 'manager-inventory';
+      section.innerHTML =
+        '<div class="sechead"><span class="secnum">٨</span><h2 class="sectitle" id="manager-inventory-title"></h2></div>' +
+        '<p class="secsub" id="manager-inventory-sub"></p>' +
+        '<div class="lab-inv-grid" id="manager-inventory-cards"></div>';
+      const overview = document.getElementById('executive-overview');
+      if (overview && overview.parentElement === page) overview.insertAdjacentElement('afterend', section);
+      else page.prepend(section);
+    }
+    const title = document.getElementById('manager-inventory-title');
+    const sub = document.getElementById('manager-inventory-sub');
+    if (title) title.textContent = t('lab.inv.title');
+    if (sub) sub.textContent = t('lab.inv.managerSub');
+  }
+
+  function renderManagerInventory() {
+    if (IS_EDITOR) return;
+    ensureManagerInventory();
+    const mount = document.getElementById('manager-inventory-cards');
+    if (!mount) return;
+    mount.innerHTML = DEFAULT_INVENTORY.map(function (d) {
+      const item = effectiveInventoryItem(d);
+      const qty = Number(item.qty) || 0;
+      const min = Number(item.min) || 0;
+      const low = qty <= 0 || (min > 0 && qty <= min);
+      const pct = min > 0 ? Math.max(0, Math.min(100, qty / (min * 3) * 100)) : (qty > 0 ? 100 : 0);
+      const status = qty <= 0 ? t('lab.outOfStock') : (min > 0 && qty <= min ? t('lab.lowStock') : t('lab.inStock'));
+      const total = Number(item.received);
+      const used = Number(item.used);
+      const details = isFinite(total) && isFinite(used)
+        ? esc(t('lab.inv.received')) + ': ' + total.toLocaleString() + ' ' + esc(item.unit || d.unit) +
+          ' · ' + esc(t('lab.inv.used')) + ': ' + used.toLocaleString() + ' ' + esc(item.unit || d.unit)
+        : esc(t('lab.inv.available'));
+      return '<div class="lab-inv' + (low ? ' low' : '') + '">' +
+        '<div class="lab-inv-name">' + esc(t('lab.item.' + d.key)) + '</div>' +
+        '<div class="lab-inv-qty">' + qty.toLocaleString() + '<small>' + esc(item.unit || d.unit) + '</small></div>' +
+        '<div class="lab-inv-bar"><span style="width:' + pct.toFixed(0) + '%"></span></div>' +
+        '<div class="lab-inv-min">' + details + '</div>' +
+        '<div class="lab-inv-min">' + esc(status) + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
   function renderInventory() {
     const mount = document.getElementById('lab-inventory');
     if (!mount) return;
     mount.innerHTML = DEFAULT_INVENTORY.map(function (d) {
-      const item = inventory[d.key] || d;
+      const item = effectiveInventoryItem(d);
       const qty = Number(item.qty) || 0;
       const min = Number(item.min) || 0;
       const low = min > 0 && qty <= min;
@@ -484,7 +580,7 @@
   }
 
   function renderAllLab() {
-    renderTrends(); renderLife(); renderRenewals(); renderInventory();
+    renderTrends(); renderLife(); renderRenewals(); renderInventory(); renderManagerInventory();
   }
 
   /* ---------------- renewal form ---------------- */
@@ -536,14 +632,14 @@
     // the tank cards carry the bath age, so they follow this log
     if (typeof window.renderTanksAll === 'function') window.renderTanksAll();
   });
-  database.ref('inventory').on('value', s => { inventory = s.val() || {}; renderInventory(); });
+  database.ref('inventory').on('value', s => { inventory = s.val() || {}; renderInventory(); renderManagerInventory(); });
   /* The life estimate divides the iron rise by the tonnage put through, so a
      new production import changes the answer and has to redraw it. */
   database.ref('zinc_daily').on('value', renderLife);
   database.ref('tanks_data').on('value', function () { renderTrends(); renderLife(); renderRenewals(); wireForm(); });
 
   if (window.I18N) I18N.onChange(renderAllLab);
-  document.addEventListener('DOMContentLoaded', function () { wireForm(); renderAllLab(); });
+  document.addEventListener('DOMContentLoaded', function () { wireForm(); renderAllLab(); seedWarehouseSnapshot(); });
 
   window.KGCLab = {
     captureReadings: captureReadings,
@@ -557,17 +653,20 @@
     /* The effective inventory, not just the stored overrides: an item nobody
        has edited yet still has the level the inventory page shows for it, and
        anything reading stock needs to see the same number the operator does. */
+    seedWarehouseSnapshot: seedWarehouseSnapshot,
     _inventory: function () {
       const out = {};
       DEFAULT_INVENTORY.forEach(function (d) {
-        const saved = inventory[d.key] || {};
+        const item = effectiveInventoryItem(d);
         out[d.key] = {
-          qty: saved.qty != null ? Number(saved.qty) : d.qty,
-          min: saved.min != null ? Number(saved.min) : d.min,
-          unit: d.unit
+          qty: item.qty != null ? Number(item.qty) : d.qty,
+          min: item.min != null ? Number(item.min) : d.min,
+          unit: item.unit || d.unit
         };
       });
-      Object.keys(inventory).forEach(function (k) { if (!out[k]) out[k] = inventory[k]; });
+      Object.keys(inventory).forEach(function (k) {
+        if (!out[k] && k.charAt(0) !== '_') out[k] = inventory[k];
+      });
       return out;
     }
   };
