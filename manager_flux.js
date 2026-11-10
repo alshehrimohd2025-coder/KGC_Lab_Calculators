@@ -5,7 +5,7 @@
   const panel = document.getElementById('manager-flux-treatment');
   const body = document.getElementById('manager-flux-summary-body');
   const toggle = document.getElementById('manager-flux-toggle');
-  if (!panel || !body || !toggle || !window.database || !window.KGCWeekly) return;
+  if (!panel || !body || !toggle || typeof database === 'undefined' || !window.KGCWeekly) return;
   const settingRef = database.ref('report_settings/managerFluxSummaryVisible');
   let visible = true;
   let readDone = false;
