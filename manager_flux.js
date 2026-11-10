@@ -44,7 +44,7 @@
     const buckets = new Map();
     const bucket = d => buckets.get(d) || (buckets.set(d,{actions:[],adds:[],readings:[],issues:[]}),buckets.get(d));
     ms.forEach(({p,m},i)=>{
-      (m.treatments||[]).forEach(x=>bucket(x.date).readings.push(esc(x.parameter)+' <bdi dir="ltr">'+esc(num(x.before))+' → '+esc(num(x.after))+(x.unit?' '+esc(x.unit):'')+'</bdi>'+(x.note?' <small>'+esc(x.note)+'</small>':'')));
+      (m.treatments||[]).forEach(x=>{const b=bucket(x.date);if(x.material)b.actions.push(esc(tr('معالجة الفلكس','Flux treatment'))+' — '+esc(x.material));b.readings.push(esc(x.parameter)+' <bdi dir="ltr">'+esc(num(x.before))+' → '+esc(num(x.after))+(x.unit?' '+esc(x.unit):'')+'</bdi>'+(x.note?' <small>'+esc(x.note)+'</small>'));});
       (m.materialEntries||[]).filter(x=>Number(x.tankId)===10).forEach(x=>bucket(x.date).adds.push(esc(x.name||x.mat||tr('إضافة','Addition'))+': '+esc(num(x.q))+' '+esc(x.unit||'kg')));
       (m.operations||[]).filter(e=>Number(e.tankId)===10||/flux|فلكس|rinse|شطف|pump|مضخ/i.test([e.title,e.action,e.impact].join(' '))).forEach(e=>{
         const date=e.start||e.date; if(!date) return;
