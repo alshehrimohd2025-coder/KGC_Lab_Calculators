@@ -44,7 +44,7 @@
     const buckets = new Map();
     const bucket = d => buckets.get(d) || (buckets.set(d,{actions:[],adds:[],readings:[],issues:[]}),buckets.get(d));
     ms.forEach(({p,m},i)=>{
-      (m.treatments||[]).forEach(x=>{const b=bucket(x.date);if(x.material)b.actions.push(esc(tr('معالجة الفلكس','Flux treatment'))+' — '+esc(x.material));b.readings.push(esc(x.parameter)+' <bdi dir="ltr">'+esc(num(x.before))+' → '+esc(num(x.after))+(x.unit?' '+esc(x.unit):'')+'</bdi>'+(x.note?' <small>'+esc(x.note)+'</small>':''));});
+      (m.treatments||[]).forEach(x=>{const b=bucket(x.date);if(x.material)b.actions.push(esc(tr('معالجة الفلكس','Flux treatment'))+' — '+esc(x.material));if(x.note)b.issues.push(esc(x.note));b.readings.push(esc(x.parameter)+' <bdi dir="ltr">'+esc(num(x.before))+' → '+esc(num(x.after))+(x.unit?' '+esc(x.unit):'')+'</bdi>');});
       (m.materialEntries||[]).filter(x=>Number(x.tankId)===10).forEach(x=>bucket(x.date).adds.push(esc(x.name||x.mat||tr('إضافة','Addition'))+': '+esc(num(x.q))+' '+esc(x.unit||'kg')));
       (m.operations||[]).filter(e=>Number(e.tankId)===10||/flux|فلكس|rinse|شطف|pump|مضخ/i.test([e.title,e.action,e.impact].join(' '))).forEach(e=>{
         const date=e.start||e.date; if(!date) return;
@@ -53,6 +53,7 @@
         if(e.impact||/breakdown|failure|عطل|مشكلة|broken|pump|مضخ/i.test([e.title,e.kindText,e.action].join(' '))) b.issues.push(esc(short([e.impact,e.title,e.action])));
       });
     });
+    buckets.forEach(b=>{b.actions=[...new Set(b.actions)];b.issues=[...new Set(b.issues)];});
     const dates=[...buckets.keys()].sort();
     if(!dates.length){
       body.innerHTML='<p class="manager-flux-muted">'+esc(tr('لا توجد معالجات أو إضافات فلكس مسجلة خلال آخر خمسة أسابيع.','No flux treatments or additions are recorded in the last five weeks.'))+'</p>'; return;
@@ -71,7 +72,7 @@
     }).join('');
     body.innerHTML='<p class="manager-flux-muted">'+esc(tr('آخر خمسة أسابيع. استهلاك الزنك المعروض هو للأسبوع التالي لتاريخ الإجراء، كنسبة وكمية لكل طن.','Last five weeks. Zinc use shown is for the week after each action, as both a percentage and kg per tonne.'))+'</p>'+
       '<div class="manager-flux-table-wrap"><table class="manager-flux-table"><thead><tr>'+
-      ['التاريخ','الإجراء والإضافات','القراءات قبل ← بعد','المشكلة المسجلة','استهلاك الزنك بعد الإجراء'].map(x=>'<th>'+esc(tr(x,({'التاريخ':'Date','الإجراء والإضافات':'Action and additions','القراءات قبل ← بعد':'Readings before → after','المشكلة المسجلة':'Recorded issue','استهلاك الزنك بعد الإجراء':'Zinc use after action'}[x]||x)))+'</th>').join('')+
+      ['التاريخ','الإجراء والإضافات','القراءات قبل ← بعد','الملاحظات والمشكلات','استهلاك الزنك بعد الإجراء'].map(x=>'<th>'+esc(tr(x,({'التاريخ':'Date','الإجراء والإضافات':'Action and additions','القراءات قبل ← بعد':'Readings before → after','الملاحظات والمشكلات':'Notes and issues','استهلاك الزنك بعد الإجراء':'Zinc use after action'}[x]||x)))+'</th>').join('')+
       '</tr></thead><tbody>'+rows+'</tbody></table></div>';
   }
   const style=document.createElement('style');
